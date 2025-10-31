@@ -5,7 +5,33 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - mc.k8s.lex.la.mc.k8s.lex.la
+  - ""
+  resources:
+  - persistentvolumeclaims
+  - secrets
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mc.k8s.lex.la
   resources:
   - papermcservers
   - plugins
@@ -18,14 +44,14 @@ rules:
   - update
   - watch
 - apiGroups:
-  - mc.k8s.lex.la.mc.k8s.lex.la
+  - mc.k8s.lex.la
   resources:
   - papermcservers/finalizers
   - plugins/finalizers
   verbs:
   - update
 - apiGroups:
-  - mc.k8s.lex.la.mc.k8s.lex.la
+  - mc.k8s.lex.la
   resources:
   - papermcservers/status
   - plugins/status

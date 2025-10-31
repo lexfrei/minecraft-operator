@@ -17,7 +17,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Plugin is the Schema for the plugins API
+        description: Plugin is the Schema for the plugins API.
         properties:
           apiVersion:
             description: |-
@@ -39,25 +39,151 @@ spec:
           spec:
             description: spec defines the desired state of Plugin
             properties:
-              foo:
-                description: foo is an example field of Plugin. Edit plugin_types.go
-                  to remove/update
+              compatibilityOverride:
+                description: CompatibilityOverride allows manual compatibility specification
+                  for edge cases.
+                properties:
+                  enabled:
+                    description: Enabled determines if the override replaces API metadata.
+                    type: boolean
+                  minecraftVersions:
+                    description: MinecraftVersions lists supported Minecraft versions.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - enabled
+                type: object
+              instanceSelector:
+                description: InstanceSelector selects which PaperMCServer instances
+                  to apply this plugin to.
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              pinnedVersion:
+                description: PinnedVersion specifies the exact version if versionPolicy
+                  is pinned.
                 type: string
+              source:
+                description: Source specifies where to fetch the plugin.
+                properties:
+                  project:
+                    description: Project is the plugin project identifier (for hangar/modrinth/spigot).
+                    type: string
+                  type:
+                    description: Type specifies the plugin repository type.
+                    enum:
+                    - hangar
+                    - modrinth
+                    - spigot
+                    - url
+                    type: string
+                  url:
+                    description: 'URL is the direct download URL (for type: url).'
+                    type: string
+                required:
+                - type
+                type: object
+              updateDelay:
+                description: UpdateDelay is the grace period before auto-applying
+                  new versions.
+                type: string
+              versionPolicy:
+                description: VersionPolicy determines version selection strategy.
+                enum:
+                - latest
+                - pinned
+                type: string
+            required:
+            - instanceSelector
+            - source
+            - versionPolicy
             type: object
           status:
             description: status defines the observed state of Plugin
             properties:
+              availableVersions:
+                description: AvailableVersions contains cached metadata from the plugin
+                  repository.
+                items:
+                  description: PluginVersionInfo contains metadata about a specific
+                    plugin version.
+                  properties:
+                    cachedAt:
+                      description: CachedAt is when this metadata was cached.
+                      format: date-time
+                      type: string
+                    downloadURL:
+                      description: DownloadURL is the URL to download this version.
+                      type: string
+                    hash:
+                      description: Hash is the SHA256 hash of the plugin JAR.
+                      type: string
+                    minecraftVersions:
+                      description: MinecraftVersions lists compatible Minecraft versions.
+                      items:
+                        type: string
+                      type: array
+                    releasedAt:
+                      description: ReleasedAt is when this version was released.
+                      format: date-time
+                      type: string
+                    version:
+                      description: Version is the plugin version string.
+                      type: string
+                  required:
+                  - cachedAt
+                  - downloadURL
+                  - hash
+                  - minecraftVersions
+                  - releasedAt
+                  - version
+                  type: object
+                type: array
               conditions:
-                description: |-
-                  conditions represent the current state of the Plugin resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                description: Conditions represent the current state of the Plugin
+                  resource.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -116,6 +242,47 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              lastFetched:
+                description: LastFetched is the timestamp of the last API fetch.
+                format: date-time
+                type: string
+              matchedInstances:
+                description: MatchedInstances lists servers this plugin applies to.
+                items:
+                  description: MatchedInstance represents a PaperMCServer instance
+                    matched by the selector.
+                  properties:
+                    compatible:
+                      description: Compatible indicates if the resolved plugin version
+                        is compatible.
+                      type: boolean
+                    name:
+                      description: Name is the server name.
+                      type: string
+                    namespace:
+                      description: Namespace is the server namespace.
+                      type: string
+                    paperVersion:
+                      description: PaperVersion is the server's current Paper version.
+                      type: string
+                  required:
+                  - compatible
+                  - name
+                  - namespace
+                  - paperVersion
+                  type: object
+                type: array
+              repositoryStatus:
+                description: RepositoryStatus indicates the plugin repository availability.
+                enum:
+                - available
+                - unavailable
+                - orphaned
+                type: string
+              resolvedVersion:
+                description: ResolvedVersion is the version selected by the constraint
+                  solver.
+                type: string
             type: object
         required:
         - spec

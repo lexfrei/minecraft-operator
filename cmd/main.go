@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -37,6 +38,9 @@ import (
 
 	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
 	"github.com/lexfrei/minecraft-operator/internal/controller"
+	"github.com/lexfrei/minecraft-operator/pkg/paper"
+	"github.com/lexfrei/minecraft-operator/pkg/plugins"
+	"github.com/lexfrei/minecraft-operator/pkg/solver"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -178,16 +182,35 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize plugin client with caching
+	pluginClient := plugins.NewCachedPluginClient(
+		plugins.NewHangarClient(),
+		time.Hour, // 1 hour cache TTL
+	)
+
+	// Initialize Paper API client
+	paperClient := paper.NewClient()
+
+	// Initialize constraint solver
+	constraintSolver := solver.NewSimpleSolver()
+
+	// Setup Plugin controller
 	if err := (&controller.PluginReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		PluginClient: pluginClient,
+		Solver:       constraintSolver,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Plugin")
 		os.Exit(1)
 	}
+
+	// Setup PaperMCServer controller
 	if err := (&controller.PaperMCServerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		PaperClient: paperClient,
+		Solver:      constraintSolver,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PaperMCServer")
 		os.Exit(1)

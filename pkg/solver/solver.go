@@ -1,10 +1,31 @@
 // Package solver implements constraint solving for Minecraft plugin version compatibility.
 package solver
 
+import (
+	"context"
+
+	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	"github.com/lexfrei/minecraft-operator/pkg/plugins"
+)
+
 // Solver defines the interface for finding compatible versions.
-// Implementations include simple linear search and future SAT-based solvers.
+// Implementations include simple linear search (MVP) and future SAT-based solvers.
 type Solver interface {
-	// Solve finds the best compatible versions for plugins and server.
-	// Returns error if no solution exists.
-	Solve() error
+	// FindBestPluginVersion finds the maximum plugin version compatible with ALL matched servers.
+	// This implements the constraint: ∀ server ∈ servers: compatible(plugin_version, server.paperVersion).
+	FindBestPluginVersion(
+		ctx context.Context,
+		plugin *mcv1alpha1.Plugin,
+		servers []mcv1alpha1.PaperMCServer,
+		allVersions []plugins.PluginVersion,
+	) (string, error)
+
+	// FindBestPaperVersion finds the maximum Paper version compatible with ALL matched plugins.
+	// This implements the constraint: ∀ plugin ∈ plugins: ∃ plugin_version compatible with paper_version.
+	FindBestPaperVersion(
+		ctx context.Context,
+		server *mcv1alpha1.PaperMCServer,
+		matchedPlugins []mcv1alpha1.Plugin,
+		paperVersions []string,
+	) (string, error)
 }

@@ -20,38 +20,116 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// PluginSource defines the source of a plugin.
+type PluginSource struct {
+	// Type specifies the plugin repository type.
+	// +kubebuilder:validation:Enum=hangar;modrinth;spigot;url
+	Type string `json:"type"`
+
+	// Project is the plugin project identifier (for hangar/modrinth/spigot).
+	// +optional
+	Project string `json:"project,omitempty"`
+
+	// URL is the direct download URL (for type: url).
+	// +optional
+	URL string `json:"url,omitempty"`
+}
+
+// CompatibilityOverride allows manual compatibility specification.
+type CompatibilityOverride struct {
+	// Enabled determines if the override replaces API metadata.
+	Enabled bool `json:"enabled"`
+
+	// MinecraftVersions lists supported Minecraft versions.
+	// +optional
+	MinecraftVersions []string `json:"minecraftVersions,omitempty"`
+}
 
 // PluginSpec defines the desired state of Plugin.
 type PluginSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+	// Source specifies where to fetch the plugin.
+	Source PluginSource `json:"source"`
 
-	// foo is an example field of Plugin. Edit plugin_types.go to remove/update
+	// VersionPolicy determines version selection strategy.
+	// +kubebuilder:validation:Enum=latest;pinned
+	VersionPolicy string `json:"versionPolicy"`
+
+	// PinnedVersion specifies the exact version if versionPolicy is pinned.
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	PinnedVersion string `json:"pinnedVersion,omitempty"`
+
+	// UpdateDelay is the grace period before auto-applying new versions.
+	// +optional
+	UpdateDelay *metav1.Duration `json:"updateDelay,omitempty"`
+
+	// InstanceSelector selects which PaperMCServer instances to apply this plugin to.
+	InstanceSelector metav1.LabelSelector `json:"instanceSelector"`
+
+	// CompatibilityOverride allows manual compatibility specification for edge cases.
+	// +optional
+	CompatibilityOverride *CompatibilityOverride `json:"compatibilityOverride,omitempty"`
+}
+
+// PluginVersionInfo contains metadata about a specific plugin version.
+type PluginVersionInfo struct {
+	// Version is the plugin version string.
+	Version string `json:"version"`
+
+	// MinecraftVersions lists compatible Minecraft versions.
+	MinecraftVersions []string `json:"minecraftVersions"`
+
+	// DownloadURL is the URL to download this version.
+	DownloadURL string `json:"downloadURL"`
+
+	// Hash is the SHA256 hash of the plugin JAR.
+	Hash string `json:"hash"`
+
+	// CachedAt is when this metadata was cached.
+	CachedAt metav1.Time `json:"cachedAt"`
+
+	// ReleasedAt is when this version was released.
+	ReleasedAt metav1.Time `json:"releasedAt"`
+}
+
+// MatchedInstance represents a PaperMCServer instance matched by the selector.
+type MatchedInstance struct {
+	// Name is the server name.
+	Name string `json:"name"`
+
+	// Namespace is the server namespace.
+	Namespace string `json:"namespace"`
+
+	// PaperVersion is the server's current Paper version.
+	PaperVersion string `json:"paperVersion"`
+
+	// Compatible indicates if the resolved plugin version is compatible.
+	Compatible bool `json:"compatible"`
 }
 
 // PluginStatus defines the observed state of Plugin.
 type PluginStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ResolvedVersion is the version selected by the constraint solver.
+	// +optional
+	ResolvedVersion string `json:"resolvedVersion,omitempty"`
 
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
+	// AvailableVersions contains cached metadata from the plugin repository.
+	// +optional
+	AvailableVersions []PluginVersionInfo `json:"availableVersions,omitempty"`
 
-	// conditions represent the current state of the Plugin resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
+	// MatchedInstances lists servers this plugin applies to.
+	// +optional
+	MatchedInstances []MatchedInstance `json:"matchedInstances,omitempty"`
+
+	// RepositoryStatus indicates the plugin repository availability.
+	// +optional
+	// +kubebuilder:validation:Enum=available;unavailable;orphaned
+	RepositoryStatus string `json:"repositoryStatus,omitempty"`
+
+	// LastFetched is the timestamp of the last API fetch.
+	// +optional
+	LastFetched *metav1.Time `json:"lastFetched,omitempty"`
+
+	// Conditions represent the current state of the Plugin resource.
 	// +listType=map
 	// +listMapKey=type
 	// +optional

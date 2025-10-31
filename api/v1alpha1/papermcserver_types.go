@@ -17,41 +17,158 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// UpdateSchedule defines when to check and apply updates.
+type UpdateSchedule struct {
+	// CheckCron is the cron schedule for checking updates (e.g., "0 3 * * *").
+	CheckCron string `json:"checkCron"`
+
+	// MaintenanceWindow defines when updates can be applied.
+	MaintenanceWindow MaintenanceWindow `json:"maintenanceWindow"`
+}
+
+// MaintenanceWindow defines the time window for applying updates.
+type MaintenanceWindow struct {
+	// Cron is the schedule for applying updates (e.g., "0 4 * * 0").
+	Cron string `json:"cron"`
+
+	// Enabled determines if the maintenance window is active.
+	Enabled bool `json:"enabled"`
+}
+
+// GracefulShutdown defines graceful shutdown configuration.
+type GracefulShutdown struct {
+	// Timeout is the shutdown timeout (must match terminationGracePeriodSeconds).
+	Timeout metav1.Duration `json:"timeout"`
+}
+
+// SecretKeyRef references a key in a Secret.
+type SecretKeyRef struct {
+	// Name is the Secret name.
+	Name string `json:"name"`
+
+	// Key is the key within the Secret.
+	Key string `json:"key"`
+}
+
+// RCONConfig defines RCON configuration for the server.
+type RCONConfig struct {
+	// Enabled determines if RCON is enabled.
+	Enabled bool `json:"enabled"`
+
+	// PasswordSecret references the Secret containing the RCON password.
+	PasswordSecret SecretKeyRef `json:"passwordSecret"`
+
+	// Port is the RCON port.
+	// +optional
+	// +kubebuilder:default=25575
+	Port int32 `json:"port,omitempty"`
+}
 
 // PaperMCServerSpec defines the desired state of PaperMCServer.
 type PaperMCServerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+	// PaperVersion specifies the Paper version ("latest" or specific version).
+	PaperVersion string `json:"paperVersion"`
 
-	// foo is an example field of PaperMCServer. Edit papermcserver_types.go to remove/update
+	// UpdateDelay is the grace period before applying Paper updates.
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	UpdateDelay *metav1.Duration `json:"updateDelay,omitempty"`
+
+	// UpdateSchedule defines when to check and apply updates.
+	UpdateSchedule UpdateSchedule `json:"updateSchedule"`
+
+	// GracefulShutdown configures graceful server shutdown.
+	GracefulShutdown GracefulShutdown `json:"gracefulShutdown"`
+
+	// RCON configures RCON for graceful shutdown.
+	RCON RCONConfig `json:"rcon"`
+
+	// PodTemplate is the template for the StatefulSet pod.
+	PodTemplate corev1.PodTemplateSpec `json:"podTemplate"`
+}
+
+// PluginRef references a Plugin resource.
+type PluginRef struct {
+	// Name is the Plugin name.
+	Name string `json:"name"`
+
+	// Namespace is the Plugin namespace.
+	Namespace string `json:"namespace"`
+}
+
+// ServerPluginStatus represents a plugin's status for this server.
+type ServerPluginStatus struct {
+	// PluginRef references the Plugin resource.
+	PluginRef PluginRef `json:"pluginRef"`
+
+	// ResolvedVersion is the plugin version resolved for this server.
+	ResolvedVersion string `json:"resolvedVersion"`
+
+	// Compatible indicates if this version is compatible with the server.
+	Compatible bool `json:"compatible"`
+
+	// Source is the plugin repository type.
+	Source string `json:"source"`
+}
+
+// PluginVersionPair pairs a plugin with its version.
+type PluginVersionPair struct {
+	// PluginRef references the Plugin resource.
+	PluginRef PluginRef `json:"pluginRef"`
+
+	// Version is the plugin version.
+	Version string `json:"version"`
+}
+
+// AvailableUpdate represents an available server update.
+type AvailableUpdate struct {
+	// PaperVersion is the available Paper version.
+	PaperVersion string `json:"paperVersion"`
+
+	// ReleasedAt is when this Paper version was released.
+	ReleasedAt metav1.Time `json:"releasedAt"`
+
+	// Plugins lists plugin versions for this update.
+	Plugins []PluginVersionPair `json:"plugins"`
+
+	// FoundAt is when this update was discovered.
+	FoundAt metav1.Time `json:"foundAt"`
+}
+
+// UpdateHistory records the last update attempt.
+type UpdateHistory struct {
+	// AppliedAt is when the update was applied.
+	AppliedAt metav1.Time `json:"appliedAt"`
+
+	// PreviousPaperVersion is the Paper version before the update.
+	PreviousPaperVersion string `json:"previousPaperVersion"`
+
+	// Successful indicates if the update succeeded.
+	Successful bool `json:"successful"`
 }
 
 // PaperMCServerStatus defines the observed state of PaperMCServer.
 type PaperMCServerStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// CurrentPaperVersion is the currently running Paper version.
+	// +optional
+	CurrentPaperVersion string `json:"currentPaperVersion,omitempty"`
 
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
+	// Plugins lists matched Plugin resources and their versions.
+	// +optional
+	Plugins []ServerPluginStatus `json:"plugins,omitempty"`
 
-	// conditions represent the current state of the PaperMCServer resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
+	// AvailableUpdate contains the next available update if any.
+	// +optional
+	AvailableUpdate *AvailableUpdate `json:"availableUpdate,omitempty"`
+
+	// LastUpdate records the most recent update attempt.
+	// +optional
+	LastUpdate *UpdateHistory `json:"lastUpdate,omitempty"`
+
+	// Conditions represent the current state of the PaperMCServer resource.
 	// +listType=map
 	// +listMapKey=type
 	// +optional
