@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -64,12 +65,19 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
 		By("installing CRDs")
-		cmd = exec.Command("make", "install")
+		cmd = exec.Command("helm", "install", "minecraft-operator-crds",
+			"./charts/minecraft-operator-crds",
+			"--namespace", namespace)
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
 		By("deploying the controller-manager")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+		imageRepo, imageTag := parseImage(projectImage)
+		cmd = exec.Command("helm", "install", "minecraft-operator",
+			"./charts/minecraft-operator",
+			"--namespace", namespace,
+			"--set", fmt.Sprintf("image.repository=%s", imageRepo),
+			"--set", fmt.Sprintf("image.tag=%s", imageTag))
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 	})
@@ -82,11 +90,13 @@ var _ = Describe("Manager", Ordered, func() {
 		_, _ = utils.Run(cmd)
 
 		By("undeploying the controller-manager")
-		cmd = exec.Command("make", "undeploy")
+		cmd = exec.Command("helm", "uninstall", "minecraft-operator",
+			"--namespace", namespace)
 		_, _ = utils.Run(cmd)
 
 		By("uninstalling CRDs")
-		cmd = exec.Command("make", "uninstall")
+		cmd = exec.Command("helm", "uninstall", "minecraft-operator-crds",
+			"--namespace", namespace)
 		_, _ = utils.Run(cmd)
 
 		By("removing manager namespace")
@@ -331,4 +341,15 @@ type tokenRequest struct {
 	Status struct {
 		Token string `json:"token"`
 	} `json:"status"`
+}
+
+// parseImage splits a container image reference into repository and tag.
+// For example: "example.com/minecraft-operator:v0.0.1" returns
+// ("example.com/minecraft-operator", "v0.0.1")
+func parseImage(image string) (string, string) {
+	parts := strings.Split(image, ":")
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return image, "latest"
 }
