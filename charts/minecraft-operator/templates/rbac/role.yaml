@@ -1,0 +1,61 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  - secrets
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mc.k8s.lex.la
+  resources:
+  - papermcservers
+  - plugins
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mc.k8s.lex.la
+  resources:
+  - papermcservers/finalizers
+  - plugins/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mc.k8s.lex.la
+  resources:
+  - papermcservers/status
+  - plugins/status
+  verbs:
+  - get
+  - patch
+  - update
