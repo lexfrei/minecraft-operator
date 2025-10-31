@@ -1,0 +1,56 @@
+apiVersion: mc.k8s.lex.la/v1alpha1
+kind: PaperMCServer
+metadata:
+  name: test-server
+  namespace: default
+  labels:
+    environment: test
+    type: vanilla
+spec:
+  # Use latest Paper version
+  paperVersion: "latest"
+
+  # Update schedule
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+
+  # Graceful shutdown
+  gracefulShutdown:
+    timeout: 300s
+
+  # RCON for remote management
+  rcon:
+    enabled: true
+    port: 25575
+    passwordSecret:
+      name: test-server-rcon
+      key: password
+
+  # Pod template
+  podTemplate:
+    spec:
+      containers:
+      - name: minecraft
+        image: lexfrei/papermc:latest
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        env:
+        - name: EULA
+          value: "TRUE"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-server-rcon
+  namespace: default
+type: Opaque
+stringData:
+  password: "test-password-123"

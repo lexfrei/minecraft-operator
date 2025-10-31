@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: papermcservers.mc.k8s.lex.la.mc.k8s.lex.la
+  name: papermcservers.mc.k8s.lex.la
 spec:
-  group: mc.k8s.lex.la.mc.k8s.lex.la
+  group: mc.k8s.lex.la
   names:
     kind: PaperMCServer
     listKind: PaperMCServerList

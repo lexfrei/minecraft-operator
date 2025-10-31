@@ -1,0 +1,6 @@
+dependencies:
+- name: minecraft-operator-crds
+  repository: file://../minecraft-operator-crds
+  version: 0.1.0
+digest: sha256:1f94b0065a4f1416e039fffea37cbb169057cbf3336007b24a8830b9433c886a
+generated: "2025-10-31T09:44:09.65197+03:00"

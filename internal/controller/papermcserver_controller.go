@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -135,6 +136,11 @@ func (r *PaperMCServerReconciler) doReconcile(ctx context.Context, server *mcv1a
 	statefulSet, err := r.ensureStatefulSet(ctx, server)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to ensure statefulset")
+	}
+
+	// Step 2.5: Ensure Service exists
+	if err := r.ensureService(ctx, server); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to ensure service")
 	}
 
 	// Step 3: Detect current Paper version from StatefulSet
@@ -385,6 +391,90 @@ func (r *PaperMCServerReconciler) addOrUpdateEnv(env []corev1.EnvVar, name, valu
 	return append(env, corev1.EnvVar{Name: name, Value: value})
 }
 
+// ensureService creates the Service if it doesn't exist.
+func (r *PaperMCServerReconciler) ensureService(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	serviceName := server.Name
+	var service corev1.Service
+
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      serviceName,
+		Namespace: server.Namespace,
+	}, &service)
+
+	if err == nil {
+		// Service exists
+		log.Info("Service already exists", "name", serviceName)
+		return nil
+	}
+
+	if !apierrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to get service")
+	}
+
+	// Service doesn't exist, create it
+	log.Info("Creating new Service", "name", serviceName)
+
+	newService := r.buildService(server)
+
+	// Set owner reference
+	if err := controllerutil.SetControllerReference(server, newService, r.Scheme); err != nil {
+		return errors.Wrap(err, "failed to set owner reference")
+	}
+
+	if err := r.Create(ctx, newService); err != nil {
+		return errors.Wrap(err, "failed to create service")
+	}
+
+	return nil
+}
+
+// buildService constructs a Service for the PaperMCServer.
+func (r *PaperMCServerReconciler) buildService(server *mcv1alpha1.PaperMCServer) *corev1.Service {
+	ports := []corev1.ServicePort{
+		{
+			Name:       "minecraft",
+			Port:       25565,
+			TargetPort: intstr.FromInt(25565),
+			Protocol:   corev1.ProtocolTCP,
+		},
+	}
+
+	// Add RCON port if enabled
+	if server.Spec.RCON.Enabled {
+		ports = append(ports, corev1.ServicePort{
+			Name:       "rcon",
+			Port:       25575,
+			TargetPort: intstr.FromInt(25575),
+			Protocol:   corev1.ProtocolTCP,
+		})
+	}
+
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      server.Name,
+			Namespace: server.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       "papermc",
+				"app.kubernetes.io/instance":   server.Name,
+				"app.kubernetes.io/managed-by": "minecraft-operator",
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Type:  corev1.ServiceTypeLoadBalancer,
+			Ports: ports,
+			Selector: map[string]string{
+				"app":                       "papermc",
+				"mc.k8s.lex.la/server-name": server.Name,
+			},
+		},
+	}
+}
+
 // detectCurrentPaperVersion extracts the current Paper version from StatefulSet.
 func (r *PaperMCServerReconciler) detectCurrentPaperVersion(statefulSet *appsv1.StatefulSet) string {
 	// Try to get version from PAPER_VERSION env var
@@ -529,6 +619,7 @@ func (r *PaperMCServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mcv1alpha1.PaperMCServer{}).
 		Owns(&appsv1.StatefulSet{}).
+		Owns(&corev1.Service{}).
 		Watches(
 			&mcv1alpha1.Plugin{},
 			handler.EnqueueRequestsFromMapFunc(r.findServersForPlugin),

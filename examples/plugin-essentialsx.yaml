@@ -1,0 +1,22 @@
+apiVersion: mc.k8s.lex.la/v1alpha1
+kind: Plugin
+metadata:
+  name: essentialsx
+  namespace: default
+spec:
+  # Plugin source from Hangar (PaperMC plugin repository)
+  source:
+    type: hangar
+    project: "EssentialsX"
+
+  # Use latest compatible version
+  versionPolicy: latest
+
+  # Wait 7 days before applying new plugin versions
+  # This allows community to report issues with new releases
+  updateDelay: 168h
+
+  # Apply this plugin to all servers with label "type: vanilla"
+  instanceSelector:
+    matchLabels:
+      type: vanilla

@@ -21,7 +21,7 @@ COPY . .
 # -a forces rebuilding of packages
 # -ldflags="-s -w" strips debug info for smaller binary
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
-    go build -a -ldflags="-s -w" -o manager cmd/main.go
+    go build -a -ldflags="-s -w" -o manager ./cmd/main.go
 
 # Use distroless static-debian12 as minimal runtime image
 # Non-root user (uid 65532), no shell, no package manager
