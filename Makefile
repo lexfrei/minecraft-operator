@@ -115,7 +115,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: container-build
 container-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build --file build/Containerfile --tag ${IMG} .
 
 .PHONY: container-push
 container-push: ## Push docker image with the manager.
@@ -131,12 +131,12 @@ PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 .PHONY: container-buildx
 container-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Containerfile and insert --platform=${BUILDPLATFORM} into Containerfile.cross, and preserve the original Containerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Containerfile > Containerfile.cross
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' build/Containerfile > build/Containerfile.cross
 	- $(CONTAINER_TOOL) buildx create --name minecraft-operator-builder
 	$(CONTAINER_TOOL) buildx use minecraft-operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Containerfile.cross .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} --file build/Containerfile.cross .
 	- $(CONTAINER_TOOL) buildx rm minecraft-operator-builder
-	rm Containerfile.cross
+	rm build/Containerfile.cross
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
