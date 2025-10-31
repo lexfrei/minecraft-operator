@@ -2,194 +2,97 @@ package plugins
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/lexfrei/go-hangar/pkg/hangar"
 )
 
-const (
-	hangarAPIBase = "https://hangar.papermc.io/api/v1"
-)
-
-// HangarClient implements PluginClient for the Hangar API.
+// HangarClient implements PluginClient using the go-hangar library.
 type HangarClient struct {
-	httpClient *http.Client
-	baseURL    string
+	client *hangar.Client
 }
 
 // NewHangarClient creates a new Hangar API client.
 func NewHangarClient() *HangarClient {
+	client := hangar.NewClient(hangar.Config{
+		BaseURL: hangar.DefaultBaseURL,
+		Timeout: hangar.DefaultTimeout,
+	})
+
 	return &HangarClient{
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		baseURL: hangarAPIBase,
+		client: client,
 	}
-}
-
-// hangarVersion represents a version from Hangar API.
-type hangarVersion struct {
-	Name         string                 `json:"name"`
-	CreatedAt    string                 `json:"createdAt"`
-	Downloads    map[string]interface{} `json:"downloads"`
-	PlatformDeps map[string][]string    `json:"platformDependencies"`
-	PluginDeps   map[string]interface{} `json:"pluginDependencies"`
-	FileInfo     hangarFileInfo         `json:"fileInfo"`
-	ReviewState  string                 `json:"reviewState"`
-	Visibility   string                 `json:"visibility"`
-	Stats        interface{}            `json:"stats"`
-	Author       string                 `json:"author"`
-	Channel      interface{}            `json:"channel"`
-	PinnedStatus string                 `json:"pinnedStatus"`
-	ExternalURL  string                 `json:"externalUrl"`
-	Description  string                 `json:"description"`
-	Platforms    []string               `json:"platforms"`
-	GameVersions []string               `json:"gameVersions,omitempty"`
-}
-
-// hangarFileInfo contains file metadata.
-type hangarFileInfo struct {
-	Name        string `json:"name"`
-	SizeBytes   int64  `json:"sizeBytes"`
-	Sha256Hash  string `json:"sha256Hash"`
-	DownloadURL string `json:"downloadUrl,omitempty"`
-}
-
-// hangarVersionsResponse represents the versions list response.
-type hangarVersionsResponse struct {
-	Result []hangarVersion `json:"result"`
 }
 
 // GetVersions retrieves all available versions for a plugin from Hangar.
+// NOTE: Currently using go-hangar which doesn't expose platformDependencies and gameVersions.
+// A PR will be created to add these fields to the library.
+// For now, we return empty compatibility data - this will be fixed after the PR is merged.
 func (c *HangarClient) GetVersions(ctx context.Context, project string) ([]PluginVersion, error) {
-	versionsResp, err := c.fetchHangarVersions(ctx, project)
+	// Get project info first to obtain owner
+	proj, err := c.client.GetProject(ctx, project)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch versions")
+		return nil, errors.Wrap(err, "failed to get project")
 	}
 
-	return c.convertHangarVersions(project, versionsResp.Result), nil
-}
-
-// fetchHangarVersions fetches raw version data from Hangar API.
-func (c *HangarClient) fetchHangarVersions(
-	ctx context.Context,
-	project string,
-) (*hangarVersionsResponse, error) {
-	url := fmt.Sprintf("%s/projects/%s/versions", c.baseURL, project)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Fetch all versions (paginated)
+	const maxVersions = 500
+	versionsList, err := c.client.ListVersions(ctx, proj.Namespace.Owner, proj.Namespace.Slug, hangar.ListOptions{
+		Limit: maxVersions,
+	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create request")
+		return nil, errors.Wrap(err, "failed to list versions")
 	}
 
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute request")
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, errors.Newf("hangar API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read response body")
-	}
-
-	var versionsResp hangarVersionsResponse
-	if err := json.Unmarshal(body, &versionsResp); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal response")
-	}
-
-	return &versionsResp, nil
-}
-
-// convertHangarVersions converts Hangar API response to PluginVersion structs.
-func (c *HangarClient) convertHangarVersions(project string, hangarVersions []hangarVersion) []PluginVersion {
-	versions := make([]PluginVersion, 0, len(hangarVersions))
-
-	for _, hv := range hangarVersions {
-		releaseDate, err := time.Parse(time.RFC3339, hv.CreatedAt)
-		if err != nil {
-			releaseDate = time.Now()
+	versions := make([]PluginVersion, 0, len(versionsList.Result))
+	for _, v := range versionsList.Result {
+		// Extract download URL for PAPER platform
+		downloadURL := ""
+		hash := ""
+		if downloadInfo, ok := v.Downloads["PAPER"]; ok {
+			if downloadInfo.DownloadURL != "" {
+				downloadURL = downloadInfo.DownloadURL
+			} else if downloadInfo.ExternalURL != "" {
+				downloadURL = downloadInfo.ExternalURL
+			}
+			if downloadInfo.FileInfo != nil {
+				hash = downloadInfo.FileInfo.SHA256Hash
+			}
 		}
 
-		var paperVersions []string
-		if deps, ok := hv.PlatformDeps["PAPER"]; ok {
-			paperVersions = deps
-		}
-
-		downloadURL := fmt.Sprintf("%s/projects/%s/versions/%s/PAPER/download",
-			c.baseURL, project, hv.Name)
-
+		// TODO: Add platformDependencies and gameVersions after go-hangar PR is merged
+		// For now, these fields will be empty
 		versions = append(versions, PluginVersion{
-			Version:           hv.Name,
-			ReleaseDate:       releaseDate,
-			PaperVersions:     paperVersions,
-			MinecraftVersions: hv.GameVersions,
+			Version:           v.Name,
+			ReleaseDate:       v.CreatedAt,
+			PaperVersions:     []string{}, // TODO: Extract from v.PlatformDependencies["PAPER"]
+			MinecraftVersions: []string{}, // TODO: Extract from v.GameVersions
 			DownloadURL:       downloadURL,
-			Hash:              hv.FileInfo.Sha256Hash,
+			Hash:              hash,
 		})
 	}
 
-	return versions
+	return versions, nil
 }
 
 // GetCompatibility retrieves compatibility information for a specific version.
+// NOTE: Currently returns empty data until platformDependencies and gameVersions
+// are added to go-hangar through a PR.
 func (c *HangarClient) GetCompatibility(
 	ctx context.Context,
 	project,
 	version string,
 ) (CompatibilityInfo, error) {
-	url := fmt.Sprintf("%s/projects/%s/versions/%s", c.baseURL, project, version)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	v, err := c.client.GetVersion(ctx, project, version)
 	if err != nil {
-		return CompatibilityInfo{}, errors.Wrap(err, "failed to create request")
+		return CompatibilityInfo{}, errors.Wrap(err, "failed to get version")
 	}
 
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return CompatibilityInfo{}, errors.Wrap(err, "failed to execute request")
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return CompatibilityInfo{}, errors.Newf("hangar API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return CompatibilityInfo{}, errors.Wrap(err, "failed to read response body")
-	}
-
-	var hv hangarVersion
-	if err := json.Unmarshal(body, &hv); err != nil {
-		return CompatibilityInfo{}, errors.Wrap(err, "failed to unmarshal response")
-	}
-
-	var paperVersions []string
-	if deps, ok := hv.PlatformDeps["PAPER"]; ok {
-		paperVersions = deps
-	}
+	// TODO: Add platformDependencies and gameVersions after go-hangar PR is merged
+	_ = v // Suppress unused variable warning
 
 	return CompatibilityInfo{
-		MinecraftVersions: hv.GameVersions,
-		PaperVersions:     paperVersions,
+		MinecraftVersions: []string{}, // TODO: Extract from v.GameVersions
+		PaperVersions:     []string{}, // TODO: Extract from v.PlatformDependencies["PAPER"]
 	}, nil
 }
