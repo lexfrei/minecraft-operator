@@ -1,42 +1,25 @@
-# Build the manager binary
-FROM golang:1.25-alpine AS builder
-ARG TARGETOS
-ARG TARGETARCH
+FROM docker.io/library/golang:1.25.3-alpine3.22 AS build
+
+RUN echo 'nobody:x:65534:65534:Nobody:/:' > /tmp/passwd && \
+    apk add --no-cache upx=5.0.2-r0
 
 WORKDIR /workspace
-
-# Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
-
-# Cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
+COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the Go source (relies on .dockerignore to filter)
 COPY . .
 
-# Build
-# CGO_ENABLED=0 for static binary compatible with distroless
-# -a forces rebuilding of packages
-# -ldflags="-s -w" strips debug info for smaller binary
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
-    go build -a -ldflags="-s -w" -o manager ./cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o manager ./cmd/main.go && \
+    upx --best --lzma manager
 
-# Use distroless static-debian12 as minimal runtime image
-# Non-root user (uid 65532), no shell, no package manager
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM scratch
 
-WORKDIR /
+COPY --from=build /tmp/passwd /etc/passwd
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=build /workspace/manager /
 
-# Copy the manager binary from builder
-COPY --from=builder /workspace/manager .
+USER nobody
 
-# Run as non-root user (already set by base image)
-USER 65532:65532
-
-# Metadata labels
 LABEL org.opencontainers.image.title="Minecraft Operator"
 LABEL org.opencontainers.image.description="Kubernetes operator for managing PaperMC Minecraft servers"
 LABEL org.opencontainers.image.source="https://github.com/lexfrei/minecraft-operator"
