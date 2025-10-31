@@ -799,12 +799,19 @@ minecraft-operator/
 │   │   └── matcher.go                # Label selector matching logic
 │   └── version/
 │       └── comparator.go             # Minecraft version comparison
-├── config/
-│   ├── crd/                          # CRD manifests
-│   ├── rbac/                         # RBAC rules
-│   └── manager/                      # Operator deployment
+├── charts/
+│   ├── minecraft-operator-crds/      # CRD chart (separate lifecycle)
+│   │   ├── crds/                     # Generated CRDs (controller-gen output)
+│   │   ├── Chart.yaml
+│   │   └── values.yaml
+│   └── minecraft-operator/           # Operator chart
+│       ├── templates/                # Helm templates (Deployment, RBAC, etc.)
+│       ├── Chart.yaml                # With dependency on CRD chart
+│       └── values.yaml               # crds.enabled: true (default)
 └── main.go
 ```
+
+**Note**: CRDs are in a separate chart with independent lifecycle. Operator chart depends on CRD chart via `Chart.yaml` dependencies with `condition: crds.enabled` for optional installation.
 
 ### Libraries
 

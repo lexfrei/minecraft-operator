@@ -1,0 +1,9 @@
+apiVersion: mc.k8s.lex.la.mc.k8s.lex.la/v1alpha1
+kind: PaperMCServer
+metadata:
+  labels:
+    app.kubernetes.io/name: minecraft-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: papermcserver-sample
+spec:
+  # TODO(user): Add fields here

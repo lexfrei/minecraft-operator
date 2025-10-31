@@ -1,0 +1,782 @@
+metadata:
+  repository:
+    name: "minecraft-operator"
+    type: "application"
+    description: "Kubernetes operator for managing PaperMC Minecraft servers with automatic version management"
+    owner: "f@lex.la"
+    maintainer:
+      name: "Aleksei Sviridkin"
+      email: "f@lex.la"
+      gpg: "F57F 85FC 7975 F22B BC3F 2504 9C17 3EB1 B531 AA1F"
+      role: "SRE"
+  language:
+    primary: "go"
+    version: "1.25"  # Go 1.25+ required for controller-runtime v0.22
+  version: "1.0.0"  # .architecture.yaml version
+  last_updated: "2025-10-31"
+  license: "BSD-3-Clause"
+
+technical_stack:
+  language:
+    primary: "go"
+    version: "1.25"
+    module_path: "github.com/lexfrei/minecraft-operator"
+
+  kubernetes:
+    api_group: "mc.k8s.lex.la"
+    api_version: "v1alpha1"
+    min_k8s_version: "1.27"
+    target_k8s_version: "1.34"
+    scope: "namespace"  # All CRDs are namespace-scoped
+
+  frameworks:
+    operator: "sigs.k8s.io/controller-runtime"
+    operator_version: "v0.22.3"  # Latest stable (Oct 2025)
+    kubebuilder: "kubebuilder.io/v4"
+    kubebuilder_version: "4.9.0"
+
+  core_dependencies:
+    client_go: "k8s.io/client-go"
+    client_go_version: "v0.34.0"  # Matches controller-runtime v0.22
+    apimachinery: "k8s.io/apimachinery"
+    apimachinery_version: "v0.34.0"
+    api: "k8s.io/api"
+    api_version: "v0.34.0"
+
+  external_libraries:
+    hangar_client:
+      package: "github.com/lexfrei/go-hungar"
+      version: "latest"  # Use latest stable
+      purpose: "Hangar API client for PaperMC plugin repository"
+
+    cron:
+      package: "github.com/robfig/cron/v3"
+      version: "v3.0.1"
+      purpose: "Cron scheduling for maintenance windows"
+
+    semver:
+      package: "github.com/Masterminds/semver/v3"
+      version: "v3.3.0"
+      purpose: "Semantic version comparison and constraints"
+
+    rcon:
+      package: "github.com/gorcon/rcon"
+      version: "v1.3.5"
+      purpose: "RCON protocol implementation for graceful server shutdown"
+
+    errors:
+      package: "github.com/cockroachdb/errors"
+      version: "v1.11.3"
+      purpose: "Enhanced error handling with stack traces"
+
+  testing:
+    framework: "testing (stdlib)"
+    envtest: "sigs.k8s.io/controller-runtime/pkg/envtest"
+    envtest_version: "v0.22.3"
+    ginkgo: "github.com/onsi/ginkgo/v2"
+    ginkgo_version: "v2.20.2"
+    gomega: "github.com/onsi/gomega"
+    gomega_version: "v1.34.2"
+    coverage_target: "80%"
+
+infrastructure:
+  containerization:
+    tool: "podman"  # Primary container runtime per global CLAUDE.md
+    base_image_build: "golang:1.25-alpine"
+    base_image_runtime: "gcr.io/distroless/static-debian12:nonroot"
+    security:
+      - "Non-root user (uid 65532)"
+      - "No shell access"
+      - "Minimal attack surface"
+      - "No package manager"
+    registry: "ghcr.io/lexfrei/minecraft-operator"
+    image_tags:
+      - "Use semantic versioning"
+      - "Never use 'latest' in production"
+      - "SHA256 digest pinning for dependencies"
+
+  kubernetes:
+    resource_type: "StatefulSet"  # For PaperMC server pods (persistent state)
+    operator_resource: "Deployment"  # For operator itself
+    storage: "PVC"  # PersistentVolumeClaim for world data and plugins
+    patterns:
+      - "StatefulSet with PVC for game servers"
+      - "plugins/update/ folder for hot-swap"
+      - "terminationGracePeriodSeconds: 300 (5 minutes minimum)"
+    security:
+      - "securityContext with readOnlyRootFilesystem where possible"
+      - "Resource limits and requests"
+      - "RCON password via Secret"
+      - "No privileged containers"
+
+  external_images:
+    papermc:
+      image: "lexfrei/papermc:latest"
+      registry: "Docker Hub"
+      source: "https://github.com/lexfrei/papermc-docker"
+      customizable: true
+      purpose: "Base PaperMC server image for StatefulSets"
+
+  helm:
+    api_version: "v2"
+    charts:
+      - name: "minecraft-operator-crds"
+        path: "charts/minecraft-operator-crds"
+        lifecycle: "independent"
+        purpose: "CRD definitions (separate lifecycle from operator)"
+
+      - name: "minecraft-operator"
+        path: "charts/minecraft-operator"
+        depends_on: "minecraft-operator-crds"
+        condition: "crds.enabled"
+        purpose: "Operator deployment with optional CRD installation"
+
+    min_k8s_version: "1.27"
+    default_resources:
+      operator:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+
+  ci_cd:
+    platform: "GitHub Actions"
+    registry: "ghcr.io"
+    workflows:
+      - "Linting (golangci-lint)"
+      - "Unit tests"
+      - "Integration tests (envtest)"
+      - "Container image build"
+      - "Helm chart linting"
+      - "Security scanning"
+
+structure:
+  layout: "kubebuilder-standard"
+  organization:
+    api:
+      - "api/v1alpha1/ - CRD type definitions"
+      - "plugin_types.go - Plugin CRD"
+      - "papermcserver_types.go - PaperMCServer CRD"
+      - "zz_generated.deepcopy.go - Generated code"
+
+    controllers:
+      - "controllers/plugin_controller.go - Plugin reconciliation"
+      - "controllers/papermcserver_controller.go - PaperMCServer reconciliation"
+      - "controllers/update_controller.go - Maintenance window updates"
+
+    pkg:
+      - "pkg/solver/ - Constraint solver implementation"
+      - "pkg/solver/solver.go - Solver interface"
+      - "pkg/solver/simple_solver.go - Linear search MVP implementation"
+      - "pkg/plugins/ - Plugin repository clients"
+      - "pkg/plugins/client.go - Common interface"
+      - "pkg/plugins/hangar.go - Hangar API client (using go-hungar)"
+      - "pkg/plugins/cache.go - API response caching"
+      - "pkg/paper/ - Paper API client"
+      - "pkg/paper/client.go - Paper version fetching"
+      - "pkg/rcon/ - RCON integration"
+      - "pkg/rcon/client.go - RCON client wrapper"
+      - "pkg/selector/ - Label selector matching"
+      - "pkg/selector/matcher.go - Selector logic"
+      - "pkg/version/ - Version comparison"
+      - "pkg/version/comparator.go - Minecraft version utilities"
+
+    charts:
+      - "charts/minecraft-operator-crds/ - CRD Helm chart"
+      - "charts/minecraft-operator-crds/crds/ - Generated CRD YAML"
+      - "charts/minecraft-operator/ - Operator Helm chart"
+      - "charts/minecraft-operator/templates/ - K8s resources"
+
+    root:
+      - "main.go - Operator entrypoint"
+      - "Containerfile - Container image definition"
+      - "Makefile - Build automation"
+
+custom_resources:
+  plugin:
+    group: "mc.k8s.lex.la"
+    version: "v1alpha1"
+    kind: "Plugin"
+    scope: "Namespaced"
+    description: "Plugin definition with source and versioning policy"
+    key_fields:
+      - "source.type - hangar/modrinth/spigot/url"
+      - "source.project - Plugin project identifier"
+      - "versionPolicy - latest or pinned"
+      - "pinnedVersion - Specific version if pinned"
+      - "updateDelay - Grace period before auto-apply (e.g., 168h)"
+      - "instanceSelector - Label selector for PaperMCServer matching"
+      - "compatibilityOverride - Manual compatibility specification"
+    status_fields:
+      - "resolvedVersion - Constraint solver result"
+      - "availableVersions - Cached metadata (for orphaned fallback)"
+      - "matchedInstances - List of matched servers"
+      - "repositoryStatus - available/unavailable/orphaned"
+
+  papermcserver:
+    group: "mc.k8s.lex.la"
+    version: "v1alpha1"
+    kind: "PaperMCServer"
+    scope: "Namespaced"
+    description: "Minecraft server instance with automatic updates"
+    key_fields:
+      - "paperVersion - latest or specific version"
+      - "updateDelay - Grace period before Paper updates"
+      - "updateSchedule.checkCron - Daily update check schedule"
+      - "updateSchedule.maintenanceWindow.cron - Update application schedule"
+      - "gracefulShutdown.timeout - Must match terminationGracePeriodSeconds"
+      - "rcon - RCON configuration for graceful shutdown"
+      - "podTemplate - StatefulSet pod specification"
+    status_fields:
+      - "currentPaperVersion - Observed running version"
+      - "plugins - Matched Plugin resources with versions"
+      - "availableUpdate - Solver result for next update"
+      - "lastUpdate - History of previous update"
+
+environment_variables:
+  # RCON Configuration (per-server, from Secret)
+  RCON_PASSWORD: "RCON password from Secret"
+
+  # Operator Configuration (optional)
+  ENABLE_WEBHOOKS: "Enable admission webhooks (future)"
+  METRICS_BIND_ADDRESS: "Metrics server bind address (:8080)"
+  HEALTH_PROBE_BIND_ADDRESS: "Health probe bind address (:8081)"
+  LEADER_ELECT: "Enable leader election (true)"
+
+  # API Rate Limiting (optional)
+  HANGAR_API_RATE_LIMIT: "Hangar API rate limit (requests/minute)"
+  CACHE_TTL: "API response cache TTL (1h default)"
+
+standards:
+  naming:
+    style: "Go conventions"
+    crds: "CamelCase kinds, kebab-case in YAML"
+    packages: "lowercase, no underscores"
+    files: "snake_case for multi-word files"
+
+  errors:
+    library: "github.com/cockroachdb/errors"
+    pattern: "Always wrap with errors.Wrap(err, 'context')"
+    logging: "Log errors at appropriate level"
+
+  logging:
+    library: "controller-runtime logger (logr)"
+    format: "Structured logging"
+    pattern: "Use logger.Info/Error with key-value pairs"
+
+  testing:
+    style: "Table-driven tests"
+    coverage: ">80% for pkg/"
+    integration: "Use envtest for controller tests"
+    mocking: "Minimal mocking, prefer real Kubernetes API via envtest"
+
+  reconciliation:
+    pattern: "Idempotent reconcile loops"
+    errors: "Return error to trigger requeue"
+    status: "Always update status subresource"
+    finalizers: "Use finalizers for cleanup"
+
+  versioning:
+    scheme: "Semantic Versioning 2.0.0"
+    api: "CRD versions follow Kubernetes conventions (v1alpha1, v1beta1, v1)"
+
+  git:
+    workflow: "Feature branches + Pull Requests"
+    branch_protection: "Never commit directly to main/master"
+    commit_signing: "GPG signing required"
+    commit_format: "Semantic commit messages with Claude attribution"
+
+linting:
+  go:
+    tool: "golangci-lint"
+    config: ".golangci.yaml"
+    rules:
+      - "ALL linting errors must be fixed before push"
+      - "No exceptions for 'cosmetic' or 'minor' errors"
+      - "Modify config if rules conflict with project needs"
+    enabled_linters:
+      - "gofmt"
+      - "goimports"
+      - "govet"
+      - "staticcheck"
+      - "unused"
+      - "gosimple"
+      - "ineffassign"
+      - "godot"  # Comment punctuation
+      - "funlen"  # Function length
+      - "cyclop"  # Cyclomatic complexity
+
+  markdown:
+    tool: "markdownlint"
+    config: ".markdownlint.yaml"
+
+  helm:
+    tool: "helm lint"
+    validate: "Kubernetes schema validation"
+
+security:
+  secrets:
+    storage: "Kubernetes Secrets"
+    pattern: "Never commit secrets to git"
+    rcon: "RCON passwords via Secret with key reference"
+
+  rbac:
+    principle: "Least privilege"
+    resources:
+      - "Plugin and PaperMCServer CRDs (full access)"
+      - "StatefulSets (full access for managed servers)"
+      - "Pods (read, delete for updates)"
+      - "PVCs (read, create, update)"
+      - "Secrets (read only for RCON passwords)"
+      - "Events (create for status reporting)"
+
+  network:
+    operator_egress:
+      - "Kubernetes API Server"
+      - "Hangar API (hangar.papermc.io)"
+      - "Modrinth API (future)"
+      - "Paper API (papermc.io)"
+      - "RCON port on managed pods (25575)"
+
+  container:
+    user: "non-root (65532)"
+    capabilities: "drop ALL"
+    readonly_root: "true (where possible)"
+
+decisions:
+  - id: ADR-001
+    date: 2025-10-31
+    status: accepted
+    decision: "Use controller-runtime v0.22.3 as operator framework"
+    reasoning: "Latest stable version (Oct 2025), supports k8s.io/* v0.34, requires Go 1.25 which we have"
+    alternatives:
+      - "controller-runtime v0.21.x: Older, supports k8s v0.33"
+      - "Operator SDK: Higher level but less flexible, controller-runtime is more direct"
+    impact: "All controller code, main.go, dependencies"
+
+  - id: ADR-002
+    date: 2025-10-31
+    status: accepted
+    decision: "Use github.com/gorcon/rcon for RCON client"
+    reasoning: "Clean Go library implementing Source RCON Protocol, actively maintained, supports Minecraft"
+    alternatives:
+      - "github.com/itzg/rcon-cli: CLI tool not library"
+      - "james4k/rcon: Older, less maintained"
+      - "Custom implementation: Unnecessary complexity"
+    impact: "pkg/rcon/, graceful shutdown implementation"
+
+  - id: ADR-003
+    date: 2025-10-31
+    status: accepted
+    decision: "Use Masterminds/semver/v3 for version comparison"
+    reasoning: "Industry standard, mature, supports constraints and ranges, v3 is latest"
+    alternatives:
+      - "hashicorp/go-version: Good but less features"
+      - "stdlib version: Too basic"
+      - "Custom parser: Error-prone"
+    impact: "pkg/version/, constraint solver, all version comparisons"
+
+  - id: ADR-004
+    date: 2025-10-31
+    status: accepted
+    decision: "Use robfig/cron/v3 for maintenance window scheduling"
+    reasoning: "Standard Go cron library, v3 has context support, well-tested"
+    alternatives:
+      - "K8s CronJob: External resource, harder to coordinate with reconciliation"
+      - "time.Ticker: Too basic, no cron syntax"
+    impact: "controllers/update_controller.go, maintenance window implementation"
+
+  - id: ADR-005
+    date: 2025-10-31
+    status: accepted
+    decision: "Separate Helm chart for CRDs with independent lifecycle"
+    reasoning: "CRDs have different upgrade/delete implications than operator, follows Helm best practices"
+    alternatives:
+      - "Single chart: Simpler but couples CRD lifecycle to operator"
+      - "Manual CRD management: No versioning, harder to track"
+    impact: "charts/ structure, deployment process, upgrade workflows"
+
+  - id: ADR-006
+    date: 2025-10-31
+    status: accepted
+    decision: "Use distroless/static-debian12:nonroot as runtime image"
+    reasoning: "Minimal attack surface, no shell, no package manager, non-root by default, industry standard"
+    alternatives:
+      - "alpine: Has shell and package manager (larger attack surface)"
+      - "scratch: Too minimal, missing CA certs"
+      - "distroless/base: Includes glibc, we only need static binary"
+    impact: "Containerfile, security posture"
+
+  - id: ADR-007
+    date: 2025-10-31
+    status: accepted
+    decision: "Use cockroachdb/errors instead of pkg/errors or stdlib"
+    reasoning: "Maintained fork of pkg/errors (which is deprecated), backwards compatible, adds stack traces"
+    alternatives:
+      - "pkg/errors: Deprecated"
+      - "stdlib errors: Too basic, no stack traces"
+      - "hashicorp/go-multierror: Different use case"
+    impact: "All error handling, pkg/, controllers/"
+
+  - id: ADR-008
+    date: 2025-10-31
+    status: accepted
+    decision: "Namespace-scoped CRDs (not cluster-scoped)"
+    reasoning: "Isolation between tenants, follows Kubernetes multi-tenancy best practices, matches PaperMC use case"
+    alternatives:
+      - "Cluster-scoped: Global visibility, harder multi-tenancy"
+      - "Configurable scope: Unnecessary complexity"
+    impact: "api/v1alpha1/, RBAC, Helm charts"
+
+  - id: ADR-009
+    date: 2025-10-31
+    status: accepted
+    decision: "Use Kubebuilder v4 scaffolding (not Operator SDK)"
+    reasoning: "Lower level, more control, better for learning, Kubebuilder 4.9.0 already installed"
+    alternatives:
+      - "Operator SDK: Higher level abstraction, less control"
+      - "controller-runtime directly: Too low level, missing scaffolding"
+    impact: "Project structure, Makefile, main.go bootstrapping"
+
+  - id: ADR-010
+    date: 2025-10-31
+    status: accepted
+    decision: "Simple linear search solver for MVP (not SAT solver)"
+    reasoning: "Sufficient for small number of plugins/servers, easier to debug, can optimize later"
+    alternatives:
+      - "Z3 or gophersat: Overkill for MVP, adds CGO dependency"
+      - "No solver: Cannot handle complex constraints"
+    impact: "pkg/solver/simple_solver.go, can add z3_solver.go later"
+    future: "Add SAT solver in Phase 2 if performance becomes issue"
+
+  - id: ADR-011
+    date: 2025-10-31
+    status: accepted
+    decision: "Use envtest for integration tests (not Kind or real cluster)"
+    reasoning: "Fast, built into controller-runtime, no external dependencies, runs in CI"
+    alternatives:
+      - "Kind: Slower, requires Docker"
+      - "Real cluster: Complex setup, not reproducible"
+      - "Unit tests only: Insufficient for controllers"
+    impact: "Testing setup, CI/CD, coverage targets"
+
+  - id: ADR-012
+    date: 2025-10-31
+    status: accepted
+    decision: "Use github.com/lexfrei/go-hungar for Hangar API client"
+    reasoning: "Custom library already built for Hangar, maintained by same author, domain expertise"
+    alternatives:
+      - "Generic HTTP client: More work, no type safety"
+      - "Generated client from OpenAPI: Hangar may not have spec"
+    impact: "pkg/plugins/hangar.go, API interactions"
+
+  - id: ADR-013
+    date: 2025-10-31
+    status: accepted
+    decision: "StatefulSet for PaperMC servers (not Deployment)"
+    reasoning: "Need stable network identity, persistent storage, ordered deployment/scaling"
+    alternatives:
+      - "Deployment: No stable identity, PVC issues"
+      - "Bare Pods: No automatic recovery"
+    impact: "controllers/papermcserver_controller.go, PVC management"
+
+  - id: ADR-014
+    date: 2025-10-31
+    status: accepted
+    decision: "plugins/update/ folder mechanism for plugin hot-swap"
+    reasoning: "Native Paper feature, no custom code needed, atomic updates, auto-cleanup"
+    alternatives:
+      - "Manual JAR replacement: Requires tracking old versions"
+      - "Volume mounts: Complex, race conditions"
+      - "Custom plugin loader: Reinventing Paper's wheel"
+    impact: "Update workflow, JAR file management"
+
+  - id: ADR-015
+    date: 2025-10-31
+    status: accepted
+    decision: "Explicitly NOT a high-availability system"
+    reasoning: "Minecraft servers inherently require downtime for updates, 5-10 minutes acceptable, simplifies design"
+    alternatives:
+      - "HA with load balancing: Minecraft doesn't support this"
+      - "Zero-downtime: Impossible with world data persistence"
+    impact: "Update strategy, user expectations, documentation"
+
+  - id: ADR-016
+    date: 2025-10-31
+    status: accepted
+    decision: "Two-level caching: in-memory (1h TTL) + persistent (Plugin.status)"
+    reasoning: "Fast reconciliation + resilience against API unavailability, orphaned plugin support"
+    alternatives:
+      - "No cache: Too many API calls"
+      - "Only memory: Lost on restart"
+      - "Only persistent: Slower reconciliation"
+      - "External cache (Redis): Unnecessary complexity"
+    impact: "pkg/plugins/cache.go, API client implementations"
+
+  - id: ADR-017
+    date: 2025-10-31
+    status: accepted
+    decision: "Use Ginkgo/Gomega for testing (controller-runtime convention)"
+    reasoning: "Standard in Kubebuilder projects, excellent for async testing, BDD style for controllers"
+    alternatives:
+      - "testify: Good but less suited for async"
+      - "stdlib only: Too verbose for complex scenarios"
+    impact: "Test suite structure, CI configuration"
+
+  - id: ADR-018
+    date: 2025-10-31
+    status: accepted
+    decision: "updateDelay in both Plugin and PaperMCServer specs"
+    reasoning: "Allows community testing period before auto-apply, different policies per resource type"
+    alternatives:
+      - "No delay: Risky, untested versions"
+      - "Global delay only: Not flexible enough"
+      - "Manual approval: Too much ops overhead"
+    impact: "Constraint solver, update controller logic"
+
+  - id: ADR-019
+    date: 2025-10-31
+    status: accepted
+    decision: "Selector conflict resolution: latest > pinned, highest semver for all-pinned"
+    reasoning: "Clear precedence rules, predictable behavior, warning events for visibility"
+    alternatives:
+      - "Error on conflict: Too strict, breaks GitOps"
+      - "First match wins: Non-deterministic"
+      - "Explicit priority field: More complex API"
+    impact: "pkg/selector/matcher.go, reconciliation logic, status reporting"
+
+phases:
+  phase_1_mvp:
+    description: "Minimum viable product"
+    status: "planned"
+    features:
+      - "Plugin CRD with instanceSelector"
+      - "PaperMCServer CRD with labels"
+      - "Basic reconciliation loops"
+      - "Hangar API integration only"
+      - "Simple linear solver"
+      - "RCON graceful shutdown"
+      - "Cron-based maintenance windows"
+      - "Persistent cache in status"
+      - "Separate CRD Helm chart"
+
+  phase_2_enhanced:
+    description: "Additional plugin sources and optimizations"
+    status: "future"
+    features:
+      - "Modrinth API support"
+      - "SpigotMC API support"
+      - "URL-based plugin source"
+      - "SAT solver for complex constraints"
+      - "Admission webhooks for validation"
+      - "UI/Dashboard for visualization"
+
+  phase_3_advanced:
+    description: "Advanced features"
+    status: "future"
+    features:
+      - "Plugin dependency support"
+      - "Canary deployments"
+      - "Automatic compatibility testing"
+      - "E2E test suite with real servers"
+      - "Grafana dashboards"
+
+  phase_4_enterprise:
+    description: "Enterprise capabilities"
+    status: "future"
+    features:
+      - "Multi-cluster federation"
+      - "GitOps integration (Flux/ArgoCD)"
+      - "Backup/restore integration"
+      - "Advanced scheduling (blue-green)"
+      - "Plugin dependency graph visualization"
+
+observability:
+  metrics:
+    exporter: "Prometheus"
+    endpoint: "/metrics"
+    port: 8080
+    key_metrics:
+      - "minecraft_operator_plugin_reconcile_duration_seconds"
+      - "minecraft_operator_plugin_matched_servers_total"
+      - "minecraft_operator_server_reconcile_duration_seconds"
+      - "minecraft_operator_server_update_success_total"
+      - "minecraft_operator_server_update_failure_total"
+
+  logging:
+    format: "structured (logr)"
+    levels:
+      - "info - Normal operations"
+      - "error - Reconciliation failures"
+      - "debug - Detailed solver output"
+
+  events:
+    provider: "Kubernetes Events"
+    key_events:
+      - "Normal Resolved - Plugin version resolved"
+      - "Normal UpdateAvailable - New version available"
+      - "Normal UpdateCompleted - Update successful"
+      - "Warning IncompatibleVersion - No compatible version"
+      - "Warning RepositoryUnavailable - API unavailable"
+      - "Warning UpdateFailed - Update failed"
+
+  tracing:
+    status: "future"
+    consideration: "OpenTelemetry integration in Phase 3"
+
+documentation:
+  api_docs: "Generated from Go code comments"
+  user_guide: "README.md with quick start"
+  architecture: "DESIGN.md (comprehensive design document)"
+  adr: ".architecture.yaml (this file, single source of truth)"
+  examples: "examples/ directory with sample CRDs"
+  helm_readme: "charts/*/README.md for each chart"
+
+development:
+  ide: "Any with Go support"
+  required_tools:
+    - tool: "go"
+      version: "1.25+"
+
+    - tool: "kubebuilder"
+      version: "4.9.0"
+
+    - tool: "controller-gen"
+      version: "v0.22.3"
+      source: "Installed with kubebuilder"
+
+    - tool: "kustomize"
+      version: "v5.0+"
+
+    - tool: "podman"
+      version: "latest"
+
+    - tool: "helm"
+      version: "3.14+"
+
+    - tool: "golangci-lint"
+      version: "v1.62+"
+
+    - tool: "kind"
+      version: "v0.20+"
+      optional: true
+      purpose: "Local testing cluster"
+
+  local_development:
+    - "Use 'make manifests' to generate CRDs from Go types"
+    - "Use 'make generate' to generate deepcopy methods"
+    - "Use 'make test' to run unit tests"
+    - "Use 'make run' to run operator locally (connects to kubeconfig cluster)"
+    - "Use 'make docker-build' to build container image"
+    - "Use 'make install' to install CRDs into cluster"
+    - "Use 'make deploy' to deploy operator to cluster"
+
+  debugging:
+    - "Delve for Go debugging"
+    - "kubectl logs for operator logs"
+    - "kubectl describe for resource status"
+    - "kubectl get events for events"
+
+makefile_targets:
+  core:
+    - target: "manifests"
+      command: "controller-gen crd paths=./api/... output:crd:dir=./charts/minecraft-operator-crds/crds"
+      description: "Generate CRD YAML from Go types"
+
+    - target: "generate"
+      command: "controller-gen object paths=./api/..."
+      description: "Generate deepcopy methods"
+
+    - target: "test"
+      command: "go test ./... -coverprofile cover.out"
+      description: "Run unit tests with coverage"
+
+    - target: "lint"
+      command: "golangci-lint run"
+      description: "Run Go linters"
+
+    - target: "build"
+      command: "go build -o bin/manager main.go"
+      description: "Build operator binary"
+
+    - target: "run"
+      command: "go run ./main.go"
+      description: "Run operator locally against kubeconfig cluster"
+
+    - target: "docker-build"
+      command: "podman build --tag ghcr.io/lexfrei/minecraft-operator:latest --file Containerfile ."
+      description: "Build container image"
+
+    - target: "docker-push"
+      command: "podman push ghcr.io/lexfrei/minecraft-operator:latest"
+      description: "Push container image to registry"
+
+    - target: "install"
+      command: "helm install minecraft-operator-crds ./charts/minecraft-operator-crds"
+      description: "Install CRD chart into cluster"
+
+    - target: "deploy"
+      command: "helm install minecraft-operator ./charts/minecraft-operator"
+      description: "Deploy operator into cluster"
+
+    - target: "undeploy"
+      command: "helm uninstall minecraft-operator && helm uninstall minecraft-operator-crds"
+      description: "Remove operator and CRDs from cluster"
+
+quick_reference:
+  scaffold_project: |
+    # Initialize project (if starting from scratch)
+    kubebuilder init --domain mc.k8s.lex.la --repo github.com/lexfrei/minecraft-operator
+
+    # Create APIs
+    kubebuilder create api --group mc.k8s.lex.la --version v1alpha1 --kind Plugin --resource --controller
+    kubebuilder create api --group mc.k8s.lex.la --version v1alpha1 --kind PaperMCServer --resource --controller
+
+    # Configure controller-gen for CRD chart output
+    # Edit Makefile to set: output:crd:dir=./charts/minecraft-operator-crds/crds
+
+  development_workflow: |
+    1. Make changes to api/v1alpha1/*.go
+    2. Run 'make manifests generate' to update CRDs and generated code
+    3. Run 'make test' to verify tests pass
+    4. Run 'make lint' to check code quality (ALL errors must be fixed)
+    5. Run 'make run' to test locally
+    6. Commit changes with semantic commit message and GPG signing
+    7. Push to feature branch
+    8. Create PR (NEVER push to main/master)
+
+  deployment_workflow: |
+    1. Build image: make docker-build
+    2. Push image: make docker-push
+    3. Update chart version in Chart.yaml
+    4. Lint charts: helm lint charts/minecraft-operator-crds && helm lint charts/minecraft-operator
+    5. Install CRDs: helm install minecraft-operator-crds charts/minecraft-operator-crds
+    6. Deploy operator: helm install minecraft-operator charts/minecraft-operator
+    7. Verify: kubectl get pods -n minecraft-operator-system
+
+important_notes:
+  - "This is NOT a high-availability system - 5-10 min downtime during updates is acceptable"
+  - "CRDs have independent lifecycle from operator (separate Helm chart)"
+  - "terminationGracePeriodSeconds CRITICAL - never set too low (world corruption risk)"
+  - "plugins/update/ is standard Paper mechanism - don't reinvent"
+  - "Always use feature branches - NEVER commit to main/master"
+  - "GPG signing required for all commits"
+  - "ALL linting errors must be fixed before push - no exceptions"
+  - "API domain is mc.k8s.lex.la (NOT paperstack.io)"
+  - "Use podman not docker per global CLAUDE.md"
+  - "updateDelay allows community testing before auto-apply"
+  - "Constraint solver ensures ALL matched servers are compatible"
+  - "Cache has two levels: memory (1h) + persistent (status)"
+  - "Selector conflicts: latest policy wins, or highest semver"
+
+references:
+  design_doc: "DESIGN.md"
+  project_readme: "README.md (to be created)"
+  kubebuilder_book: "https://book.kubebuilder.io"
+  controller_runtime_docs: "https://pkg.go.dev/sigs.k8s.io/controller-runtime"
+  papermc_docker: "https://github.com/lexfrei/papermc-docker"
+  hangar_api_client: "https://github.com/lexfrei/go-hungar"
+  paper_api: "https://papermc.io/api/docs"
+  rcon_protocol: "https://developer.valvesoftware.com/wiki/Source_RCON_Protocol"
