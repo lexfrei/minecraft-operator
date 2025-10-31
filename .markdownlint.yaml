@@ -1,0 +1,12 @@
+# Markdownlint configuration for minecraft-operator
+# Technical documentation requires flexibility for:
+# - Long YAML manifests
+# - Command examples
+# - Technical descriptions
+
+# Disable line length limit - too restrictive for technical docs
+MD013: false
+
+# Keep other important rules enabled
+MD040: true  # Require language for code blocks
+MD031: true  # Blank lines around fenced code blocks
