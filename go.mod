@@ -6,7 +6,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/cockroachdb/errors v1.12.0
 	github.com/gorcon/rcon v1.4.0
-	github.com/lexfrei/go-hangar v0.0.0-20251031013128-da409f390e69
+	github.com/lexfrei/go-hangar v0.0.0-20251031132727-083bf84be6ba
 	github.com/lexfrei/goPaperMC v0.0.2
 	github.com/onsi/ginkgo/v2 v2.27.2
 	github.com/onsi/gomega v1.38.2

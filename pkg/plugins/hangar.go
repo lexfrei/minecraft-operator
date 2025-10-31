@@ -25,9 +25,6 @@ func NewHangarClient() *HangarClient {
 }
 
 // GetVersions retrieves all available versions for a plugin from Hangar.
-// NOTE: Currently using go-hangar which doesn't expose platformDependencies and gameVersions.
-// A PR will be created to add these fields to the library.
-// For now, we return empty compatibility data - this will be fixed after the PR is merged.
 func (c *HangarClient) GetVersions(ctx context.Context, project string) ([]PluginVersion, error) {
 	// Get project info first to obtain owner
 	proj, err := c.client.GetProject(ctx, project)
@@ -60,13 +57,25 @@ func (c *HangarClient) GetVersions(ctx context.Context, project string) ([]Plugi
 			}
 		}
 
-		// TODO: Add platformDependencies and gameVersions after go-hangar PR is merged
-		// For now, these fields will be empty
+		// Extract Paper versions from platform dependencies
+		var paperVersions []string
+		if v.PlatformDependencies != nil {
+			if deps, ok := v.PlatformDependencies["PAPER"]; ok {
+				paperVersions = deps
+			}
+		}
+
+		// Use GameVersions for Minecraft versions (may be nil/empty)
+		minecraftVersions := v.GameVersions
+		if minecraftVersions == nil {
+			minecraftVersions = []string{}
+		}
+
 		versions = append(versions, PluginVersion{
 			Version:           v.Name,
 			ReleaseDate:       v.CreatedAt,
-			PaperVersions:     []string{}, // TODO: Extract from v.PlatformDependencies["PAPER"]
-			MinecraftVersions: []string{}, // TODO: Extract from v.GameVersions
+			PaperVersions:     paperVersions,
+			MinecraftVersions: minecraftVersions,
 			DownloadURL:       downloadURL,
 			Hash:              hash,
 		})
@@ -76,8 +85,6 @@ func (c *HangarClient) GetVersions(ctx context.Context, project string) ([]Plugi
 }
 
 // GetCompatibility retrieves compatibility information for a specific version.
-// NOTE: Currently returns empty data until platformDependencies and gameVersions
-// are added to go-hangar through a PR.
 func (c *HangarClient) GetCompatibility(
 	ctx context.Context,
 	project,
@@ -88,11 +95,22 @@ func (c *HangarClient) GetCompatibility(
 		return CompatibilityInfo{}, errors.Wrap(err, "failed to get version")
 	}
 
-	// TODO: Add platformDependencies and gameVersions after go-hangar PR is merged
-	_ = v // Suppress unused variable warning
+	// Extract Paper versions from platform dependencies
+	var paperVersions []string
+	if v.PlatformDependencies != nil {
+		if deps, ok := v.PlatformDependencies["PAPER"]; ok {
+			paperVersions = deps
+		}
+	}
+
+	// Use GameVersions for Minecraft versions (may be nil/empty)
+	minecraftVersions := v.GameVersions
+	if minecraftVersions == nil {
+		minecraftVersions = []string{}
+	}
 
 	return CompatibilityInfo{
-		MinecraftVersions: []string{}, // TODO: Extract from v.GameVersions
-		PaperVersions:     []string{}, // TODO: Extract from v.PlatformDependencies["PAPER"]
+		MinecraftVersions: minecraftVersions,
+		PaperVersions:     paperVersions,
 	}, nil
 }

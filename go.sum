@@ -128,6 +128,8 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lexfrei/go-hangar v0.0.0-20251031013128-da409f390e69 h1:2k7/kzVUhtdXzbSiq1wivPk+4vPrGYP5jxSEnWa5LrI=
 github.com/lexfrei/go-hangar v0.0.0-20251031013128-da409f390e69/go.mod h1:lH7Ux6fOmPE1DuSv1iEUK+EnGIV6XzE4A5yKcUd02g8=
+github.com/lexfrei/go-hangar v0.0.0-20251031132727-083bf84be6ba h1:zgc4g6iQySeP7U/zlp4pqQTSm3ghYEWgb8qUhNw6xxY=
+github.com/lexfrei/go-hangar v0.0.0-20251031132727-083bf84be6ba/go.mod h1:lH7Ux6fOmPE1DuSv1iEUK+EnGIV6XzE4A5yKcUd02g8=
 github.com/lexfrei/goPaperMC v0.0.2 h1:iQyUa7dge2lrisGo15Wnvvk88Gz0s4LO1Ifnj/2Nn9M=
 github.com/lexfrei/goPaperMC v0.0.2/go.mod h1:AJ29AyKm/ywUyYyvEl2wGBD9R2BKA2Yo2ZFrFMy7rp4=
 github.com/maruel/natural v1.1.1 h1:Hja7XhhmvEFhcByqDoHz9QZbkWey+COd9xWfCfn1ioo=
