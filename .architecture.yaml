@@ -153,7 +153,8 @@ infrastructure:
       - "Security scanning"
 
 structure:
-  layout: "kubebuilder-standard"
+  layout: "helm-first-kubebuilder"
+  deployment_method: "helm-only"
   organization:
     api:
       - "api/v1alpha1/ - CRD type definitions"
@@ -162,9 +163,9 @@ structure:
       - "zz_generated.deepcopy.go - Generated code"
 
     controllers:
-      - "controllers/plugin_controller.go - Plugin reconciliation"
-      - "controllers/papermcserver_controller.go - PaperMCServer reconciliation"
-      - "controllers/update_controller.go - Maintenance window updates"
+      - "internal/controller/plugin_controller.go - Plugin reconciliation"
+      - "internal/controller/papermcserver_controller.go - PaperMCServer reconciliation"
+      - "internal/controller/update_controller.go - Maintenance window updates"
 
     pkg:
       - "pkg/solver/ - Constraint solver implementation"
@@ -180,19 +181,22 @@ structure:
       - "pkg/rcon/client.go - RCON client wrapper"
       - "pkg/selector/ - Label selector matching"
       - "pkg/selector/matcher.go - Selector logic"
-      - "pkg/version/ - Version comparison"
-      - "pkg/version/comparator.go - Minecraft version utilities"
 
     charts:
-      - "charts/minecraft-operator-crds/ - CRD Helm chart"
-      - "charts/minecraft-operator-crds/crds/ - Generated CRD YAML"
+      - "charts/minecraft-operator-crds/ - CRD Helm chart (independent lifecycle)"
+      - "charts/minecraft-operator-crds/crds/ - Generated CRD YAML (controller-gen output)"
       - "charts/minecraft-operator/ - Operator Helm chart"
-      - "charts/minecraft-operator/templates/ - K8s resources"
+      - "charts/minecraft-operator/templates/ - K8s resources (Deployment, RBAC, Service)"
+      - "charts/minecraft-operator/templates/rbac/ - Generated RBAC manifests"
+
+    examples:
+      - "examples/ - Example custom resources for testing"
 
     root:
-      - "main.go - Operator entrypoint"
-      - "Containerfile - Container image definition"
+      - "cmd/main.go - Operator entrypoint"
+      - "build/Containerfile - Container image definition"
       - "Makefile - Build automation"
+      - ".architecture.yaml - This file (single source of truth)"
 
 custom_resources:
   plugin:
@@ -391,12 +395,13 @@ decisions:
   - id: ADR-005
     date: 2025-10-31
     status: accepted
-    decision: "Separate Helm chart for CRDs with independent lifecycle"
-    reasoning: "CRDs have different upgrade/delete implications than operator, follows Helm best practices"
+    decision: "Helm-only deployment with separate CRD chart (no Kustomize)"
+    reasoning: "CRDs have different upgrade/delete implications than operator, follows Helm best practices. Helm-only simplifies deployment methods and avoids maintaining dual infrastructure."
     alternatives:
+      - "Kustomize: More Kubernetes-native but less user-friendly for end users"
+      - "Dual approach (Kustomize + Helm): Maintenance overhead, confusion about which to use"
       - "Single chart: Simpler but couples CRD lifecycle to operator"
-      - "Manual CRD management: No versioning, harder to track"
-    impact: "charts/ structure, deployment process, upgrade workflows"
+    impact: "charts/ structure, deployment process, upgrade workflows, Makefile commands"
 
   - id: ADR-006
     date: 2025-10-31
@@ -682,8 +687,8 @@ development:
 makefile_targets:
   core:
     - target: "manifests"
-      command: "controller-gen crd paths=./api/... output:crd:dir=./charts/minecraft-operator-crds/crds"
-      description: "Generate CRD YAML from Go types"
+      command: "controller-gen crd paths=./api/... output:crd:dir=charts/minecraft-operator-crds/crds output:rbac:dir=charts/minecraft-operator/templates/rbac"
+      description: "Generate CRD and RBAC YAML from Go types"
 
     - target: "generate"
       command: "controller-gen object paths=./api/..."
@@ -693,36 +698,52 @@ makefile_targets:
       command: "go test ./... -coverprofile cover.out"
       description: "Run unit tests with coverage"
 
+    - target: "test-e2e"
+      command: "KIND=kind KIND_CLUSTER=minecraft-operator-test-e2e go test -tags=e2e ./test/e2e/"
+      description: "Run e2e tests with Kind cluster"
+
     - target: "lint"
       command: "golangci-lint run"
       description: "Run Go linters"
 
+    - target: "lint-fix"
+      command: "golangci-lint run --fix"
+      description: "Auto-fix linting issues"
+
     - target: "build"
-      command: "go build -o bin/manager main.go"
+      command: "go build -o bin/manager cmd/main.go"
       description: "Build operator binary"
 
     - target: "run"
-      command: "go run ./main.go"
+      command: "go run ./cmd/main.go"
       description: "Run operator locally against kubeconfig cluster"
 
-    - target: "docker-build"
-      command: "podman build --tag ghcr.io/lexfrei/minecraft-operator:latest --file Containerfile ."
+    - target: "container-build"
+      command: "podman build --tag ghcr.io/lexfrei/minecraft-operator:latest --file build/Containerfile ."
       description: "Build container image"
 
-    - target: "docker-push"
+    - target: "container-push"
       command: "podman push ghcr.io/lexfrei/minecraft-operator:latest"
       description: "Push container image to registry"
 
-    - target: "install"
-      command: "helm install minecraft-operator-crds ./charts/minecraft-operator-crds"
+    - target: "helm-lint"
+      command: "helm lint charts/minecraft-operator-crds && helm lint charts/minecraft-operator"
+      description: "Lint Helm charts"
+
+    - target: "helm-install-crds"
+      command: "helm install minecraft-operator-crds charts/minecraft-operator-crds --create-namespace --namespace minecraft-operator-system"
       description: "Install CRD chart into cluster"
 
-    - target: "deploy"
-      command: "helm install minecraft-operator ./charts/minecraft-operator"
-      description: "Deploy operator into cluster"
+    - target: "helm-install"
+      command: "helm install minecraft-operator charts/minecraft-operator --namespace minecraft-operator-system"
+      description: "Install operator chart into cluster (auto-installs CRDs)"
 
-    - target: "undeploy"
-      command: "helm uninstall minecraft-operator && helm uninstall minecraft-operator-crds"
+    - target: "helm-upgrade"
+      command: "helm upgrade minecraft-operator charts/minecraft-operator --namespace minecraft-operator-system"
+      description: "Upgrade operator in cluster"
+
+    - target: "helm-uninstall"
+      command: "helm uninstall minecraft-operator && helm uninstall minecraft-operator-crds --namespace minecraft-operator-system"
       description: "Remove operator and CRDs from cluster"
 
 quick_reference:
@@ -748,17 +769,33 @@ quick_reference:
     8. Create PR (NEVER push to main/master)
 
   deployment_workflow: |
-    1. Build image: make docker-build
-    2. Push image: make docker-push
-    3. Update chart version in Chart.yaml
-    4. Lint charts: helm lint charts/minecraft-operator-crds && helm lint charts/minecraft-operator
-    5. Install CRDs: helm install minecraft-operator-crds charts/minecraft-operator-crds
-    6. Deploy operator: helm install minecraft-operator charts/minecraft-operator
+    1. Build image: make container-build IMG=ghcr.io/lexfrei/minecraft-operator:v1.0.0
+    2. Push image: make container-push IMG=ghcr.io/lexfrei/minecraft-operator:v1.0.0
+    3. Update chart versions in Chart.yaml files
+    4. Lint charts: make helm-lint
+    5. Install CRDs: make helm-install-crds
+    6. Deploy operator: make helm-install
     7. Verify: kubectl get pods -n minecraft-operator-system
+
+  helm_workflow: |
+    # Development
+    make helm-install-crds  # Install CRDs
+    make helm-install       # Install operator
+
+    # Updates
+    make manifests          # Regenerate CRDs after API changes
+    make helm-upgrade       # Upgrade operator deployment
+    kubectl apply -f charts/minecraft-operator-crds/crds/  # Manually upgrade CRDs
+
+    # Cleanup
+    make helm-uninstall     # Remove everything
 
 important_notes:
   - "This is NOT a high-availability system - 5-10 min downtime during updates is acceptable"
-  - "CRDs have independent lifecycle from operator (separate Helm chart)"
+  - "Helm-only deployment (NO Kustomize) - CRDs in separate chart with independent lifecycle"
+  - "CRDs generated to charts/minecraft-operator-crds/crds/ via make manifests"
+  - "RBAC generated to charts/minecraft-operator/templates/rbac/ via make manifests"
+  - "Main entrypoint is cmd/main.go (NOT root main.go)"
   - "terminationGracePeriodSeconds CRITICAL - never set too low (world corruption risk)"
   - "plugins/update/ is standard Paper mechanism - don't reinvent"
   - "Always use feature branches - NEVER commit to main/master"

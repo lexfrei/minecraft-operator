@@ -30,7 +30,6 @@ go.work
 .DS_Store
 
 # Kubernetes operator specific
-config/manager/kustomization.yaml
 dist/
 
 # Kubebuilder

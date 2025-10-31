@@ -39,10 +39,10 @@ make deploy IMG=<some-registry>/minecraft-operator:tag
 privileges or be logged in as admin.
 
 **Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
+You can apply the samples (examples) from the examples directory:
 
 ```sh
-kubectl apply -k config/samples/
+kubectl apply -f examples/
 ```
 
 >**NOTE**: Ensure that the samples has default values to test it out.
@@ -51,7 +51,7 @@ kubectl apply -k config/samples/
 **Delete the instances (CRs) from the cluster:**
 
 ```sh
-kubectl delete -k config/samples/
+kubectl delete -f examples/
 ```
 
 **Delete the APIs(CRDs) from the cluster:**
