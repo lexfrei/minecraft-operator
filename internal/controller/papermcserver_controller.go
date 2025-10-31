@@ -494,7 +494,10 @@ func (r *PaperMCServerReconciler) detectCurrentPaperVersion(statefulSet *appsv1.
 			}
 			if env.Name == "PAPER_BUILD" {
 				// Parse build number
-				fmt.Sscanf(env.Value, "%d", &build)
+				if _, err := fmt.Sscanf(env.Value, "%d", &build); err != nil {
+					// If parsing fails, build remains 0
+					build = 0
+				}
 			}
 		}
 	}
