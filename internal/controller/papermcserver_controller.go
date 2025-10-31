@@ -143,11 +143,12 @@ func (r *PaperMCServerReconciler) doReconcile(ctx context.Context, server *mcv1a
 		return ctrl.Result{}, errors.Wrap(err, "failed to ensure service")
 	}
 
-	// Step 3: Detect current Paper version from StatefulSet
-	currentVersion := r.detectCurrentPaperVersion(statefulSet)
+	// Step 3: Detect current Paper version and build from StatefulSet
+	currentVersion, currentBuild := r.detectCurrentPaperVersion(statefulSet)
 	server.Status.CurrentPaperVersion = currentVersion
+	server.Status.CurrentPaperBuild = currentBuild
 
-	log.Info("Detected Paper version", "version", currentVersion)
+	log.Info("Detected Paper version", "version", currentVersion, "build", currentBuild)
 
 	// Step 4: Update plugin status
 	server.Status.Plugins = r.buildPluginStatus(matchedPlugins)
@@ -359,6 +360,11 @@ func (r *PaperMCServerReconciler) buildEnvironmentVariables(
 		env = r.addOrUpdateEnv(env, "PAPER_VERSION", paperVersion)
 	}
 
+	// Add Paper build if specified
+	if server.Spec.PaperBuild != nil {
+		env = r.addOrUpdateEnv(env, "PAPER_BUILD", fmt.Sprintf("%d", *server.Spec.PaperBuild))
+	}
+
 	// Add RCON configuration if enabled
 	if server.Spec.RCON.Enabled {
 		env = r.addOrUpdateEnv(env, "RCON_PORT", fmt.Sprintf("%d", server.Spec.RCON.Port))
@@ -475,17 +481,24 @@ func (r *PaperMCServerReconciler) buildService(server *mcv1alpha1.PaperMCServer)
 	}
 }
 
-// detectCurrentPaperVersion extracts the current Paper version from StatefulSet.
-func (r *PaperMCServerReconciler) detectCurrentPaperVersion(statefulSet *appsv1.StatefulSet) string {
-	// Try to get version from PAPER_VERSION env var
+// detectCurrentPaperVersion extracts the current Paper version and build from StatefulSet.
+func (r *PaperMCServerReconciler) detectCurrentPaperVersion(statefulSet *appsv1.StatefulSet) (string, int) {
+	version := ""
+	build := 0
+
+	// Try to get version and build from env vars
 	if len(statefulSet.Spec.Template.Spec.Containers) > 0 {
 		for _, env := range statefulSet.Spec.Template.Spec.Containers[0].Env {
 			if env.Name == "PAPER_VERSION" {
-				return env.Value
+				version = env.Value
+			}
+			if env.Name == "PAPER_BUILD" {
+				// Parse build number
+				fmt.Sscanf(env.Value, "%d", &build)
 			}
 		}
 	}
-	return ""
+	return version, build
 }
 
 // isStatefulSetReady checks if the StatefulSet is ready.
@@ -521,19 +534,33 @@ func (r *PaperMCServerReconciler) buildPluginStatus(plugins []mcv1alpha1.Plugin)
 	return status
 }
 
-// findAvailableUpdate runs the solver to find available Paper version updates.
+// findAvailableUpdate runs the solver to find available Paper version or build updates.
 func (r *PaperMCServerReconciler) findAvailableUpdate(
 	ctx context.Context,
 	server *mcv1alpha1.PaperMCServer,
 	matchedPlugins []mcv1alpha1.Plugin,
 ) (*mcv1alpha1.AvailableUpdate, error) {
-	log := ctrl.LoggerFrom(ctx)
-
-	// Handle specific version (not "latest")
-	if server.Spec.PaperVersion != "latest" {
-		// No update check for pinned versions
-		return nil, nil
+	// Case 1: paperVersion == "latest" - find best version through solver
+	if server.Spec.PaperVersion == "latest" {
+		return r.findVersionUpdate(ctx, server, matchedPlugins)
 	}
+
+	// Case 2: specific version but no build specified - check for build updates
+	if server.Spec.PaperBuild == nil {
+		return r.findBuildUpdate(ctx, server, matchedPlugins)
+	}
+
+	// Case 3: both version and build pinned - no updates
+	return nil, nil
+}
+
+// findVersionUpdate finds the best Paper version using the solver.
+func (r *PaperMCServerReconciler) findVersionUpdate(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+	matchedPlugins []mcv1alpha1.Plugin,
+) (*mcv1alpha1.AvailableUpdate, error) {
+	log := ctrl.LoggerFrom(ctx)
 
 	// Fetch available Paper versions
 	paperVersions, err := r.PaperClient.GetPaperVersions(ctx)
@@ -554,10 +581,71 @@ func (r *PaperMCServerReconciler) findAvailableUpdate(
 		return nil, nil
 	}
 
-	// TODO: Implement update delay checking based on actual Paper release dates
-	// For MVP, we apply updates immediately when solver finds them
+	// Get build info for the best version
+	buildInfo, err := r.PaperClient.GetPaperBuild(ctx, bestVersion)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get build info")
+	}
 
 	// Build plugin version pairs
+	pluginPairs := r.buildPluginVersionPairs(matchedPlugins)
+
+	return &mcv1alpha1.AvailableUpdate{
+		PaperVersion: bestVersion,
+		PaperBuild:   buildInfo.Build,
+		ReleasedAt:   metav1.Now(),
+		Plugins:      pluginPairs,
+		FoundAt:      metav1.Now(),
+	}, nil
+}
+
+// findBuildUpdate checks for newer builds of the current version.
+func (r *PaperMCServerReconciler) findBuildUpdate(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+	matchedPlugins []mcv1alpha1.Plugin,
+) (*mcv1alpha1.AvailableUpdate, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	// Get latest build for the specified version
+	buildInfo, err := r.PaperClient.GetPaperBuild(ctx, server.Spec.PaperVersion)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get latest build")
+	}
+
+	log.Info("Found latest build", "version", buildInfo.Version, "build", buildInfo.Build)
+
+	// Check if update is needed
+	if buildInfo.Build <= server.Status.CurrentPaperBuild {
+		log.Info("Already on latest build", "current", server.Status.CurrentPaperBuild, "latest", buildInfo.Build)
+		return nil, nil
+	}
+
+	// Check update delay if configured
+	if server.Spec.UpdateDelay != nil {
+		// TODO: Get actual build release time from API and check delay
+		// For now, we assume delay has passed
+		log.Info("Update delay check skipped (not implemented yet)")
+	}
+
+	// Build plugin version pairs
+	pluginPairs := r.buildPluginVersionPairs(matchedPlugins)
+
+	log.Info("Build update available", "current", server.Status.CurrentPaperBuild, "available", buildInfo.Build)
+
+	return &mcv1alpha1.AvailableUpdate{
+		PaperVersion: server.Spec.PaperVersion,
+		PaperBuild:   buildInfo.Build,
+		ReleasedAt:   metav1.Now(),
+		Plugins:      pluginPairs,
+		FoundAt:      metav1.Now(),
+	}, nil
+}
+
+// buildPluginVersionPairs constructs plugin version pairs from matched plugins.
+func (r *PaperMCServerReconciler) buildPluginVersionPairs(
+	matchedPlugins []mcv1alpha1.Plugin,
+) []mcv1alpha1.PluginVersionPair {
 	pluginPairs := make([]mcv1alpha1.PluginVersionPair, 0, len(matchedPlugins))
 	for i := range matchedPlugins {
 		plugin := &matchedPlugins[i]
@@ -571,13 +659,7 @@ func (r *PaperMCServerReconciler) findAvailableUpdate(
 			})
 		}
 	}
-
-	return &mcv1alpha1.AvailableUpdate{
-		PaperVersion: bestVersion,
-		ReleasedAt:   metav1.Now(),
-		Plugins:      pluginPairs,
-		FoundAt:      metav1.Now(),
-	}, nil
+	return pluginPairs
 }
 
 // setCondition sets or updates a condition in the server status.
@@ -603,6 +685,9 @@ func (r *PaperMCServerReconciler) setCondition(
 // serverStatusEqual compares two server statuses for equality.
 func serverStatusEqual(a, b *mcv1alpha1.PaperMCServerStatus) bool {
 	if a.CurrentPaperVersion != b.CurrentPaperVersion {
+		return false
+	}
+	if a.CurrentPaperBuild != b.CurrentPaperBuild {
 		return false
 	}
 	if len(a.Plugins) != len(b.Plugins) {

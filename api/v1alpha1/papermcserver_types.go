@@ -73,6 +73,11 @@ type PaperMCServerSpec struct {
 	// PaperVersion specifies the Paper version ("latest" or specific version).
 	PaperVersion string `json:"paperVersion"`
 
+	// PaperBuild specifies the exact Paper build number (optional).
+	// If not specified, the operator will auto-update to the latest build during maintenance windows.
+	// +optional
+	PaperBuild *int `json:"paperBuild,omitempty"`
+
 	// UpdateDelay is the grace period before applying Paper updates.
 	// +optional
 	UpdateDelay *metav1.Duration `json:"updateDelay,omitempty"`
@@ -128,6 +133,9 @@ type AvailableUpdate struct {
 	// PaperVersion is the available Paper version.
 	PaperVersion string `json:"paperVersion"`
 
+	// PaperBuild is the available Paper build number.
+	PaperBuild int `json:"paperBuild"`
+
 	// ReleasedAt is when this Paper version was released.
 	ReleasedAt metav1.Time `json:"releasedAt"`
 
@@ -155,6 +163,10 @@ type PaperMCServerStatus struct {
 	// CurrentPaperVersion is the currently running Paper version.
 	// +optional
 	CurrentPaperVersion string `json:"currentPaperVersion,omitempty"`
+
+	// CurrentPaperBuild is the currently running Paper build number.
+	// +optional
+	CurrentPaperBuild int `json:"currentPaperBuild,omitempty"`
 
 	// Plugins lists matched Plugin resources and their versions.
 	// +optional

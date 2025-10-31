@@ -48,6 +48,11 @@ spec:
                 required:
                 - timeout
                 type: object
+              paperBuild:
+                description: |-
+                  PaperBuild specifies the exact Paper build number (optional).
+                  If not specified, the operator will auto-update to the latest build during maintenance windows.
+                type: integer
               paperVersion:
                 description: PaperVersion specifies the Paper version ("latest" or
                   specific version).
@@ -8542,6 +8547,9 @@ spec:
                     description: FoundAt is when this update was discovered.
                     format: date-time
                     type: string
+                  paperBuild:
+                    description: PaperBuild is the available Paper build number.
+                    type: integer
                   paperVersion:
                     description: PaperVersion is the available Paper version.
                     type: string
@@ -8577,6 +8585,7 @@ spec:
                     type: string
                 required:
                 - foundAt
+                - paperBuild
                 - paperVersion
                 - plugins
                 - releasedAt
@@ -8642,6 +8651,10 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              currentPaperBuild:
+                description: CurrentPaperBuild is the currently running Paper build
+                  number.
+                type: integer
               currentPaperVersion:
                 description: CurrentPaperVersion is the currently running Paper version.
                 type: string
