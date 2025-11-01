@@ -1,0 +1,37 @@
+{{- if and .Values.webui.enabled .Values.webui.httproute.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "minecraft-operator.fullname" . }}-webui
+  labels:
+    {{- include "minecraft-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webui
+  {{- with .Values.webui.httproute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.webui.httproute.parentRefs }}
+  parentRefs:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.webui.httproute.hostnames }}
+  hostnames:
+    {{- range . }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.webui.httproute.rules }}
+  rules:
+    {{- toYaml .Values.webui.httproute.rules | nindent 4 }}
+  {{- else }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "minecraft-operator.fullname" . }}-webui
+          port: {{ .Values.webui.service.port }}
+  {{- end }}
+{{- end }}

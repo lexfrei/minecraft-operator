@@ -61,6 +61,27 @@ func (c *Client) GetPaperBuild(ctx context.Context, version string) (*BuildInfo,
 	return c.extractBuildInfo(ctx, version, builds)
 }
 
+// GetBuilds retrieves all build numbers for a specific Paper version.
+// Returns a slice of build numbers in ascending order.
+func (c *Client) GetBuilds(ctx context.Context, version string) ([]int, error) {
+	builds, err := c.paperClient.GetBuilds(ctx, "paper", version)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get builds")
+	}
+
+	if len(builds.Builds) == 0 {
+		return nil, errors.Newf("no builds available for version %s", version)
+	}
+
+	// Extract build numbers from the response
+	buildNumbers := make([]int, 0, len(builds.Builds))
+	for _, build := range builds.Builds {
+		buildNumbers = append(buildNumbers, int(build.Build))
+	}
+
+	return buildNumbers, nil
+}
+
 // extractBuildInfo extracts build info from builds response.
 func (c *Client) extractBuildInfo(
 	ctx context.Context,

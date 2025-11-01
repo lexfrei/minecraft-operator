@@ -40,8 +40,10 @@ import (
 	"github.com/lexfrei/minecraft-operator/internal/controller"
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
+	"github.com/lexfrei/minecraft-operator/pkg/registry"
 	"github.com/lexfrei/minecraft-operator/pkg/solver"
 	"github.com/lexfrei/minecraft-operator/pkg/testutil"
+	"github.com/lexfrei/minecraft-operator/pkg/webui"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -66,6 +68,9 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var webuiAddr string
+	var webuiNamespace string
+	var webuiEnabled bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -84,6 +89,10 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.StringVar(&webuiAddr, "webui-bind-address", ":8082", "The address the Web UI endpoint binds to.")
+	flag.StringVar(&webuiNamespace, "webui-namespace", "",
+		"The namespace to display in Web UI. If empty, uses the operator's namespace.")
+	flag.BoolVar(&webuiEnabled, "webui-enabled", true, "Enable the Web UI server.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -192,6 +201,9 @@ func main() {
 	// Initialize Paper API client
 	paperClient := paper.NewClient()
 
+	// Initialize Docker Hub registry client
+	registryClient := registry.NewClient()
+
 	// Initialize constraint solver
 	constraintSolver := solver.NewSimpleSolver()
 
@@ -211,10 +223,12 @@ func main() {
 
 	// Setup PaperMCServer controller
 	if err := (&controller.PaperMCServerReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		PaperClient: paperClient,
-		Solver:      constraintSolver,
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		Config:         mgr.GetConfig(),
+		PaperClient:    paperClient,
+		Solver:         constraintSolver,
+		RegistryClient: registryClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PaperMCServer")
 		os.Exit(1)
@@ -241,6 +255,25 @@ func main() {
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
+	}
+
+	// Initialize and start Web UI server
+	if webuiEnabled {
+		// Use operator namespace if webui-namespace not specified
+		uiNamespace := webuiNamespace
+		if uiNamespace == "" {
+			uiNamespace = os.Getenv("POD_NAMESPACE")
+			if uiNamespace == "" {
+				uiNamespace = "default"
+			}
+		}
+
+		webuiServer := webui.NewServer(mgr.GetClient(), uiNamespace, webuiAddr)
+		if err := mgr.Add(webuiServer); err != nil {
+			setupLog.Error(err, "unable to add webui server to manager")
+			os.Exit(1)
+		}
+		setupLog.Info("web ui server enabled", "address", webuiAddr, "namespace", uiNamespace)
 	}
 
 	setupLog.Info("starting manager")

@@ -1,0 +1,117 @@
+package templates
+
+import (
+	"fmt"
+)
+
+type DashboardData struct {
+	Servers           []ServerSummary
+	Namespaces        []string
+	SelectedNamespace string
+}
+
+type ServerSummary struct {
+	Name                string
+	Namespace           string
+	CurrentPaperVersion string
+	Strategy            string
+	AvailableUpdate     string
+	PluginCount         int
+	NextMaintenance     string
+	Status              string
+}
+
+templ Dashboard(data DashboardData) {
+	@Layout("Dashboard") {
+		<div hx-ext="sse" sse-connect="/ui/events" sse-swap="update">
+			<div class="card">
+				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+					<h2 style="margin: 0;">PaperMC Servers</h2>
+					if len(data.Namespaces) > 0 {
+						<div>
+							<label for="namespace-filter" style="color: var(--text-secondary); font-size: 14px; margin-right: 10px;">Namespace:</label>
+							<select id="namespace-filter"
+									name="namespace"
+									hx-get="/ui"
+									hx-trigger="change"
+									hx-target="body"
+									hx-swap="outerHTML"
+									hx-include="[name='namespace']"
+									style="background-color: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border); padding: 8px 12px; border-radius: 4px; font-size: 14px;">
+								<option value="">All Namespaces</option>
+								for _, ns := range data.Namespaces {
+									if ns == data.SelectedNamespace {
+										<option value={ ns } selected>{ ns }</option>
+									} else {
+										<option value={ ns }>{ ns }</option>
+									}
+								}
+							</select>
+						</div>
+					}
+				</div>
+				if len(data.Servers) == 0 {
+					<p style="color: var(--text-secondary);">No servers found.</p>
+				} else {
+					<div id="server-list">
+						for _, server := range data.Servers {
+							@ServerCard(server)
+						}
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
+templ ServerCard(server ServerSummary) {
+	<div class="card" style="margin-bottom: 15px;">
+		<div style="display: flex; justify-content: space-between; align-items: start;">
+			<div>
+				<h3 style="font-size: 18px; margin-bottom: 10px;">
+					<a href={ templ.URL(fmt.Sprintf("/ui/server/%s", server.Name)) }>
+						{ server.Name }
+					</a>
+				</h3>
+				<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 5px;">
+					Namespace: { server.Namespace }
+				</p>
+			</div>
+			<div>
+				if server.Status == "running" {
+					<span class="badge badge-success">Running</span>
+				} else if server.Status == "updating" {
+					<span class="badge badge-warning">Updating</span>
+				} else {
+					<span class="badge badge-error">Unknown</span>
+				}
+			</div>
+		</div>
+		<div style="margin-top: 15px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+			<div>
+				<p style="color: var(--text-secondary); font-size: 12px;">Current Version</p>
+				<p style="font-size: 16px; font-weight: 600;">{ server.CurrentPaperVersion }</p>
+			</div>
+			<div>
+				<p style="color: var(--text-secondary); font-size: 12px;">Strategy</p>
+				<p style="font-size: 16px; font-weight: 600;">{ server.Strategy }</p>
+			</div>
+			if server.AvailableUpdate != "" {
+				<div>
+					<p style="color: var(--text-secondary); font-size: 12px;">Available Update</p>
+					<p style="font-size: 16px; font-weight: 600; color: var(--accent);">{ server.AvailableUpdate }</p>
+				</div>
+			}
+			<div>
+				<p style="color: var(--text-secondary); font-size: 12px;">Plugins</p>
+				<p style="font-size: 16px; font-weight: 600;">{ fmt.Sprintf("%d", server.PluginCount) }</p>
+			</div>
+			if server.NextMaintenance != "" {
+				<div>
+					<p style="color: var(--text-secondary); font-size: 12px;">Next Maintenance</p>
+					<p style="font-size: 16px; font-weight: 600;">{ server.NextMaintenance }</p>
+				</div>
+			}
+		</div>
+	</div>
+}

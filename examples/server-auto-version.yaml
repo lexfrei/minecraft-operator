@@ -1,25 +1,23 @@
+# Example PaperMCServer with automatic version management
+# The solver will pick the best Paper version compatible with all matched plugins
 apiVersion: mc.k8s.lex.la/v1alpha1
 kind: PaperMCServer
 metadata:
-  name: test-server
+  name: auto-server
   namespace: default
   labels:
-    environment: test
-    type: vanilla
+    environment: production
+    type: modded
 spec:
-  # Update strategy controls version management:
-  # - "latest": Always use the latest available Paper version from Docker Hub
-  # - "auto": Solver automatically picks best version compatible with all plugins
-  # - "pin": Pin specific version (paperVersion), auto-update to latest build
-  # - "build-pin": Pin specific version and build (requires paperVersion and paperBuild)
-  updateStrategy: "latest"
+  # Auto mode: Solver picks best version for plugins
+  updateStrategy: "auto"
 
   # Update schedule
   updateSchedule:
     checkCron: "0 3 * * *"
     maintenanceWindow:
       enabled: true
-      cron: "0 4 * * 0"
+      cron: "0 4 * * 0"  # Sundays at 4 AM
 
   # Graceful shutdown
   gracefulShutdown:
@@ -30,11 +28,11 @@ spec:
     enabled: true
     port: 25575
     passwordSecret:
-      name: test-server-rcon
+      name: auto-server-rcon
       key: password
 
   # Pod template
-  # Note: The operator will override the container image based on paperVersion setting
+  # Note: The operator will override the container image based on solver results
   podTemplate:
     spec:
       containers:
@@ -42,11 +40,11 @@ spec:
         image: docker.io/lexfrei/papermc:latest
         resources:
           requests:
-            memory: "2Gi"
-            cpu: "1000m"
-          limits:
             memory: "4Gi"
             cpu: "2000m"
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
         env:
         - name: EULA
           value: "TRUE"
@@ -54,8 +52,8 @@ spec:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: test-server-rcon
+  name: auto-server-rcon
   namespace: default
 type: Opaque
 stringData:
-  password: "test-password-123"
+  password: "auto-password-456"

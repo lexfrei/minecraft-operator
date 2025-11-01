@@ -1,0 +1,133 @@
+package templates
+
+templ Layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+	<head>
+		<meta charset="UTF-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+		<title>{ title } - Minecraft Operator</title>
+		<script src="https://unpkg.com/htmx.org@1.9.12" crossorigin="anonymous"></script>
+		<style>
+			:root {
+				--bg-primary: #1a1a1a;
+				--bg-secondary: #2d2d2d;
+				--bg-tertiary: #3a3a3a;
+				--text-primary: #e0e0e0;
+				--text-secondary: #b0b0b0;
+				--accent: #4a9eff;
+				--success: #4caf50;
+				--warning: #ff9800;
+				--error: #f44336;
+				--border: #404040;
+			}
+
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+
+			body {
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+				background-color: var(--bg-primary);
+				color: var(--text-primary);
+				line-height: 1.6;
+			}
+
+			.container {
+				max-width: 1400px;
+				margin: 0 auto;
+				padding: 20px;
+			}
+
+			header {
+				background-color: var(--bg-secondary);
+				border-bottom: 2px solid var(--accent);
+				padding: 20px 0;
+				margin-bottom: 30px;
+			}
+
+			header h1 {
+				font-size: 24px;
+				color: var(--accent);
+			}
+
+			header p {
+				color: var(--text-secondary);
+				font-size: 14px;
+				margin-top: 5px;
+			}
+
+			.card {
+				background-color: var(--bg-secondary);
+				border: 1px solid var(--border);
+				border-radius: 8px;
+				padding: 20px;
+				margin-bottom: 20px;
+			}
+
+			.card h2 {
+				font-size: 18px;
+				margin-bottom: 15px;
+				color: var(--text-primary);
+			}
+
+			.badge {
+				display: inline-block;
+				padding: 4px 12px;
+				border-radius: 12px;
+				font-size: 12px;
+				font-weight: 600;
+				text-transform: uppercase;
+			}
+
+			.badge-success {
+				background-color: var(--success);
+				color: white;
+			}
+
+			.badge-warning {
+				background-color: var(--warning);
+				color: white;
+			}
+
+			.badge-error {
+				background-color: var(--error);
+				color: white;
+			}
+
+			.badge-info {
+				background-color: var(--accent);
+				color: white;
+			}
+
+			a {
+				color: var(--accent);
+				text-decoration: none;
+			}
+
+			a:hover {
+				text-decoration: underline;
+			}
+
+			@media (max-width: 768px) {
+				.container {
+					padding: 10px;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<header>
+			<div class="container">
+				<h1>Minecraft Operator</h1>
+				<p>PaperMC Server Management Dashboard</p>
+			</div>
+		</header>
+		<main class="container">
+			{ children... }
+		</main>
+	</body>
+	</html>
+}

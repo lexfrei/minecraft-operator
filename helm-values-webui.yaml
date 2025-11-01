@@ -1,0 +1,11 @@
+image:
+  tag: 0.2.4
+webui:
+  httproute:
+    enabled: true
+    parentRefs:
+      - name: cilium-gateway-internal
+        namespace: kube-system
+        sectionName: https-home-lex-la
+    hostnames:
+      - mco.home.lex.la

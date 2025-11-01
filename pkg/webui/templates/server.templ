@@ -1,0 +1,154 @@
+package templates
+
+import (
+	"fmt"
+)
+
+type ServerDetailData struct {
+	Name                string
+	Namespace           string
+	CurrentPaperVersion string
+	DesiredPaperVersion string
+	AvailableUpdate     string
+	Plugins             []PluginInfo
+	MaintenanceSchedule MaintenanceInfo
+	LastUpdate          UpdateInfo
+}
+
+type PluginInfo struct {
+	Name            string
+	Project         string
+	ResolvedVersion string
+	Status          string
+}
+
+type MaintenanceInfo struct {
+	CheckCron     string
+	WindowCron    string
+	NextWindow    string
+}
+
+type UpdateInfo struct {
+	Timestamp string
+	Status    string
+	Message   string
+}
+
+templ ServerDetail(data ServerDetailData) {
+	@Layout(data.Name) {
+		<div hx-ext="sse" sse-connect="/ui/events" sse-swap="update">
+			<div style="margin-bottom: 20px;">
+				<a href="/ui" style="font-size: 14px;">← Back to Dashboard</a>
+			</div>
+
+			<div class="card">
+				<h2>{ data.Name }</h2>
+				<p style="color: var(--text-secondary); margin-top: 5px;">Namespace: { data.Namespace }</p>
+			</div>
+
+			<div class="card">
+				<h2>Paper Version</h2>
+				<div style="margin-top: 15px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+					<div>
+						<p style="color: var(--text-secondary); font-size: 12px;">Current</p>
+						<p style="font-size: 18px; font-weight: 600;">{ data.CurrentPaperVersion }</p>
+					</div>
+					if data.DesiredPaperVersion != "" && data.DesiredPaperVersion != data.CurrentPaperVersion {
+						<div>
+							<p style="color: var(--text-secondary); font-size: 12px;">Desired</p>
+							<p style="font-size: 18px; font-weight: 600;">{ data.DesiredPaperVersion }</p>
+						</div>
+					}
+					if data.AvailableUpdate != "" {
+						<div>
+							<p style="color: var(--text-secondary); font-size: 12px;">Available Update</p>
+							<p style="font-size: 18px; font-weight: 600; color: var(--accent);">{ data.AvailableUpdate }</p>
+						</div>
+					}
+				</div>
+			</div>
+
+			<div class="card">
+				<h2>Plugins ({ fmt.Sprintf("%d", len(data.Plugins)) })</h2>
+				if len(data.Plugins) == 0 {
+					<p style="color: var(--text-secondary); margin-top: 15px;">No plugins configured.</p>
+				} else {
+					<div style="margin-top: 15px;">
+						for _, plugin := range data.Plugins {
+							@PluginCard(plugin)
+						}
+					</div>
+				}
+			</div>
+
+			<div class="card">
+				<h2>Maintenance Schedule</h2>
+				<div style="margin-top: 15px;">
+					<div style="margin-bottom: 15px;">
+						<p style="color: var(--text-secondary); font-size: 12px;">Update Check Schedule</p>
+						<p style="font-size: 16px; font-family: monospace;">{ data.MaintenanceSchedule.CheckCron }</p>
+					</div>
+					<div style="margin-bottom: 15px;">
+						<p style="color: var(--text-secondary); font-size: 12px;">Maintenance Window</p>
+						<p style="font-size: 16px; font-family: monospace;">{ data.MaintenanceSchedule.WindowCron }</p>
+					</div>
+					if data.MaintenanceSchedule.NextWindow != "" {
+						<div>
+							<p style="color: var(--text-secondary); font-size: 12px;">Next Window</p>
+							<p style="font-size: 16px; font-weight: 600; color: var(--accent);">{ data.MaintenanceSchedule.NextWindow }</p>
+						</div>
+					}
+				</div>
+			</div>
+
+			if data.LastUpdate.Timestamp != "" {
+				<div class="card">
+					<h2>Last Update</h2>
+					<div style="margin-top: 15px;">
+						<div style="margin-bottom: 10px;">
+							<p style="color: var(--text-secondary); font-size: 12px;">Timestamp</p>
+							<p style="font-size: 16px;">{ data.LastUpdate.Timestamp }</p>
+						</div>
+						<div style="margin-bottom: 10px;">
+							<p style="color: var(--text-secondary); font-size: 12px;">Status</p>
+							if data.LastUpdate.Status == "success" {
+								<span class="badge badge-success">Success</span>
+							} else if data.LastUpdate.Status == "failed" {
+								<span class="badge badge-error">Failed</span>
+							} else {
+								<span class="badge badge-info">{ data.LastUpdate.Status }</span>
+							}
+						</div>
+						if data.LastUpdate.Message != "" {
+							<div>
+								<p style="color: var(--text-secondary); font-size: 12px;">Message</p>
+								<p style="font-size: 14px;">{ data.LastUpdate.Message }</p>
+							</div>
+						}
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+templ PluginCard(plugin PluginInfo) {
+	<div style="background-color: var(--bg-tertiary); padding: 15px; border-radius: 6px; margin-bottom: 10px;">
+		<div style="display: flex; justify-content: space-between; align-items: start;">
+			<div>
+				<p style="font-size: 16px; font-weight: 600; margin-bottom: 5px;">{ plugin.Name }</p>
+				<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 5px;">Project: { plugin.Project }</p>
+				<p style="font-size: 14px;">Version: <span style="font-family: monospace; color: var(--accent);">{ plugin.ResolvedVersion }</span></p>
+			</div>
+			<div>
+				if plugin.Status == "compatible" {
+					<span class="badge badge-success">Compatible</span>
+				} else if plugin.Status == "incompatible" {
+					<span class="badge badge-error">Incompatible</span>
+				} else {
+					<span class="badge badge-info">{ plugin.Status }</span>
+				}
+			</div>
+		</div>
+	</div>
+}

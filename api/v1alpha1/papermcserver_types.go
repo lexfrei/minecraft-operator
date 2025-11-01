@@ -70,11 +70,20 @@ type RCONConfig struct {
 
 // PaperMCServerSpec defines the desired state of PaperMCServer.
 type PaperMCServerSpec struct {
-	// PaperVersion specifies the Paper version ("latest" or specific version).
-	PaperVersion string `json:"paperVersion"`
+	// UpdateStrategy defines the update strategy for Paper version.
+	// Valid values: "latest", "auto", "pin", "build-pin".
+	// - latest: always use latest available version from Docker Hub
+	// - auto: use solver to find best version compatible with plugins
+	// - pin: pin to specific version, auto-update to latest build (requires paperVersion)
+	// - build-pin: pin to specific version and build (requires paperVersion and paperBuild)
+	// +kubebuilder:validation:Enum=latest;auto;pin;build-pin
+	UpdateStrategy string `json:"updateStrategy"`
 
-	// PaperBuild specifies the exact Paper build number (optional).
-	// If not specified, the operator will auto-update to the latest build during maintenance windows.
+	// PaperVersion specifies the Paper version when using "pin" or "build-pin" strategy.
+	// +optional
+	PaperVersion string `json:"paperVersion,omitempty"`
+
+	// PaperBuild specifies the exact Paper build number when using "build-pin" strategy.
 	// +optional
 	PaperBuild *int `json:"paperBuild,omitempty"`
 
@@ -111,6 +120,14 @@ type ServerPluginStatus struct {
 
 	// ResolvedVersion is the plugin version resolved for this server.
 	ResolvedVersion string `json:"resolvedVersion"`
+
+	// CurrentVersion is the currently installed plugin version.
+	// +optional
+	CurrentVersion string `json:"currentVersion,omitempty"`
+
+	// DesiredVersion is the target plugin version the operator wants to install.
+	// +optional
+	DesiredVersion string `json:"desiredVersion,omitempty"`
 
 	// Compatible indicates if this version is compatible with the server.
 	Compatible bool `json:"compatible"`
@@ -158,6 +175,33 @@ type UpdateHistory struct {
 	Successful bool `json:"successful"`
 }
 
+// UpdateBlockedStatus indicates if updates are blocked due to compatibility issues.
+type UpdateBlockedStatus struct {
+	// Blocked indicates if updates are currently blocked.
+	Blocked bool `json:"blocked"`
+
+	// Reason provides a human-readable explanation for the block.
+	// +optional
+	Reason string `json:"reason,omitempty"`
+
+	// BlockedBy contains details about which plugin is blocking the update.
+	// +optional
+	BlockedBy *BlockedByInfo `json:"blockedBy,omitempty"`
+}
+
+// BlockedByInfo contains details about which plugin is blocking an update.
+type BlockedByInfo struct {
+	// Plugin is the name of the Plugin resource blocking the update.
+	Plugin string `json:"plugin"`
+
+	// Version is the current/desired version of the blocking plugin.
+	Version string `json:"version"`
+
+	// SupportedPaperVersions lists Paper versions this plugin supports.
+	// +optional
+	SupportedPaperVersions []string `json:"supportedPaperVersions,omitempty"`
+}
+
 // PaperMCServerStatus defines the observed state of PaperMCServer.
 type PaperMCServerStatus struct {
 	// CurrentPaperVersion is the currently running Paper version.
@@ -167,6 +211,14 @@ type PaperMCServerStatus struct {
 	// CurrentPaperBuild is the currently running Paper build number.
 	// +optional
 	CurrentPaperBuild int `json:"currentPaperBuild,omitempty"`
+
+	// DesiredPaperVersion is the target Paper version the operator wants to run.
+	// +optional
+	DesiredPaperVersion string `json:"desiredPaperVersion,omitempty"`
+
+	// DesiredPaperBuild is the target Paper build number the operator wants to run.
+	// +optional
+	DesiredPaperBuild int `json:"desiredPaperBuild,omitempty"`
 
 	// Plugins lists matched Plugin resources and their versions.
 	// +optional
@@ -179,6 +231,10 @@ type PaperMCServerStatus struct {
 	// LastUpdate records the most recent update attempt.
 	// +optional
 	LastUpdate *UpdateHistory `json:"lastUpdate,omitempty"`
+
+	// UpdateBlocked indicates if updates are blocked due to compatibility issues.
+	// +optional
+	UpdateBlocked *UpdateBlockedStatus `json:"updateBlocked,omitempty"`
 
 	// Conditions represent the current state of the PaperMCServer resource.
 	// +listType=map

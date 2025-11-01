@@ -40,7 +40,18 @@ spec:
         - --health-probe-bind-address=:8081
         - --metrics-bind-address=:8443
         - --metrics-secure=true
+        {{- if .Values.webui.enabled }}
+        - --webui-enabled=true
+        - --webui-bind-address=:{{ .Values.webui.port }}
+        {{- if .Values.webui.namespace }}
+        - --webui-namespace={{ .Values.webui.namespace }}
+        {{- end }}
+        {{- end }}
         env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         - name: NAMESPACE
           valueFrom:
             fieldRef:
@@ -52,6 +63,11 @@ spec:
         - containerPort: 8081
           name: health
           protocol: TCP
+        {{- if .Values.webui.enabled }}
+        - containerPort: {{ .Values.webui.port }}
+          name: webui
+          protocol: TCP
+        {{- end }}
         livenessProbe:
           httpGet:
             path: /healthz

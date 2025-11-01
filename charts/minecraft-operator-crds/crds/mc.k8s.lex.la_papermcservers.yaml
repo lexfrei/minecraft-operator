@@ -49,13 +49,12 @@ spec:
                 - timeout
                 type: object
               paperBuild:
-                description: |-
-                  PaperBuild specifies the exact Paper build number (optional).
-                  If not specified, the operator will auto-update to the latest build during maintenance windows.
+                description: PaperBuild specifies the exact Paper build number when
+                  using "build-pin" strategy.
                 type: integer
               paperVersion:
-                description: PaperVersion specifies the Paper version ("latest" or
-                  specific version).
+                description: PaperVersion specifies the Paper version when using "pin"
+                  or "build-pin" strategy.
                 type: string
               podTemplate:
                 description: PodTemplate is the template for the StatefulSet pod.
@@ -8529,12 +8528,26 @@ spec:
                 - checkCron
                 - maintenanceWindow
                 type: object
+              updateStrategy:
+                description: |-
+                  UpdateStrategy defines the update strategy for Paper version.
+                  Valid values: "latest", "auto", "pin", "build-pin".
+                  - latest: always use latest available version from Docker Hub
+                  - auto: use solver to find best version compatible with plugins
+                  - pin: pin to specific version, auto-update to latest build (requires paperVersion)
+                  - build-pin: pin to specific version and build (requires paperVersion and paperBuild)
+                enum:
+                - latest
+                - auto
+                - pin
+                - build-pin
+                type: string
             required:
             - gracefulShutdown
-            - paperVersion
             - podTemplate
             - rcon
             - updateSchedule
+            - updateStrategy
             type: object
           status:
             description: status defines the observed state of PaperMCServer
@@ -8658,6 +8671,14 @@ spec:
               currentPaperVersion:
                 description: CurrentPaperVersion is the currently running Paper version.
                 type: string
+              desiredPaperBuild:
+                description: DesiredPaperBuild is the target Paper build number the
+                  operator wants to run.
+                type: integer
+              desiredPaperVersion:
+                description: DesiredPaperVersion is the target Paper version the operator
+                  wants to run.
+                type: string
               lastUpdate:
                 description: LastUpdate records the most recent update attempt.
                 properties:
@@ -8687,6 +8708,14 @@ spec:
                       description: Compatible indicates if this version is compatible
                         with the server.
                       type: boolean
+                    currentVersion:
+                      description: CurrentVersion is the currently installed plugin
+                        version.
+                      type: string
+                    desiredVersion:
+                      description: DesiredVersion is the target plugin version the
+                        operator wants to install.
+                      type: string
                     pluginRef:
                       description: PluginRef references the Plugin resource.
                       properties:
@@ -8714,6 +8743,42 @@ spec:
                   - source
                   type: object
                 type: array
+              updateBlocked:
+                description: UpdateBlocked indicates if updates are blocked due to
+                  compatibility issues.
+                properties:
+                  blocked:
+                    description: Blocked indicates if updates are currently blocked.
+                    type: boolean
+                  blockedBy:
+                    description: BlockedBy contains details about which plugin is
+                      blocking the update.
+                    properties:
+                      plugin:
+                        description: Plugin is the name of the Plugin resource blocking
+                          the update.
+                        type: string
+                      supportedPaperVersions:
+                        description: SupportedPaperVersions lists Paper versions this
+                          plugin supports.
+                        items:
+                          type: string
+                        type: array
+                      version:
+                        description: Version is the current/desired version of the
+                          blocking plugin.
+                        type: string
+                    required:
+                    - plugin
+                    - version
+                    type: object
+                  reason:
+                    description: Reason provides a human-readable explanation for
+                      the block.
+                    type: string
+                required:
+                - blocked
+                type: object
             type: object
         required:
         - spec

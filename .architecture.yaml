@@ -12,8 +12,8 @@ metadata:
   language:
     primary: "go"
     version: "1.25"  # Go 1.25+ required for controller-runtime v0.22
-  version: "1.0.0"  # .architecture.yaml version
-  last_updated: "2025-10-31"
+  version: "1.3.0"  # .architecture.yaml version (MINOR: Version management constraints)
+  last_updated: "2025-11-02"
   license: "BSD-3-Clause"
 
 technical_stack:
@@ -69,6 +69,22 @@ technical_stack:
       version: "v1.11.3"
       purpose: "Enhanced error handling with stack traces"
 
+    registry:
+      package: "net/http (stdlib)"
+      version: "stdlib"
+      purpose: "Docker Hub Registry API v2 client for image verification"
+
+    templ:
+      package: "github.com/a-h/templ"
+      version: "v0.3.960"
+      purpose: "Type-safe HTML templates compiled to Go code for Web UI"
+
+    htmx:
+      type: "static-asset"
+      version: "1.9.12"
+      cdn: "https://unpkg.com/htmx.org@1.9.12"
+      purpose: "Dynamic HTML updates via SSE and AJAX for Web UI"
+
   testing:
     framework: "testing (stdlib)"
     envtest: "sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -111,7 +127,7 @@ infrastructure:
 
   external_images:
     papermc:
-      image: "lexfrei/papermc:latest"
+      image: "docker.io/lexfrei/papermc:latest"
       registry: "Docker Hub"
       source: "https://github.com/lexfrei/papermc-docker"
       customizable: true
@@ -177,10 +193,22 @@ structure:
       - "pkg/plugins/cache.go - API response caching"
       - "pkg/paper/ - Paper API client"
       - "pkg/paper/client.go - Paper version fetching"
+      - "pkg/registry/ - Docker Hub Registry API client"
+      - "pkg/registry/client.go - Docker Hub tag listing and verification"
+      - "pkg/registry/types.go - Docker Hub API response types"
       - "pkg/rcon/ - RCON integration"
       - "pkg/rcon/client.go - RCON client wrapper"
       - "pkg/selector/ - Label selector matching"
       - "pkg/selector/matcher.go - Selector logic"
+      - "pkg/webui/ - Web UI server and handlers"
+      - "pkg/webui/server.go - HTTP server setup"
+      - "pkg/webui/handlers.go - Request handlers"
+      - "pkg/webui/sse.go - Server-Sent Events for live updates"
+      - "pkg/webui/templates/ - Templ template files"
+      - "pkg/webui/templates/layout.templ - Base HTML layout"
+      - "pkg/webui/templates/dashboard.templ - Dashboard view"
+      - "pkg/webui/templates/server.templ - Server details view"
+      - "pkg/webui/static/ - Static assets (CSS, embedded HTMX)"
 
     charts:
       - "charts/minecraft-operator-crds/ - CRD Helm chart (independent lifecycle)"
@@ -235,9 +263,13 @@ custom_resources:
       - "podTemplate - StatefulSet pod specification"
     status_fields:
       - "currentPaperVersion - Observed running version"
-      - "plugins - Matched Plugin resources with versions"
+      - "currentPaperBuild - Observed running build number"
+      - "desiredPaperVersion - Target Paper version"
+      - "desiredPaperBuild - Target Paper build number"
+      - "plugins - Matched Plugin resources with current/desired versions"
       - "availableUpdate - Solver result for next update"
       - "lastUpdate - History of previous update"
+      - "updateBlocked - Update blocking information (blocked bool, reason string, blockedBy)"
 
 environment_variables:
   # RCON Configuration (per-server, from Secret)
@@ -248,6 +280,11 @@ environment_variables:
   METRICS_BIND_ADDRESS: "Metrics server bind address (:8080)"
   HEALTH_PROBE_BIND_ADDRESS: "Health probe bind address (:8081)"
   LEADER_ELECT: "Enable leader election (true)"
+
+  # Web UI Configuration (optional)
+  WEBUI_BIND_ADDRESS: "Web UI server bind address (:8082)"
+  WEBUI_NAMESPACE: "Namespace to display in UI (defaults to operator namespace)"
+  WEBUI_ENABLED: "Enable Web UI server (true by default)"
 
   # API Rate Limiting (optional)
   HANGAR_API_RATE_LIMIT: "Hangar API rate limit (requests/minute)"
@@ -344,10 +381,89 @@ security:
       - "Paper API (papermc.io)"
       - "RCON port on managed pods (25575)"
 
+    webui_ingress:
+      - "Browser clients (via kubectl port-forward or Ingress)"
+      - "No authentication required by default"
+      - "Production: Use Ingress with oauth2-proxy or similar"
+
   container:
     user: "non-root (65532)"
     capabilities: "drop ALL"
     readonly_root: "true (where possible)"
+
+webui:
+  architecture:
+    pattern: "Embedded HTTP server in operator binary"
+    framework: "net/http (stdlib) with github.com/a-h/templ"
+    port: 8082
+    authentication: "None for MVP (network policies)"
+
+  components:
+    server: "pkg/webui/server.go - HTTP server setup and routing"
+    handlers: "pkg/webui/handlers.go - Request handlers for routes"
+    sse: "pkg/webui/sse.go - Server-Sent Events for live updates"
+    templates: "pkg/webui/templates/*.templ - Type-safe HTML templates"
+    static: "pkg/webui/static/ - CSS and embedded JavaScript (HTMX)"
+
+  routes:
+    - path: "/ui"
+      method: "GET"
+      description: "Dashboard with all PaperMCServer instances"
+
+    - path: "/ui/server/{name}"
+      method: "GET"
+      description: "Server details page with plugins and status"
+
+    - path: "/ui/events"
+      method: "GET"
+      description: "SSE endpoint for real-time updates (K8s watch)"
+
+    - path: "/ui/static/*"
+      method: "GET"
+      description: "Static assets (CSS, embedded HTMX script)"
+
+  data_flow:
+    - "Browser → GET /ui → server.go handler"
+    - "handler → K8s client (shared cache) → fetch PaperMCServer/Plugin CRs"
+    - "handler → templates.Dashboard(data) → rendered HTML"
+    - "Browser ← HTML with HTMX + SSE connection"
+    - "Browser → SSE connection → /ui/events"
+    - "sse.go → K8s watch API → stream updates"
+    - "sse.go → format as SSE events → Browser"
+    - "HTMX receives SSE → triggers partial page update"
+
+  sse_implementation:
+    watch_resources:
+      - "PaperMCServer (status changes)"
+      - "Plugin (resolvedVersion changes)"
+    event_format: "SSE (text/event-stream)"
+    reconnection: "Automatic via browser SSE API"
+    filtering: "Only send updates for displayed namespace"
+
+  styling:
+    approach: "Minimal embedded CSS"
+    framework: "None (vanilla CSS)"
+    responsive: "Basic mobile support"
+    theme: "Dark mode friendly"
+
+  performance:
+    caching: "Uses operator's informer cache (no additional load)"
+    connections: "One SSE connection per browser tab"
+    updates: "Only send changes (not full state)"
+
+  deployment:
+    service_type: "ClusterIP (default)"
+    service_port: 8082
+    ingress: "Optional via Helm values (webui.ingress.enabled)"
+    local_access: "kubectl port-forward svc/minecraft-operator 8082:8082"
+
+  future_enhancements:
+    - "Namespace selector dropdown"
+    - "K8s RBAC authentication via SubjectAccessReview"
+    - "Search and filtering"
+    - "Plugin version comparison view"
+    - "Manual update triggering (with confirmation)"
+    - "Event log viewer"
 
 decisions:
   - id: ADR-001
@@ -552,6 +668,326 @@ decisions:
       - "Explicit priority field: More complex API"
     impact: "pkg/selector/matcher.go, reconciliation logic, status reporting"
 
+  - id: ADR-020
+    date: 2025-11-01
+    status: accepted
+    decision: "Use a-h/templ v0.3.960 for Web UI templates instead of html/template"
+    reasoning: "Type-safe templates compiled to Go at build time, prevents runtime errors, better IDE support, automatic XSS protection, aligns with project type-safety philosophy. Note: v0.3.0 in original specification doesn't exist; using latest stable v0.3.960"
+    alternatives:
+      - "html/template: Runtime template parsing, no type safety, prone to errors"
+      - "No templates: Pure Go HTML generation is verbose and error-prone"
+    impact: "pkg/webui/templates/, build process (templ generate step), Makefile"
+
+  - id: ADR-021
+    date: 2025-11-01
+    status: accepted
+    decision: "Embed Web UI in operator binary (not separate deployment)"
+    reasoning: "Shares K8s client and informer cache, simpler deployment, lower overhead, consistent with single-binary operator philosophy, uses existing RBAC permissions"
+    alternatives:
+      - "Separate deployment: Duplicates K8s client, additional RBAC, more complex deployment, higher resource usage"
+      - "Sidecar container: Still duplicates resources, complex communication"
+    impact: "cmd/main.go, pkg/webui/, Helm chart Service definition, single binary deployment"
+
+  - id: ADR-022
+    date: 2025-11-01
+    status: accepted
+    decision: "Web UI on port :8082 with ClusterIP Service and optional Ingress"
+    reasoning: "Separates concerns (:8080 metrics, :8081 health, :8082 UI), ClusterIP default for security, Ingress optional via Helm values for production, kubectl port-forward for dev"
+    alternatives:
+      - "Same port as metrics: Confusing, mixes concerns"
+      - "NodePort by default: Less secure, exposes service externally"
+      - "LoadBalancer: Expensive, not needed for internal tool"
+    impact: "cmd/main.go (port binding), Helm chart Service template, documentation"
+
+  - id: ADR-023
+    date: 2025-11-01
+    status: accepted
+    decision: "No authentication for MVP Web UI (rely on network policies)"
+    reasoning: "Simplifies MVP, kubectl port-forward provides secure access for dev, production uses Ingress with external auth (oauth2-proxy), aligns with metrics endpoint pattern"
+    alternatives:
+      - "K8s RBAC integration: Complex, requires SubjectAccessReview, overkill for MVP"
+      - "Basic auth: Weak security, credential management overhead"
+      - "OAuth: Too complex for MVP, can add later via Ingress"
+    impact: "pkg/webui/server.go (no auth middleware), Helm chart (network policy templates), documentation (port-forward instructions)"
+    future: "Add K8s RBAC integration in Phase 2 via SubjectAccessReview for fine-grained permissions"
+
+  - id: ADR-024
+    date: 2025-11-01
+    status: accepted
+    decision: "Use Server-Sent Events (SSE) with K8s watch for live updates instead of polling"
+    reasoning: "Real-time updates via K8s watch API, efficient (no polling overhead), native browser support, works with HTMX hx-trigger='sse:update', graceful degradation if SSE fails"
+    alternatives:
+      - "Polling with hx-trigger='every Xs': Higher latency, unnecessary API load, less responsive"
+      - "WebSockets: More complex, bidirectional not needed for read-only UI"
+      - "No live updates: Poor UX, requires manual refresh"
+    impact: "pkg/webui/sse.go (watch implementation), templates (HTMX SSE directives), browser compatibility (all modern browsers)"
+
+  - id: ADR-025
+    date: 2025-11-01
+    status: accepted
+    decision: "Web UI shares operator's cached K8s client instead of creating separate client"
+    reasoning: "Zero additional API load, consistent state with controllers, uses existing informer cache, no additional RBAC needed, efficient memory usage"
+    alternatives:
+      - "Separate K8s client: Duplicates API calls, cache, and memory, inconsistent state"
+      - "Direct API calls: Bypasses cache, high API load, poor performance"
+    impact: "cmd/main.go (pass client to webui), pkg/webui/server.go (accepts client), no additional RBAC rules"
+
+  - id: ADR-026
+    date: 2025-11-01
+    status: accepted
+    decision: "Web UI shows single namespace (configurable via flag) for MVP"
+    reasoning: "Aligns with operator deployment model (one per namespace), simpler implementation, configurable via --webui-namespace flag, sufficient for most use cases"
+    alternatives:
+      - "Cluster-wide view: Requires ClusterRole, more complex RBAC, overwhelming for large clusters"
+      - "Namespace selector dropdown: More complex UI, needs namespace list endpoint, can add in Phase 2"
+    impact: "cmd/main.go (flag), pkg/webui/server.go (namespace filtering), Helm chart (flag value), UI displays single namespace"
+    future: "Add namespace selector dropdown in Phase 2 if multi-namespace demand exists"
+
+  - id: ADR-027
+    date: 2025-11-02
+    status: accepted
+    decision: "Paper version management with Docker Hub Registry API, four resolution modes, and critical compatibility constraints"
+    reasoning: "PaperMC server images are built to Docker Hub with specific versioning scheme (docker.io/lexfrei/papermc:{version}-{build}). Need to verify image existence before applying updates since images are built once per day. Four resolution modes provide flexibility from fully automated to fully pinned. Status must track both current AND desired state for transparency. Using full docker.io/ path ensures correct registry resolution across different container runtimes. CRITICAL: Plugin compatibility must be checked BEFORE setting desired version, and updates MUST be blocked if any plugin would become incompatible. Never downgrade versions (Paper or plugins) - desired version must always be >= current version."
+    alternatives:
+      - "Always use latest tag: No version control, risky updates"
+      - "Only support pinned versions: No automation, manual maintenance burden"
+      - "Build images on-demand: Complex, slow, unnecessary infrastructure"
+      - "Use Paper API only without image verification: May reference non-existent images"
+      - "Skip compatibility checks: Risk breaking plugins and server functionality"
+      - "Allow downgrades: Data corruption risk, unexpected behavior, violates user expectations"
+    impact: "api/v1alpha1/papermcserver_types.go (status fields including UpdateBlocked), internal/controller/papermcserver_controller.go (version resolution with compatibility filtering), pkg/registry/ (new package), pkg/paper/client.go (build listing), pkg/solver/ (constraint enforcement)"
+    components:
+      docker_hub_client:
+        package: "pkg/registry/"
+        description: "Docker Hub Registry API v2 client using stdlib net/http"
+        api_endpoint: "https://hub.docker.com/v2/repositories/lexfrei/papermc/tags"
+        authentication: "None (public repository)"
+        methods:
+          - "ListTags(ctx, repository, pageSize) - List available tags"
+          - "ImageExists(ctx, repository, tag) - Verify specific tag exists"
+        rationale: "Simple, no external dependencies, sufficient for our needs, avoids heavy Docker SDK"
+
+      image_naming_convention:
+        with_build: "docker.io/lexfrei/papermc:{version}-{build} (e.g., docker.io/lexfrei/papermc:1.21.10-91)"
+        without_build: "docker.io/lexfrei/papermc:{version} (e.g., docker.io/lexfrei/papermc:1.21.10)"
+        latest: "docker.io/lexfrei/papermc:latest"
+        verified_examples:
+          - "latest"
+          - "1.21.9"
+          - "1.21.9-59"
+          - "1.21.10"
+          - "1.21.10-91"
+        build_frequency: "Once per day"
+        verification_required: true
+
+      status_field_extensions:
+        papermcserver_status:
+          - field: "desiredPaperVersion"
+            type: "string"
+            description: "Target Paper version to run (e.g., '1.21.10')"
+          - field: "desiredPaperBuild"
+            type: "int"
+            description: "Target Paper build number (e.g., 91)"
+          - field: "currentPaperVersion"
+            type: "string"
+            description: "Currently running Paper version"
+          - field: "currentPaperBuild"
+            type: "int"
+            description: "Currently running Paper build number"
+          - field: "updateBlocked"
+            type: "UpdateBlockedStatus"
+            description: "Indicates if updates are blocked due to compatibility issues"
+            subfields:
+              - field: "blocked"
+                type: "bool"
+                description: "True if update is blocked"
+              - field: "reason"
+                type: "string"
+                description: "Human-readable reason for blocking (e.g., 'Plugin EssentialsX incompatible with Paper 1.21.11')"
+              - field: "blockedBy"
+                type: "BlockedByInfo"
+                description: "Details about which plugin is blocking the update"
+                subfields:
+                  - field: "plugin"
+                    type: "string"
+                    description: "Name of the Plugin resource blocking update"
+                  - field: "version"
+                    type: "string"
+                    description: "Current/desired version of the blocking plugin"
+                  - field: "supportedPaperVersions"
+                    type: "[]string"
+                    description: "List of Paper versions this plugin supports (for user visibility)"
+        server_plugin_status:
+          - field: "currentVersion"
+            type: "string"
+            description: "Currently installed plugin version"
+          - field: "desiredVersion"
+            type: "string"
+            description: "Target plugin version from solver"
+        rationale: "Separate current/desired allows users to see what's running now, what operator wants to install, and when update will happen (maintenance window). UpdateBlocked provides transparency when compatibility constraints prevent updates."
+
+      version_resolution_modes:
+        mode_1_latest:
+          spec_value: "latest"
+          algorithm: |
+            1. Collect all matched Plugin resources
+            2. Get current Paper version from status.currentPaperVersion
+            3. Query Docker Hub for tag named 'latest'
+            4. Extract version from 'latest' tag metadata (if available) or query running version
+            5. Filter: Remove version if < current (no downgrade)
+            6. Filter: Remove version if incompatible with ANY plugin
+            7. If filtered out: Set updateBlocked=true with reason and blockedBy, keep current desired
+            8. Otherwise: Set desired to 'latest'
+          use_case: "Always run newest available Paper version"
+          image_verification: "Tag 'latest' always exists by convention"
+          compatibility_enforcement: "Yes - checks all matched plugins before setting desired"
+
+        mode_2_auto:
+          spec_value: "auto"
+          algorithm: |
+            1. Collect all matched Plugin resources
+            2. Get current Paper version from status.currentPaperVersion
+            3. Run constraint solver to find best Paper version for plugin compatibility
+            4. Filter: Remove versions < current (no downgrade)
+            5. Filter: Remove versions incompatible with ANY plugin
+            6. If filtered list is empty: Set updateBlocked=true with reason and blockedBy, keep current desired
+            7. Otherwise: Solver selects best version from filtered list
+            8. Find latest build for selected version with existing Docker image (see mode 3 algorithm)
+            9. Set desired to selected version-build
+          use_case: "Automated updates with plugin compatibility guarantee"
+          image_verification: "Required after solver picks version"
+          compatibility_enforcement: "Yes - constraint solver enforces compatibility with ALL plugins"
+
+        mode_3_version_only:
+          spec_value: "{version} (e.g., '1.21.10')"
+          algorithm: |
+            1. Collect all matched Plugin resources
+            2. Get current Paper version from status.currentPaperVersion
+            3. Parse specified version
+            4. Filter: If specified version < current, set updateBlocked=true (downgrade not allowed), keep current desired
+            5. Filter: Check if specified version is compatible with ALL matched plugins
+            6. If incompatible with any plugin: Set updateBlocked=true with reason and blockedBy, keep current desired
+            7. Otherwise: Query Paper API for all builds of specified version
+            8. Sort builds descending (newest first)
+            9. For each build, check if docker.io/lexfrei/papermc:{version}-{build} exists in Docker Hub
+            10. Return first existing image
+            11. Set desired to found version-build
+          use_case: "Pin major.minor version, auto-update builds"
+          image_verification: "Required for each build until match found"
+          compatibility_enforcement: "Yes - checks all matched plugins for specified version"
+          error_handling: "If no builds have images, log error and keep existing. If version incompatible, set updateBlocked=true"
+
+        mode_4_pinned:
+          spec_value: "{version}-{build} (e.g., '1.21.10-91')"
+          algorithm: |
+            1. Collect all matched Plugin resources
+            2. Get current Paper version from status.currentPaperVersion
+            3. Parse specified version-build
+            4. Filter: If specified version < current, set updateBlocked=true (downgrade not allowed), keep current desired
+            5. Filter: Check if specified version is compatible with ALL matched plugins
+            6. If incompatible with any plugin: Set updateBlocked=true with reason and blockedBy, keep current desired
+            7. Otherwise: Verify docker.io/lexfrei/papermc:{version}-{build} exists in Docker Hub
+            8. If exists: Set desired to specified version-build
+            9. If not exists: Set condition ImageNotFound, don't update StatefulSet
+          use_case: "Complete version control, manual updates only"
+          image_verification: "Required, error if image doesn't exist"
+          compatibility_enforcement: "Yes - checks all matched plugins for specified version"
+          error_handling: "Set condition to indicate missing image or compatibility issue, don't update StatefulSet"
+
+      caching_strategy:
+        decision: "No caching for MVP"
+        rationale: "Docker Hub API is fast enough, reconciliation is not frequent, simplifies implementation"
+        future: "Could add in-memory cache with 5-minute TTL if needed"
+
+      compatibility_checking:
+        description: "CRITICAL - Plugin compatibility MUST be checked before setting desired version"
+        algorithm: |
+          For each mode (latest, auto, version, pinned):
+            1. Collect matched Plugin resources via instanceSelector
+            2. Get current Paper version from status.currentPaperVersion (or empty if first reconcile)
+            3. For candidate Paper version(s):
+               a. Filter out versions < current (no downgrade constraint)
+               b. For each remaining candidate version:
+                  - Check compatibility with ALL matched plugins
+                  - If ANY plugin incompatible: mark candidate as invalid
+               c. If all candidates filtered out:
+                  - Identify which plugin caused the block
+                  - Set updateBlocked.blocked = true
+                  - Set updateBlocked.reason = "Plugin '{name}' incompatible with Paper {version}"
+                  - Set updateBlocked.blockedBy.plugin = plugin name
+                  - Set updateBlocked.blockedBy.version = plugin desired version
+                  - Set updateBlocked.blockedBy.supportedPaperVersions = plugin compatibility list
+                  - Keep existing desired version (don't change)
+                  - DO NOT proceed with update
+               d. Otherwise: Select best valid candidate and set as desired version
+
+        no_compatibility_info:
+          action: "If plugin has no compatibility metadata (API unavailable, field missing):"
+          strategy_fail_safe: "Log warning, assume INCOMPATIBLE, block update (conservative approach)"
+          strategy_permissive: "Log warning, assume COMPATIBLE, proceed with update (risky)"
+          recommendation: "Use fail-safe for production, permissive only if user explicitly configured compatibilityOverride"
+
+        downgrade_prevention:
+          rule: "desired MUST always be >= current (semantic versioning comparison)"
+          enforcement: "Check BEFORE compatibility filtering - reject immediately if downgrade detected"
+          rationale: "Prevent data corruption, unexpected behavior, and violate user expectations of forward-only updates"
+          example: "current=1.21.10, candidate=1.21.9 -> REJECT, set updateBlocked"
+
+      error_handling:
+        docker_hub_unavailable:
+          action: "Log error, keep existing status.desired* values, don't block reconciliation, retry on next reconciliation"
+          status_update: "Do not change updateBlocked (preserve previous state)"
+
+        paper_api_unavailable:
+          action: "Same as Docker Hub unavailable, use previous desired version if set"
+          status_update: "Do not change updateBlocked (preserve previous state)"
+
+        image_not_found:
+          action: "Log warning, set condition to indicate issue, don't update StatefulSet"
+          status_update: "Set updateBlocked.blocked=true, reason='Image not found in Docker Hub'"
+
+        plugin_incompatible:
+          action: "Set updateBlocked with details, emit Warning event, keep current desired version"
+          status_update: "updateBlocked.blocked=true, populate reason and blockedBy"
+          user_visibility: "Status visible in kubectl get/describe, event in kubectl get events"
+
+        downgrade_attempt:
+          action: "Reject immediately, set updateBlocked, emit Warning event"
+          status_update: "updateBlocked.blocked=true, reason='Downgrade not allowed: current={current}, candidate={candidate}'"
+          user_visibility: "Clearly indicate downgrade prevention in status and events"
+
+        conditions:
+          - type: "ImageAvailable"
+            status: "False"
+            reason: "ImageNotFound"
+            message: "Docker image docker.io/lexfrei/papermc:{version}-{build} does not exist"
+
+          - type: "UpdateBlocked"
+            status: "True"
+            reason: "PluginIncompatible"
+            message: "Plugin '{plugin}' version {version} incompatible with Paper {paper_version}"
+
+          - type: "UpdateBlocked"
+            status: "True"
+            reason: "DowngradeNotAllowed"
+            message: "Cannot downgrade from {current} to {candidate}"
+
+      update_flow:
+        step_1: "Reconcile runs"
+        step_2: "Collect all matched Plugin resources via instanceSelector"
+        step_3: "Get current Paper version from StatefulSet image tag (parse docker.io/lexfrei/papermc:{version}-{build})"
+        step_4: "Store in status.currentPaperVersion and status.currentPaperBuild"
+        step_5: "Resolve desired version based on spec.paperVersion mode (1-4) WITH compatibility filtering:"
+        step_5a: "- Filter candidate versions: remove all < current (downgrade prevention)"
+        step_5b: "- Filter candidate versions: remove all incompatible with ANY matched plugin"
+        step_5c: "- If all candidates filtered out: set updateBlocked=true with reason/blockedBy, keep current desired, STOP"
+        step_6: "If valid candidate found: Store in status.desiredPaperVersion and status.desiredPaperBuild"
+        step_7: "Clear updateBlocked (set blocked=false) if previously blocked"
+        step_8: "Compare current vs desired"
+        step_9: "If different + maintenance window + NOT blocked: update StatefulSet image to docker.io/lexfrei/papermc:{desiredVersion}-{desiredBuild}"
+        step_10: "If not in window OR blocked: wait, show difference/block reason in status for user visibility"
+        step_11: "Emit appropriate events (Normal UpdateAvailable, Warning UpdateBlocked, etc.)"
+
 phases:
   phase_1_mvp:
     description: "Minimum viable product"
@@ -576,7 +1012,9 @@ phases:
       - "URL-based plugin source"
       - "SAT solver for complex constraints"
       - "Admission webhooks for validation"
-      - "UI/Dashboard for visualization"
+      - "Web UI namespace selector (multi-namespace view)"
+      - "Web UI authentication via K8s RBAC (SubjectAccessReview)"
+      - "Web UI filtering and search capabilities"
 
   phase_3_advanced:
     description: "Advanced features"
@@ -609,6 +1047,8 @@ observability:
       - "minecraft_operator_server_reconcile_duration_seconds"
       - "minecraft_operator_server_update_success_total"
       - "minecraft_operator_server_update_failure_total"
+      - "minecraft_operator_webui_requests_total"
+      - "minecraft_operator_webui_sse_connections_total"
 
   logging:
     format: "structured (logr)"
@@ -626,6 +1066,17 @@ observability:
       - "Warning IncompatibleVersion - No compatible version"
       - "Warning RepositoryUnavailable - API unavailable"
       - "Warning UpdateFailed - Update failed"
+
+  webui:
+    endpoint: "/ui"
+    port: 8082
+    features:
+      - "Dashboard view of all PaperMCServer instances"
+      - "Real-time updates via SSE"
+      - "Server details with current/desired state"
+      - "Plugin list with resolved versions"
+      - "Maintenance window schedule display"
+      - "Update status and history"
 
   tracing:
     status: "future"
@@ -672,11 +1123,13 @@ development:
   local_development:
     - "Use 'make manifests' to generate CRDs from Go types"
     - "Use 'make generate' to generate deepcopy methods"
+    - "Use 'make templ' to generate Go code from templ templates"
     - "Use 'make test' to run unit tests"
     - "Use 'make run' to run operator locally (connects to kubeconfig cluster)"
     - "Use 'make docker-build' to build container image"
     - "Use 'make install' to install CRDs into cluster"
     - "Use 'make deploy' to deploy operator to cluster"
+    - "Access Web UI locally: kubectl port-forward -n minecraft-operator-system svc/minecraft-operator 8082:8082"
 
   debugging:
     - "Delve for Go debugging"
@@ -693,6 +1146,10 @@ makefile_targets:
     - target: "generate"
       command: "controller-gen object paths=./api/..."
       description: "Generate deepcopy methods"
+
+    - target: "templ"
+      command: "templ generate -path pkg/webui/templates"
+      description: "Generate Go code from templ templates"
 
     - target: "test"
       command: "go test ./... -coverprofile cover.out"
@@ -759,11 +1216,11 @@ quick_reference:
     # Edit Makefile to set: output:crd:dir=./charts/minecraft-operator-crds/crds
 
   development_workflow: |
-    1. Make changes to api/v1alpha1/*.go
-    2. Run 'make manifests generate' to update CRDs and generated code
+    1. Make changes to api/v1alpha1/*.go or pkg/webui/templates/*.templ
+    2. Run 'make manifests generate templ' to update CRDs, generated code, and templates
     3. Run 'make test' to verify tests pass
     4. Run 'make lint' to check code quality (ALL errors must be fixed)
-    5. Run 'make run' to test locally
+    5. Run 'make run' to test locally (Web UI available at http://localhost:8082)
     6. Commit changes with semantic commit message and GPG signing
     7. Push to feature branch
     8. Create PR (NEVER push to main/master)
@@ -795,6 +1252,7 @@ important_notes:
   - "Helm-only deployment (NO Kustomize) - CRDs in separate chart with independent lifecycle"
   - "CRDs generated to charts/minecraft-operator-crds/crds/ via make manifests"
   - "RBAC generated to charts/minecraft-operator/templates/rbac/ via make manifests"
+  - "Templ templates generated to .go files via make templ (run before build)"
   - "Main entrypoint is cmd/main.go (NOT root main.go)"
   - "terminationGracePeriodSeconds CRITICAL - never set too low (world corruption risk)"
   - "plugins/update/ is standard Paper mechanism - don't reinvent"
@@ -807,6 +1265,10 @@ important_notes:
   - "Constraint solver ensures ALL matched servers are compatible"
   - "Cache has two levels: memory (1h) + persistent (status)"
   - "Selector conflicts: latest policy wins, or highest semver"
+  - "Web UI embedded in operator binary - shares K8s client and cache"
+  - "Web UI on port :8082 - use kubectl port-forward for local access"
+  - "Web UI has NO authentication by default - rely on network policies"
+  - "Web UI uses SSE for real-time updates via K8s watch API"
 
 references:
   design_doc: "DESIGN.md"

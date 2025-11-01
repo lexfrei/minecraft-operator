@@ -68,6 +68,53 @@ metrics:
 health:
   port: 8081
 
+# Web UI configuration
+webui:
+  enabled: true
+  port: 8082
+  namespace: ""  # If empty, uses the operator's namespace
+  service:
+    type: ClusterIP
+    port: 8082
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+      # cert-manager.io/cluster-issuer: letsencrypt-prod
+      # nginx.ingress.kubernetes.io/auth-url: "https://$host/oauth2/auth"
+      # nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
+    hosts:
+      - host: minecraft-operator.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+    #  - secretName: minecraft-operator-tls
+    #    hosts:
+    #      - minecraft-operator.local
+  # Gateway API HTTPRoute configuration
+  # Requires Gateway API CRDs to be installed in the cluster
+  # Can be enabled alongside Ingress for different use cases
+  httproute:
+    enabled: false
+    annotations: {}
+    # Reference to the Gateway(s) that this HTTPRoute should attach to
+    parentRefs:
+      - name: gateway
+        namespace: gateway-system
+    # Hostnames to match for routing
+    hostnames:
+      - minecraft-operator.local
+    # Custom rules (optional) - if not specified, defaults to routing all traffic on /
+    # rules:
+    #   - matches:
+    #       - path:
+    #           type: PathPrefix
+    #           value: /
+    #     backendRefs:
+    #       - name: minecraft-operator-webui
+    #         port: 8082
+
 # Node labels for pod assignment
 nodeSelector: {}
 

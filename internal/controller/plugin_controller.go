@@ -52,9 +52,6 @@ const (
 	repositoryStatusAvailable   = "available"
 	repositoryStatusUnavailable = "unavailable"
 	repositoryStatusOrphaned    = "orphaned"
-
-	versionPolicyLatest = "latest"
-	versionPolicyPinned = "pinned"
 )
 
 // PluginReconciler reconciles a Plugin object.

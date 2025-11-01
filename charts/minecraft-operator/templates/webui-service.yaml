@@ -1,0 +1,19 @@
+{{- if .Values.webui.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "minecraft-operator.fullname" . }}-webui
+  labels:
+    {{- include "minecraft-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webui
+spec:
+  type: {{ .Values.webui.service.type }}
+  ports:
+    - port: {{ .Values.webui.service.port }}
+      targetPort: webui
+      protocol: TCP
+      name: http
+  selector:
+    control-plane: controller-manager
+    {{- include "minecraft-operator.selectorLabels" . | nindent 4 }}
+{{- end }}
