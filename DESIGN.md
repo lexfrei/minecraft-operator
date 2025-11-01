@@ -1232,6 +1232,77 @@ rules:
    - `pinned 2.20.1` + `pinned 2.19.0` → 2.20.1 wins (newer version)
    - `latest` + `latest` → Solver picks best version (both are identical, no conflict)
 
+## Implementation Status
+
+### Current Implementation vs Design
+
+As of 2025-11, the following differences exist between the design document and actual implementation:
+
+#### Implemented Components (~85%)
+
+- ✅ **API Types (CRDs)**: Fully implemented as designed
+  - Plugin CRD with all spec and status fields
+  - PaperMCServer CRD with all required fields
+  - **Extension**: Added `paperBuild` field to PaperMCServer for granular build control
+
+- ✅ **Plugin Controller**: 100% complete
+  - Fetches plugin metadata from repositories
+  - Finds matched servers via label selectors
+  - Runs constraint solver for version resolution
+  - Updates Plugin status with resolved versions
+  - Handles orphaned state when repository unavailable
+  - Applies updateDelay filtering
+
+- ✅ **PaperMCServer Controller**: 80% complete
+  - Ensures StatefulSet and Service exist
+  - Finds matched plugins via selectors
+  - Runs solver for Paper version selection
+  - Updates server status with current state
+  - **Missing**: Does not apply updates (only detects them)
+
+- ✅ **Cross-Resource Triggers**: Fully implemented
+  - Plugin changes trigger PaperMCServer reconciliation
+  - PaperMCServer label changes trigger Plugin reconciliation
+
+- ✅ **Supporting Packages**: All implemented
+  - `pkg/solver/` - Constraint solver
+  - `pkg/plugins/` - Plugin API clients
+  - `pkg/paper/` - Paper API client
+  - `pkg/rcon/` - RCON client
+  - `pkg/selector/` - Label selector matching
+  - `pkg/version/` - Version comparison
+
+#### Not Yet Implemented (~15%)
+
+- ❌ **Update Controller**: Critical missing component
+  - Purpose: Applies updates during maintenance windows
+  - Responsibilities:
+    - Cron-based scheduling for maintenance windows
+    - RCON graceful shutdown before updates
+    - JAR downloads to `/data/plugins/update/`
+    - Pod deletion to trigger StatefulSet recreation
+  - **Current state**: PaperMCServer Controller only DETECTS available updates via `status.availableUpdate`, but does not APPLY them
+
+#### Minor Structural Differences (Non-Breaking)
+
+- **Controllers location**: `internal/controller/` instead of `controllers/` (standard Go practice)
+- **Main entrypoint**: `cmd/main.go` instead of root `main.go` (recommended structure)
+- **Additional feature**: Service creation for each PaperMCServer (not explicitly in design, but logical addition)
+
+### Migration Path
+
+To complete the implementation and match the design:
+
+1. Implement Update Controller with:
+   - Cron job runner for maintenance windows
+   - RCON graceful shutdown integration
+   - JAR download and placement in `plugins/update/`
+   - Pod deletion logic with proper error handling
+
+2. Add update history tracking to PaperMCServer status
+
+3. Implement metrics and events as documented
+
 ## Glossary
 
 - **PaperMC**: High-performance Spigot Minecraft server fork

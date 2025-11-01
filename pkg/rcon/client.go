@@ -10,6 +10,13 @@ import (
 	"github.com/gorcon/rcon"
 )
 
+// Client is an interface for RCON client operations.
+type Client interface {
+	Connect(ctx context.Context) error
+	GracefulShutdown(ctx context.Context, warnings []string, warningInterval time.Duration) error
+	Close() error
+}
+
 // RCONClient wraps gorcon/rcon for Minecraft server communication.
 type RCONClient struct {
 	conn     *rcon.Conn

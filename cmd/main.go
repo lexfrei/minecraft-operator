@@ -41,6 +41,7 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/solver"
+	"github.com/lexfrei/minecraft-operator/pkg/testutil"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -194,6 +195,9 @@ func main() {
 	// Initialize constraint solver
 	constraintSolver := solver.NewSimpleSolver()
 
+	// Initialize cron scheduler for update controller
+	cronScheduler := testutil.NewRealCronScheduler()
+
 	// Setup Plugin controller
 	if err := (&controller.PluginReconciler{
 		Client:       mgr.GetClient(),
@@ -213,6 +217,19 @@ func main() {
 		Solver:      constraintSolver,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PaperMCServer")
+		os.Exit(1)
+	}
+
+	// Setup Update controller with real cron scheduler
+	updateReconciler := &controller.UpdateReconciler{
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		PaperClient:  paperClient,
+		PluginClient: pluginClient,
+	}
+	updateReconciler.SetCron(cronScheduler)
+	if err := updateReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Update")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
