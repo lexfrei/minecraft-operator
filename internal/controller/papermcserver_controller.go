@@ -166,7 +166,7 @@ func (r *PaperMCServerReconciler) doReconcile(ctx context.Context, server *mcv1a
 	}
 
 	// Step 5: Ensure infrastructure (StatefulSet and Service)
-	statefulSet, err := r.ensureInfrastructure(ctx, server)
+	statefulSet, err := r.ensureInfrastructure(ctx, server, matchedPlugins)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -208,13 +208,14 @@ func (r *PaperMCServerReconciler) updateDesiredVersion(
 func (r *PaperMCServerReconciler) ensureInfrastructure(
 	ctx context.Context,
 	server *mcv1alpha1.PaperMCServer,
+	matchedPlugins []mcv1alpha1.Plugin,
 ) (*appsv1.StatefulSet, error) {
 	statefulSet, err := r.ensureStatefulSet(ctx, server)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to ensure statefulset")
 	}
 
-	if err := r.ensureService(ctx, server); err != nil {
+	if err := r.ensureService(ctx, server, matchedPlugins); err != nil {
 		return nil, errors.Wrap(err, "failed to ensure service")
 	}
 
@@ -513,48 +514,65 @@ func (r *PaperMCServerReconciler) addOrUpdateEnv(env []corev1.EnvVar, name, valu
 	return append(env, corev1.EnvVar{Name: name, Value: value})
 }
 
-// ensureService creates the Service if it doesn't exist.
+// ensureService creates or updates the Service for the PaperMCServer.
 func (r *PaperMCServerReconciler) ensureService(
 	ctx context.Context,
 	server *mcv1alpha1.PaperMCServer,
+	matchedPlugins []mcv1alpha1.Plugin,
 ) error {
 	serviceName := server.Name
-	var service corev1.Service
+	var existingService corev1.Service
 
 	err := r.Get(ctx, client.ObjectKey{
 		Name:      serviceName,
 		Namespace: server.Namespace,
-	}, &service)
+	}, &existingService)
 
-	if err == nil {
-		// Service exists
-		slog.InfoContext(ctx, "Service already exists", "name", serviceName)
+	// Build desired service
+	desiredService := r.buildService(server, matchedPlugins)
+
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to get service")
+		}
+
+		// Service doesn't exist, create it
+		slog.InfoContext(ctx, "Creating new Service", "name", serviceName)
+
+		// Set owner reference
+		if err := controllerutil.SetControllerReference(server, desiredService, r.Scheme); err != nil {
+			return errors.Wrap(err, "failed to set owner reference")
+		}
+
+		if err := r.Create(ctx, desiredService); err != nil {
+			return errors.Wrap(err, "failed to create service")
+		}
+
 		return nil
 	}
 
-	if !apierrors.IsNotFound(err) {
-		return errors.Wrap(err, "failed to get service")
-	}
+	// Service exists, update it
+	slog.InfoContext(ctx, "Updating existing Service", "name", serviceName)
 
-	// Service doesn't exist, create it
-	slog.InfoContext(ctx, "Creating new Service", "name", serviceName)
+	// Preserve immutable fields
+	desiredService.ResourceVersion = existingService.ResourceVersion
+	desiredService.Spec.ClusterIP = existingService.Spec.ClusterIP
+	desiredService.Spec.ClusterIPs = existingService.Spec.ClusterIPs
 
-	newService := r.buildService(server)
-
-	// Set owner reference
-	if err := controllerutil.SetControllerReference(server, newService, r.Scheme); err != nil {
+	// Set owner reference if not already set
+	if err := controllerutil.SetControllerReference(server, desiredService, r.Scheme); err != nil {
 		return errors.Wrap(err, "failed to set owner reference")
 	}
 
-	if err := r.Create(ctx, newService); err != nil {
-		return errors.Wrap(err, "failed to create service")
+	if err := r.Update(ctx, desiredService); err != nil {
+		return errors.Wrap(err, "failed to update service")
 	}
 
 	return nil
 }
 
-// buildService constructs a Service for the PaperMCServer.
-func (r *PaperMCServerReconciler) buildService(server *mcv1alpha1.PaperMCServer) *corev1.Service {
+// buildServicePorts constructs the list of ServicePorts for the PaperMCServer.
+func buildServicePorts(server *mcv1alpha1.PaperMCServer, matchedPlugins []mcv1alpha1.Plugin) []corev1.ServicePort {
 	ports := []corev1.ServicePort{
 		{
 			Name:       "minecraft",
@@ -574,6 +592,65 @@ func (r *PaperMCServerReconciler) buildService(server *mcv1alpha1.PaperMCServer)
 		})
 	}
 
+	// Add plugin ports (TCP+UDP for each)
+	seenPorts := make(map[int32]bool)
+	seenPorts[25565] = true // minecraft
+	if server.Spec.RCON.Enabled {
+		seenPorts[25575] = true // rcon
+	}
+
+	for _, plugin := range matchedPlugins {
+		if plugin.Spec.Port != nil && !seenPorts[*plugin.Spec.Port] {
+			seenPorts[*plugin.Spec.Port] = true
+			portName := fmt.Sprintf("plugin-%d", *plugin.Spec.Port)
+			// Add TCP port
+			ports = append(ports, corev1.ServicePort{
+				Name:       portName + "-tcp",
+				Port:       *plugin.Spec.Port,
+				TargetPort: intstr.FromInt(int(*plugin.Spec.Port)),
+				Protocol:   corev1.ProtocolTCP,
+			})
+			// Add UDP port
+			ports = append(ports, corev1.ServicePort{
+				Name:       portName + "-udp",
+				Port:       *plugin.Spec.Port,
+				TargetPort: intstr.FromInt(int(*plugin.Spec.Port)),
+				Protocol:   corev1.ProtocolUDP,
+			})
+		}
+	}
+
+	return ports
+}
+
+// buildService constructs a Service for the PaperMCServer.
+func (r *PaperMCServerReconciler) buildService(
+	server *mcv1alpha1.PaperMCServer,
+	matchedPlugins []mcv1alpha1.Plugin,
+) *corev1.Service {
+	ports := buildServicePorts(server, matchedPlugins)
+
+	// Determine service type (default to LoadBalancer)
+	serviceType := corev1.ServiceTypeLoadBalancer
+	if server.Spec.Service.Type != "" {
+		serviceType = server.Spec.Service.Type
+	}
+
+	// Build service spec
+	serviceSpec := corev1.ServiceSpec{
+		Type:  serviceType,
+		Ports: ports,
+		Selector: map[string]string{
+			"app":                       "papermc",
+			"mc.k8s.lex.la/server-name": server.Name,
+		},
+	}
+
+	// Add LoadBalancerIP if specified
+	if server.Spec.Service.LoadBalancerIP != "" {
+		serviceSpec.LoadBalancerIP = server.Spec.Service.LoadBalancerIP
+	}
+
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      server.Name,
@@ -583,15 +660,9 @@ func (r *PaperMCServerReconciler) buildService(server *mcv1alpha1.PaperMCServer)
 				"app.kubernetes.io/instance":   server.Name,
 				"app.kubernetes.io/managed-by": "minecraft-operator",
 			},
+			Annotations: server.Spec.Service.Annotations,
 		},
-		Spec: corev1.ServiceSpec{
-			Type:  corev1.ServiceTypeLoadBalancer,
-			Ports: ports,
-			Selector: map[string]string{
-				"app":                       "papermc",
-				"mc.k8s.lex.la/server-name": server.Name,
-			},
-		},
+		Spec: serviceSpec,
 	}
 }
 

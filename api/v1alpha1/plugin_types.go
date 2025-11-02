@@ -77,6 +77,14 @@ type PluginSpec struct {
 	// InstanceSelector selects which PaperMCServer instances to apply this plugin to.
 	InstanceSelector metav1.LabelSelector `json:"instanceSelector"`
 
+	// Port is the network port that this plugin exposes (optional).
+	// If specified, this port will be added to the Service of all matched servers (TCP+UDP).
+	// Example: 8123 for Dynmap web interface.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port *int32 `json:"port,omitempty"`
+
 	// CompatibilityOverride allows manual compatibility specification for edge cases.
 	// +optional
 	CompatibilityOverride *CompatibilityOverride `json:"compatibilityOverride,omitempty"`

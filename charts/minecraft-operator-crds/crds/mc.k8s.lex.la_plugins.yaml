@@ -106,6 +106,15 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-map-type: atomic
+              port:
+                description: |-
+                  Port is the network port that this plugin exposes (optional).
+                  If specified, this port will be added to the Service of all matched servers (TCP+UDP).
+                  Example: 8123 for Dynmap web interface.
+                format: int32
+                maximum: 65535
+                minimum: 1
+                type: integer
               source:
                 description: Source specifies where to fetch the plugin.
                 properties:

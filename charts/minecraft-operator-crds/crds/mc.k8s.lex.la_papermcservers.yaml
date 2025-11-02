@@ -8496,6 +8496,30 @@ spec:
                 - enabled
                 - passwordSecret
                 type: object
+              service:
+                description: Service configures the Kubernetes Service for this server.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Annotations are custom annotations for the Service (e.g., for LoadBalancer configuration).
+                      Examples: service.cilium.io/global, metallb.universe.tf/loadBalancerIPs
+                    type: object
+                  loadBalancerIP:
+                    description: LoadBalancerIP is the IP address for LoadBalancer
+                      type services.
+                    type: string
+                  type:
+                    default: LoadBalancer
+                    description: Type is the Service type (LoadBalancer, NodePort,
+                      or ClusterIP).
+                    enum:
+                    - LoadBalancer
+                    - NodePort
+                    - ClusterIP
+                    type: string
+                type: object
               updateDelay:
                 description: UpdateDelay is the grace period before applying Paper
                   updates.

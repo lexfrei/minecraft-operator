@@ -68,6 +68,24 @@ type RCONConfig struct {
 	Port int32 `json:"port,omitempty"`
 }
 
+// ServiceConfig defines configuration for the Kubernetes Service.
+type ServiceConfig struct {
+	// Type is the Service type (LoadBalancer, NodePort, or ClusterIP).
+	// +optional
+	// +kubebuilder:default=LoadBalancer
+	// +kubebuilder:validation:Enum=LoadBalancer;NodePort;ClusterIP
+	Type corev1.ServiceType `json:"type,omitempty"`
+
+	// Annotations are custom annotations for the Service (e.g., for LoadBalancer configuration).
+	// Examples: service.cilium.io/global, metallb.universe.tf/loadBalancerIPs
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// LoadBalancerIP is the IP address for LoadBalancer type services.
+	// +optional
+	LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
+}
+
 // PaperMCServerSpec defines the desired state of PaperMCServer.
 type PaperMCServerSpec struct {
 	// UpdateStrategy defines the update strategy for Paper version.
@@ -102,6 +120,10 @@ type PaperMCServerSpec struct {
 
 	// RCON configures RCON for graceful shutdown.
 	RCON RCONConfig `json:"rcon"`
+
+	// Service configures the Kubernetes Service for this server.
+	// +optional
+	Service ServiceConfig `json:"service,omitempty"`
 
 	// PodTemplate is the template for the StatefulSet pod.
 	PodTemplate corev1.PodTemplateSpec `json:"podTemplate"`
