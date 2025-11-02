@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -69,16 +70,14 @@ type PluginReconciler struct {
 
 // Reconcile implements the reconciliation loop for Plugin resources.
 func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := ctrl.LoggerFrom(ctx)
-
 	// Fetch the Plugin resource
 	var plugin mcv1alpha1.Plugin
 	if err := r.Get(ctx, req.NamespacedName, &plugin); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Info("Plugin resource not found, ignoring")
+			slog.InfoContext(ctx, "Plugin resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}
-		log.Error(err, "Failed to get Plugin resource")
+		slog.ErrorContext(ctx, "Failed to get Plugin resource", "error", err)
 		return ctrl.Result{}, errors.Wrap(err, "failed to get plugin")
 	}
 
@@ -91,7 +90,7 @@ func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Update status if changed
 	if err != nil || !statusEqual(&plugin.Status, originalStatus) {
 		if updateErr := r.Status().Update(ctx, &plugin); updateErr != nil {
-			log.Error(updateErr, "Failed to update Plugin status")
+			slog.ErrorContext(ctx, "Failed to update Plugin status", "error", updateErr)
 			if err == nil {
 				err = updateErr
 			}
@@ -100,7 +99,7 @@ func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Set conditions based on result
 	if err != nil {
-		log.Error(err, "Reconciliation failed")
+		slog.ErrorContext(ctx, "Reconciliation failed", "error", err)
 		r.setCondition(&plugin, conditionTypeReady, metav1.ConditionFalse, reasonReconcileError, err.Error())
 	} else {
 		r.setCondition(&plugin, conditionTypeReady, metav1.ConditionTrue, reasonReconcileSuccess, "Plugin reconciled successfully")
@@ -111,8 +110,6 @@ func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 // doReconcile performs the actual reconciliation logic.
 func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1alpha1.Plugin) (ctrl.Result, error) {
-	log := ctrl.LoggerFrom(ctx)
-
 	// Step 1: Fetch and cache plugin metadata
 	_, result, err := r.syncPluginMetadata(ctx, plugin)
 	if err != nil {
@@ -125,7 +122,7 @@ func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1alpha1.P
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Found matching servers", "count", len(matchedServers))
+	slog.InfoContext(ctx, "Found matching servers", "count", len(matchedServers))
 
 	// Step 3: Update status (version resolution moved to PaperMCServer controller)
 	plugin.Status.MatchedInstances = buildMatchedInstances(matchedServers)
@@ -137,7 +134,7 @@ func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1alpha1.P
 	// Step 4: Trigger reconciliation for matched PaperMCServer instances
 	// They will resolve plugin versions individually
 	if err := r.enqueueMatchedServers(ctx, matchedServers); err != nil {
-		log.Error(err, "Failed to enqueue server reconciliations")
+		slog.ErrorContext(ctx, "Failed to enqueue server reconciliations", "error", err)
 	}
 
 	return ctrl.Result{RequeueAfter: 15 * time.Minute}, nil
@@ -148,12 +145,10 @@ func (r *PluginReconciler) syncPluginMetadata(
 	ctx context.Context,
 	plugin *mcv1alpha1.Plugin,
 ) ([]plugins.PluginVersion, ctrl.Result, error) {
-	log := ctrl.LoggerFrom(ctx)
-
 	allVersions, repoErr := r.fetchPluginMetadata(ctx, plugin)
 
 	if repoErr != nil {
-		log.Error(repoErr, "Failed to fetch plugin metadata, using cached versions")
+		slog.ErrorContext(ctx, "Failed to fetch plugin metadata, using cached versions", "error", repoErr)
 		return r.handleRepositoryError(plugin, repoErr)
 	}
 
@@ -469,12 +464,10 @@ func (r *PluginReconciler) findPluginsForServer(ctx context.Context, obj client.
 		return nil
 	}
 
-	log := ctrl.LoggerFrom(ctx)
-
 	// Find all plugins in the same namespace that might match this server
 	var pluginList mcv1alpha1.PluginList
 	if err := r.List(ctx, &pluginList, client.InNamespace(server.Namespace)); err != nil {
-		log.Error(err, "Failed to list plugins for server watch")
+		slog.ErrorContext(ctx, "Failed to list plugins for server watch", "error", err)
 		return nil
 	}
 
@@ -485,7 +478,7 @@ func (r *PluginReconciler) findPluginsForServer(ctx context.Context, obj client.
 		// Check if this plugin's selector might match the server
 		matches, err := selector.MatchesSelector(server.Labels, plugin.Spec.InstanceSelector)
 		if err != nil {
-			log.Error(err, "Failed to check selector match", "plugin", plugin.Name)
+			slog.ErrorContext(ctx, "Failed to check selector match", "error", err, "plugin", plugin.Name)
 			continue
 		}
 
@@ -499,7 +492,7 @@ func (r *PluginReconciler) findPluginsForServer(ctx context.Context, obj client.
 		}
 	}
 
-	log.Info("Server change triggered plugin reconciliations",
+	slog.InfoContext(ctx, "Server change triggered plugin reconciliations",
 		"server", server.Name,
 		"plugins", len(requests))
 

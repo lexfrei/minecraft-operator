@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"log/slog"
 	"os"
 	"time"
 
@@ -26,12 +27,12 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -71,6 +72,8 @@ func main() {
 	var webuiAddr string
 	var webuiNamespace string
 	var webuiEnabled bool
+	var logLevel string
+	var logFormat string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -93,13 +96,40 @@ func main() {
 	flag.StringVar(&webuiNamespace, "webui-namespace", "",
 		"The namespace to display in Web UI. If empty, uses the operator's namespace.")
 	flag.BoolVar(&webuiEnabled, "webui-enabled", true, "Enable the Web UI server.")
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
+	flag.StringVar(&logLevel, "log-level", "info",
+		"Log level (debug, info, warn, error). Default: info")
+	flag.StringVar(&logFormat, "log-format", "json",
+		"Log format (json, text). Default: json")
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	// Configure slog handler based on flags
+	var slogLevel slog.Level
+	switch logLevel {
+	case "debug":
+		slogLevel = slog.LevelDebug
+	case "info":
+		slogLevel = slog.LevelInfo
+	case "warn":
+		slogLevel = slog.LevelWarn
+	case "error":
+		slogLevel = slog.LevelError
+	default:
+		slogLevel = slog.LevelInfo
+	}
+
+	handlerOpts := &slog.HandlerOptions{
+		Level: slogLevel,
+	}
+
+	var slogHandler slog.Handler
+	if logFormat == "text" {
+		slogHandler = slog.NewTextHandler(os.Stderr, handlerOpts)
+	} else {
+		slogHandler = slog.NewJSONHandler(os.Stderr, handlerOpts)
+	}
+
+	// Set controller-runtime logger using slog bridge
+	ctrl.SetLogger(logr.FromSlogHandler(slogHandler))
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will

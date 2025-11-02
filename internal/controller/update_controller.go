@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -78,8 +79,6 @@ type UpdateReconciler struct {
 //
 //nolint:funlen // Complex update orchestration logic, hard to simplify further
 func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := ctrl.LoggerFrom(ctx)
-
 	// Initialize cronEntries if nil
 	if r.cronEntries == nil {
 		r.cronEntriesMu.Lock()
@@ -95,23 +94,23 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if apierrors.IsNotFound(err) {
 			// Resource deleted - remove cron job if exists
 			r.removeCronJob(req.String())
-			log.Info("PaperMCServer resource not found, removed cron job if existed")
+			slog.InfoContext(ctx, "PaperMCServer resource not found, removed cron job if existed")
 			return ctrl.Result{}, nil
 		}
-		log.Error(err, "Failed to get PaperMCServer resource")
+		slog.ErrorContext(ctx, "Failed to get PaperMCServer resource", "error", err)
 		return ctrl.Result{}, errors.Wrap(err, "failed to get server")
 	}
 
 	// Manage cron schedule for this server
 	if err := r.manageCronSchedule(ctx, &server); err != nil {
-		log.Error(err, "Failed to manage cron schedule")
+		slog.ErrorContext(ctx, "Failed to manage cron schedule", "error", err)
 		return ctrl.Result{}, err
 	}
 
 	// Check if update is ready to apply
 	shouldApply, remainingDelay := r.shouldApplyUpdate(&server)
 	if !shouldApply {
-		log.Info("Update not ready to apply",
+		slog.InfoContext(ctx, "Update not ready to apply",
 			"server", server.Name,
 			"remainingDelay", remainingDelay)
 		// Requeue after remaining delay
@@ -123,7 +122,7 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Check if there's an available update
 	if server.Status.AvailableUpdate == nil {
-		log.V(1).Info("No available update", "server", server.Name)
+		slog.DebugContext(ctx, "No available update", "server", server.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -137,15 +136,17 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	var updateErr error
 	if paperChanged {
 		// Combined update: Paper + plugins
-		log.Info("Starting Paper + plugins update",
+		slog.InfoContext(ctx, "Starting Paper and plugins update",
 			"server", server.Name,
-			"from", fmt.Sprintf("%s-%d", server.Status.CurrentPaperVersion, server.Status.CurrentPaperBuild),
-			"to", fmt.Sprintf("%s-%d", server.Status.DesiredPaperVersion, server.Status.DesiredPaperBuild))
+			"currentVersion", server.Status.CurrentPaperVersion,
+			"currentBuild", server.Status.CurrentPaperBuild,
+			"desiredVersion", server.Status.DesiredPaperVersion,
+			"desiredBuild", server.Status.DesiredPaperBuild)
 
 		updateErr = r.performCombinedUpdate(ctx, &server)
 	} else {
 		// Plugin-only update
-		log.Info("Starting plugin-only update", "server", server.Name)
+		slog.InfoContext(ctx, "Starting plugin-only update", "server", server.Name)
 		updateErr = r.performPluginOnlyUpdate(ctx, &server)
 	}
 
@@ -156,16 +157,16 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Update the server resource status
 	if err := r.Status().Update(ctx, &server); err != nil {
-		log.Error(err, "Failed to update server status")
+		slog.ErrorContext(ctx, "Failed to update server status", "error", err)
 		return ctrl.Result{}, errors.Wrap(err, "failed to update status")
 	}
 
 	if updateErr != nil {
-		log.Error(updateErr, "Update failed")
+		slog.ErrorContext(ctx, "Update failed", "error", updateErr)
 		return ctrl.Result{}, updateErr
 	}
 
-	log.Info("Update completed successfully", "server", server.Name)
+	slog.InfoContext(ctx, "Update completed successfully", "server", server.Name)
 	return ctrl.Result{}, nil
 }
 
@@ -198,7 +199,6 @@ func (r *UpdateReconciler) shouldApplyUpdate(server *mcv1alpha1.PaperMCServer) (
 
 // manageCronSchedule adds, updates, or removes cron jobs based on server spec.
 func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1alpha1.PaperMCServer) error {
-	log := ctrl.LoggerFrom(ctx)
 	serverKey := types.NamespacedName{
 		Name:      server.Name,
 		Namespace: server.Namespace,
@@ -208,7 +208,7 @@ func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1a
 	if !server.Spec.UpdateSchedule.MaintenanceWindow.Enabled {
 		// Remove cron job if exists
 		r.removeCronJob(serverKey)
-		log.Info("Maintenance window disabled, removed cron job")
+		slog.InfoContext(ctx, "Maintenance window disabled, removed cron job")
 		return nil
 	}
 
@@ -225,7 +225,7 @@ func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1a
 		if existingJob != cronSpec {
 			// Spec changed - remove old and add new
 			r.removeCronJob(serverKey)
-			log.Info("Cron spec changed, updating job", "old", existingJob, "new", cronSpec)
+			slog.InfoContext(ctx, "Cron spec changed, updating job", "old", existingJob, "new", cronSpec)
 		} else {
 			// Spec unchanged - nothing to do
 			return nil
@@ -235,7 +235,7 @@ func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1a
 	// Add new cron job
 	entryID, err := r.cron.AddFunc(cronSpec, func() {
 		// Trigger reconciliation on cron schedule
-		log.Info("Maintenance window triggered by cron", "server", serverKey)
+		slog.InfoContext(ctx, "Maintenance window triggered by cron", "server", serverKey)
 		// Note: actual update logic will be implemented in later iterations
 	})
 
@@ -248,7 +248,7 @@ func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1a
 	r.cronEntries[serverKey] = entryID
 	r.cronEntriesMu.Unlock()
 
-	log.Info("Added cron job", "server", serverKey, "spec", cronSpec, "entryID", entryID)
+	slog.InfoContext(ctx, "Added cron job", "server", serverKey, "spec", cronSpec, "entryID", entryID)
 	return nil
 }
 
@@ -359,8 +359,6 @@ func (r *UpdateReconciler) downloadPluginToServer(
 	downloadURL string,
 	expectedHash string,
 ) error {
-	log := ctrl.LoggerFrom(ctx)
-
 	// Get pod for this server
 	podName := server.Name + "-0" // StatefulSet pod naming convention
 	namespace := server.Namespace
@@ -373,7 +371,7 @@ func (r *UpdateReconciler) downloadPluginToServer(
 		downloadURL,
 	)
 
-	log.Info("Downloading plugin to server",
+	slog.InfoContext(ctx, "Downloading plugin to server",
 		"server", server.Name,
 		"plugin", pluginName,
 		"url", downloadURL)
@@ -410,10 +408,10 @@ func (r *UpdateReconciler) downloadPluginToServer(
 				expectedHash, actualHash)
 		}
 
-		log.Info("Plugin checksum verified", "plugin", pluginName)
+		slog.InfoContext(ctx, "Plugin checksum verified", "plugin", pluginName)
 	}
 
-	log.Info("Plugin downloaded successfully",
+	slog.InfoContext(ctx, "Plugin downloaded successfully",
 		"server", server.Name,
 		"plugin", pluginName)
 
@@ -427,8 +425,6 @@ func (r *UpdateReconciler) applyPluginUpdates(
 	ctx context.Context,
 	server *mcv1alpha1.PaperMCServer,
 ) error {
-	log := ctrl.LoggerFrom(ctx)
-
 	// Get current Plugin CRDs to access download URLs
 	var pluginList mcv1alpha1.PluginList
 	if err := r.List(ctx, &pluginList, client.InNamespace(server.Namespace)); err != nil {
@@ -449,13 +445,13 @@ func (r *UpdateReconciler) applyPluginUpdates(
 
 		plugin, exists := pluginMap[pluginName]
 		if !exists {
-			log.Info("Plugin not found in cluster, skipping",
+			slog.InfoContext(ctx, "Plugin not found in cluster, skipping",
 				"plugin", pluginName)
 			continue
 		}
 
 		if pluginStatus.ResolvedVersion == "" {
-			log.Info("No resolved version for plugin, skipping",
+			slog.InfoContext(ctx, "No resolved version for plugin, skipping",
 				"plugin", pluginName)
 			continue
 		}
@@ -471,7 +467,7 @@ func (r *UpdateReconciler) applyPluginUpdates(
 		}
 
 		if downloadURL == "" {
-			log.Error(nil, "Download URL not found for plugin version",
+			slog.ErrorContext(ctx, "Download URL not found for plugin version",
 				"plugin", pluginName,
 				"version", pluginStatus.ResolvedVersion)
 			continue
@@ -479,7 +475,8 @@ func (r *UpdateReconciler) applyPluginUpdates(
 
 		// Download plugin
 		if err := r.downloadPluginToServer(ctx, server, pluginName, downloadURL, hash); err != nil {
-			log.Error(err, "Failed to download plugin",
+			slog.ErrorContext(ctx, "Failed to download plugin",
+				"error", err,
 				"plugin", pluginName)
 			// Continue with other plugins even if one fails
 			continue
@@ -488,7 +485,7 @@ func (r *UpdateReconciler) applyPluginUpdates(
 		updatedCount++
 	}
 
-	log.Info("Plugin updates applied",
+	slog.InfoContext(ctx, "Plugin updates applied",
 		"server", server.Name,
 		"updated", updatedCount,
 		"total", len(server.Status.Plugins))
@@ -501,12 +498,10 @@ func (r *UpdateReconciler) waitForPodReady(
 	ctx context.Context,
 	server *mcv1alpha1.PaperMCServer,
 ) error {
-	log := ctrl.LoggerFrom(ctx)
-
 	podName := server.Name + "-0"
 	namespace := server.Namespace
 
-	log.Info("Waiting for pod to become ready", "pod", podName)
+	slog.InfoContext(ctx, "Waiting for pod to become ready", "pod", podName)
 
 	// Timeout after 10 minutes
 	ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Minute)
@@ -526,19 +521,19 @@ func (r *UpdateReconciler) waitForPodReady(
 				Name:      podName,
 				Namespace: namespace,
 			}, &pod); err != nil {
-				log.Info("Pod not found yet", "pod", podName)
+				slog.InfoContext(ctx, "Pod not found yet", "pod", podName)
 				continue
 			}
 
 			// Check if pod is ready
 			for _, condition := range pod.Status.Conditions {
 				if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
-					log.Info("Pod is ready", "pod", podName)
+					slog.InfoContext(ctx, "Pod is ready", "pod", podName)
 					return nil
 				}
 			}
 
-			log.Info("Pod not ready yet", "pod", podName, "phase", pod.Status.Phase)
+			slog.InfoContext(ctx, "Pod not ready yet", "pod", podName, "phase", pod.Status.Phase)
 		}
 	}
 }
@@ -548,8 +543,6 @@ func (r *UpdateReconciler) createRCONClient(
 	ctx context.Context,
 	server *mcv1alpha1.PaperMCServer,
 ) (*rcon.RCONClient, error) {
-	log := ctrl.LoggerFrom(ctx)
-
 	podName := server.Name + "-0"
 	namespace := server.Namespace
 
@@ -590,7 +583,7 @@ func (r *UpdateReconciler) createRCONClient(
 		port = 25575 // Default RCON port
 	}
 
-	log.Info("Creating RCON client",
+	slog.InfoContext(ctx, "Creating RCON client",
 		"host", pod.Status.PodIP,
 		"port", port)
 
@@ -608,9 +601,7 @@ func (r *UpdateReconciler) performPluginOnlyUpdate(
 	ctx context.Context,
 	server *mcv1alpha1.PaperMCServer,
 ) error {
-	log := ctrl.LoggerFrom(ctx)
-
-	log.Info("Starting plugin-only update", "server", server.Name)
+	slog.InfoContext(ctx, "Starting plugin-only update", "server", server.Name)
 
 	// Step 1: Download plugins to /data/plugins/update/
 	if err := r.applyPluginUpdates(ctx, server); err != nil {
@@ -633,7 +624,7 @@ func (r *UpdateReconciler) performPluginOnlyUpdate(
 		return errors.Wrap(err, "failed to wait for pod ready")
 	}
 
-	log.Info("Plugin-only update completed successfully", "server", server.Name)
+	slog.InfoContext(ctx, "Plugin-only update completed successfully", "server", server.Name)
 
 	return nil
 }
@@ -644,9 +635,7 @@ func (r *UpdateReconciler) updateStatefulSetImage(
 	server *mcv1alpha1.PaperMCServer,
 	newImage string,
 ) error {
-	log := ctrl.LoggerFrom(ctx)
-
-	log.Info("Updating StatefulSet image",
+	slog.InfoContext(ctx, "Updating StatefulSet image",
 		"server", server.Name,
 		"newImage", newImage)
 
@@ -677,7 +666,7 @@ func (r *UpdateReconciler) updateStatefulSetImage(
 		return errors.Wrap(err, "failed to update StatefulSet")
 	}
 
-	log.Info("StatefulSet image updated successfully",
+	slog.InfoContext(ctx, "StatefulSet image updated successfully",
 		"server", server.Name,
 		"newImage", newImage)
 
@@ -689,9 +678,7 @@ func (r *UpdateReconciler) performCombinedUpdate(
 	ctx context.Context,
 	server *mcv1alpha1.PaperMCServer,
 ) error {
-	log := ctrl.LoggerFrom(ctx)
-
-	log.Info("Starting combined Paper + plugins update", "server", server.Name)
+	slog.InfoContext(ctx, "Starting combined Paper and plugins update", "server", server.Name)
 
 	// Step 1: Update StatefulSet image to new Paper version
 	newImage := fmt.Sprintf("lexfrei/papermc:%s-%d",
@@ -714,7 +701,7 @@ func (r *UpdateReconciler) performCombinedUpdate(
 		return errors.Wrap(err, "failed to wait for pod ready")
 	}
 
-	log.Info("Combined update completed successfully", "server", server.Name)
+	slog.InfoContext(ctx, "Combined update completed successfully", "server", server.Name)
 
 	return nil
 }
@@ -730,15 +717,13 @@ func (r *UpdateReconciler) executeGracefulShutdownWithClient(
 		Close() error
 	},
 ) error {
-	log := ctrl.LoggerFrom(ctx)
-
 	// Connect to RCON
 	if err := rconClient.Connect(ctx); err != nil {
 		return errors.Wrap(err, "failed to connect to RCON")
 	}
 	defer func() {
 		if err := rconClient.Close(); err != nil {
-			log.Error(err, "Failed to close RCON connection")
+			slog.ErrorContext(ctx, "Failed to close RCON connection", "error", err)
 		}
 	}()
 
@@ -760,7 +745,7 @@ func (r *UpdateReconciler) executeGracefulShutdownWithClient(
 		return errors.Wrap(err, "graceful shutdown failed")
 	}
 
-	log.Info("Graceful shutdown completed successfully")
+	slog.InfoContext(ctx, "Graceful shutdown completed successfully")
 	return nil
 }
 
