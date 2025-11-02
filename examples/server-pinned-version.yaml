@@ -11,8 +11,8 @@ metadata:
 spec:
   # Build-pin mode: Specific version and build (no updates)
   updateStrategy: "build-pin"
-  paperVersion: "1.21.10"
-  paperBuild: 91
+  version: "1.21.10"
+  build: 91
 
   # Update schedule (only for plugin updates, Paper version is pinned)
   updateSchedule:
@@ -39,7 +39,7 @@ spec:
     spec:
       containers:
       - name: minecraft
-        image: docker.io/lexfrei/papermc:latest
+        image: docker.io/lexfrei/papermc:1.21.10-91
         resources:
           requests:
             memory: "3Gi"

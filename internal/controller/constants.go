@@ -16,16 +16,13 @@ limitations under the License.
 
 package controller
 
-// Update strategy constants.
+// Update strategy constants (unified for both Plugin and PaperMCServer).
 const (
 	updateStrategyLatest   = "latest"
 	updateStrategyAuto     = "auto"
 	updateStrategyPin      = "pin"
 	updateStrategyBuildPin = "build-pin"
-)
-
-// Version policy constants for Plugin (legacy).
-const (
+	// Legacy constants for backward compatibility.
 	versionPolicyLatest = "latest"
 	versionPolicyPinned = "pinned"
 )

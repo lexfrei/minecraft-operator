@@ -44,7 +44,7 @@ func (s *Server) fetchDashboardData(ctx context.Context, filterNamespace string)
 		summary := templates.ServerSummary{
 			Name:                server.Name,
 			Namespace:           server.Namespace,
-			CurrentPaperVersion: formatVersionWithBuild(server.Status.CurrentPaperVersion, server.Status.CurrentPaperBuild),
+			CurrentPaperVersion: formatVersionWithBuild(server.Status.CurrentVersion, server.Status.CurrentBuild),
 			Strategy:            server.Spec.UpdateStrategy,
 			PluginCount:         len(server.Status.Plugins),
 			Status:              determineServerStatus(&server),
@@ -58,8 +58,8 @@ func (s *Server) fetchDashboardData(ctx context.Context, filterNamespace string)
 
 		if server.Status.AvailableUpdate != nil {
 			summary.AvailableUpdate = formatVersionWithBuild(
-				server.Status.AvailableUpdate.PaperVersion,
-				server.Status.AvailableUpdate.PaperBuild,
+				server.Status.AvailableUpdate.Version,
+				server.Status.AvailableUpdate.Build,
 			)
 
 			// Build update plan
@@ -110,15 +110,15 @@ func (s *Server) fetchServerDetailData(ctx context.Context, serverName string) (
 	data := templates.ServerDetailData{
 		Name:                server.Name,
 		Namespace:           server.Namespace,
-		CurrentPaperVersion: formatVersionWithBuild(server.Status.CurrentPaperVersion, server.Status.CurrentPaperBuild),
-		DesiredPaperVersion: formatVersionWithBuild(server.Status.DesiredPaperVersion, server.Status.DesiredPaperBuild),
+		CurrentPaperVersion: formatVersionWithBuild(server.Status.CurrentVersion, server.Status.CurrentBuild),
+		DesiredPaperVersion: formatVersionWithBuild(server.Status.DesiredVersion, server.Status.DesiredBuild),
 		Plugins:             make([]templates.PluginInfo, 0, len(server.Status.Plugins)),
 	}
 
 	if server.Status.AvailableUpdate != nil {
 		data.AvailableUpdate = formatVersionWithBuild(
-			server.Status.AvailableUpdate.PaperVersion,
-			server.Status.AvailableUpdate.PaperBuild,
+			server.Status.AvailableUpdate.Version,
+			server.Status.AvailableUpdate.Build,
 		)
 	}
 
@@ -143,7 +143,7 @@ func (s *Server) fetchServerDetailData(ctx context.Context, serverName string) (
 		data.LastUpdate = templates.UpdateInfo{
 			Timestamp: formatTimestamp(server.Status.LastUpdate.AppliedAt),
 			Status:    status,
-			Message:   fmt.Sprintf("Updated from %s", server.Status.LastUpdate.PreviousPaperVersion),
+			Message:   fmt.Sprintf("Updated from %s", server.Status.LastUpdate.PreviousVersion),
 		}
 	}
 
@@ -182,8 +182,8 @@ func determineServerStatus(server *mck8slexlav1alpha1.PaperMCServer) string {
 		}
 	}
 
-	// Fallback: check if CurrentPaperVersion is populated
-	if server.Status.CurrentPaperVersion != "" {
+	// Fallback: check if CurrentVersion is populated
+	if server.Status.CurrentVersion != "" {
 		return statusRunning
 	}
 
@@ -364,10 +364,10 @@ func buildUpdatePlan(server *mck8slexlav1alpha1.PaperMCServer) *templates.Update
 
 	// Check if Paper version is changing
 	if server.Status.AvailableUpdate != nil {
-		currentPaper := formatVersionWithBuild(server.Status.CurrentPaperVersion, server.Status.CurrentPaperBuild)
+		currentPaper := formatVersionWithBuild(server.Status.CurrentVersion, server.Status.CurrentBuild)
 		availablePaper := formatVersionWithBuild(
-			server.Status.AvailableUpdate.PaperVersion,
-			server.Status.AvailableUpdate.PaperBuild,
+			server.Status.AvailableUpdate.Version,
+			server.Status.AvailableUpdate.Build,
 		)
 
 		if currentPaper != availablePaper && availablePaper != "Unknown" {

@@ -11,6 +11,12 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/version"
 )
 
+const (
+	updateStrategyLatest = "latest"
+	updateStrategyAuto   = "auto"
+	updateStrategyPin    = "pin"
+)
+
 // SimpleSolver implements a linear search constraint solver for MVP.
 // Per ADR-010, this is sufficient for small numbers of plugins/servers.
 type SimpleSolver struct{}
@@ -22,10 +28,11 @@ func NewSimpleSolver() *SimpleSolver {
 
 // FindBestPluginVersion finds the maximum plugin version compatible with ALL servers.
 // Algorithm:
-//  1. Filter versions by updateDelay (skip too new versions)
-//  2. Sort versions in descending order
-//  3. For each version (highest first), check if compatible with ALL servers
-//  4. Return first version that satisfies all constraints
+//  1. Handle strategy-specific logic (pin/build-pin return exact version)
+//  2. Filter versions by updateDelay (skip too new versions)
+//  3. Sort versions in descending order
+//  4. For each version (highest first), check if compatible with ALL servers
+//  5. Return first version that satisfies all constraints
 func (s *SimpleSolver) FindBestPluginVersion(
 	ctx context.Context,
 	plugin *mcv1alpha1.Plugin,
@@ -40,15 +47,47 @@ func (s *SimpleSolver) FindBestPluginVersion(
 		return "", errors.New("no servers matched by selector")
 	}
 
-	// Handle pinned version policy
-	if plugin.Spec.VersionPolicy == "pinned" {
-		if plugin.Spec.PinnedVersion == "" {
-			return "", errors.New("versionPolicy is pinned but pinnedVersion is not set")
-		}
-		return plugin.Spec.PinnedVersion, nil
+	// Check if pinned strategy
+	if pinnedVersion := s.checkPinnedPluginVersion(plugin); pinnedVersion != "" {
+		return pinnedVersion, nil
 	}
 
-	// Filter by updateDelay
+	// Filter and sort versions
+	sortedVersions, err := s.filterAndSortPluginVersions(plugin, allVersions)
+	if err != nil {
+		return "", err
+	}
+
+	// Linear search: find max version compatible with ALL servers
+	return s.findCompatiblePluginVersion(sortedVersions, servers, plugin)
+}
+
+// checkPinnedPluginVersion returns pinned version if strategy is pin/build-pin/pinned.
+func (s *SimpleSolver) checkPinnedPluginVersion(plugin *mcv1alpha1.Plugin) string {
+	strategy := plugin.Spec.UpdateStrategy
+	if strategy == "" {
+		strategy = updateStrategyLatest
+	}
+
+	switch strategy {
+	case updateStrategyPin, "build-pin":
+		if plugin.Spec.Version != "" {
+			return plugin.Spec.Version
+		}
+	case "pinned":
+		if plugin.Spec.Version != "" {
+			return plugin.Spec.Version
+		}
+	}
+
+	return ""
+}
+
+// filterAndSortPluginVersions filters by updateDelay and sorts plugin versions descending.
+func (s *SimpleSolver) filterAndSortPluginVersions(
+	plugin *mcv1alpha1.Plugin,
+	allVersions []plugins.PluginVersion,
+) ([]plugins.PluginVersion, error) {
 	var delay time.Duration
 	if plugin.Spec.UpdateDelay != nil {
 		delay = plugin.Spec.UpdateDelay.Duration
@@ -56,20 +95,23 @@ func (s *SimpleSolver) FindBestPluginVersion(
 
 	filteredVersions := filterByDelay(allVersions, delay)
 	if len(filteredVersions) == 0 {
-		return "", errors.New("no versions available after updateDelay filtering")
+		return nil, errors.New("no versions available after updateDelay filtering")
 	}
 
-	// Sort versions in descending order (newest first)
-	sortedVersions := sortVersionsDesc(filteredVersions)
+	return sortVersionsDesc(filteredVersions), nil
+}
 
-	// Linear search: find max version compatible with ALL servers
+// findCompatiblePluginVersion finds first version compatible with all servers.
+func (s *SimpleSolver) findCompatiblePluginVersion(
+	sortedVersions []plugins.PluginVersion,
+	servers []mcv1alpha1.PaperMCServer,
+	plugin *mcv1alpha1.Plugin,
+) (string, error) {
 	for _, pv := range sortedVersions {
 		compatible := true
 
 		for i := range servers {
 			server := &servers[i]
-
-			// Check if this plugin version is compatible with server's Paper version
 			if !isPluginCompatibleWithServer(pv, server, plugin) {
 				compatible = false
 				break
@@ -86,10 +128,11 @@ func (s *SimpleSolver) FindBestPluginVersion(
 
 // FindBestPaperVersion finds the maximum Paper version compatible with ALL plugins.
 // Algorithm:
-//  1. Filter Paper versions by updateDelay
-//  2. Sort versions in descending order
-//  3. For each Paper version (highest first), check if ALL plugins have a compatible version
-//  4. Return first Paper version that satisfies all constraints
+//  1. Handle strategy-specific logic (pin/build-pin return exact version)
+//  2. Filter Paper versions by updateDelay
+//  3. Sort versions in descending order
+//  4. For each Paper version (highest first), check if ALL plugins have a compatible version
+//  5. Return first Paper version that satisfies all constraints
 func (s *SimpleSolver) FindBestPaperVersion(
 	ctx context.Context,
 	server *mcv1alpha1.PaperMCServer,
@@ -100,9 +143,28 @@ func (s *SimpleSolver) FindBestPaperVersion(
 		return "", errors.New("no Paper versions available")
 	}
 
-	// Handle specific version
-	if server.Spec.PaperVersion != "latest" {
-		return server.Spec.PaperVersion, nil
+	// Handle update strategy
+	strategy := server.Spec.UpdateStrategy
+	if strategy == "" {
+		// Default to latest if not specified
+		strategy = updateStrategyLatest
+	}
+
+	switch strategy {
+	case "pin", "build-pin":
+		// For pin/build-pin strategies, return the exact specified version
+		if server.Spec.Version == "" {
+			return "", errors.Newf("updateStrategy is '%s' but version is not set", strategy)
+		}
+		return server.Spec.Version, nil
+
+	case updateStrategyAuto, updateStrategyLatest:
+		// Continue with solver logic below
+		// auto: use solver to find best compatible version
+		// latest: use latest available version (filtered by compatibility)
+
+	default:
+		return "", errors.Newf("invalid updateStrategy: %s (expected 'latest', 'auto', 'pin', or 'build-pin')", strategy)
 	}
 
 	sortedVersions, err := s.filterAndSortPaperVersions(server, paperVersions)
@@ -249,9 +311,9 @@ func isPluginCompatibleWithServer(
 	plugin *mcv1alpha1.Plugin,
 ) bool {
 	// Use the current Paper version from status, fallback to spec
-	paperVersion := server.Status.CurrentPaperVersion
+	paperVersion := server.Status.CurrentVersion
 	if paperVersion == "" {
-		paperVersion = server.Spec.PaperVersion
+		paperVersion = server.Spec.Version
 	}
 
 	// Check if compatibilityOverride is enabled

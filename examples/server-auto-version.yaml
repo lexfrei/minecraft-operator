@@ -37,7 +37,7 @@ spec:
     spec:
       containers:
       - name: minecraft
-        image: docker.io/lexfrei/papermc:latest
+        image: docker.io/lexfrei/papermc:1.21.1-91
         resources:
           requests:
             memory: "4Gi"

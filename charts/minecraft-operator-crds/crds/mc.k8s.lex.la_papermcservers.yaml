@@ -39,6 +39,12 @@ spec:
           spec:
             description: spec defines the desired state of PaperMCServer
             properties:
+              build:
+                description: |-
+                  Build specifies the target Paper build number (required for build-pin strategy, optional for pin).
+                  If set with pin strategy, it serves as a minimum build; operator will still auto-update to newer builds.
+                  If set with build-pin strategy, operator will pin to this exact build.
+                type: integer
               gracefulShutdown:
                 description: GracefulShutdown configures graceful server shutdown.
                 properties:
@@ -48,14 +54,6 @@ spec:
                 required:
                 - timeout
                 type: object
-              paperBuild:
-                description: PaperBuild specifies the exact Paper build number when
-                  using "build-pin" strategy.
-                type: integer
-              paperVersion:
-                description: PaperVersion specifies the Paper version when using "pin"
-                  or "build-pin" strategy.
-                type: string
               podTemplate:
                 description: PodTemplate is the template for the StatefulSet pod.
                 properties:
@@ -8533,14 +8531,19 @@ spec:
                   UpdateStrategy defines the update strategy for Paper version.
                   Valid values: "latest", "auto", "pin", "build-pin".
                   - latest: always use latest available version from Docker Hub
-                  - auto: use solver to find best version compatible with plugins
-                  - pin: pin to specific version, auto-update to latest build (requires paperVersion)
-                  - build-pin: pin to specific version and build (requires paperVersion and paperBuild)
+                  - auto: use constraint solver to find best version compatible with plugins
+                  - pin: pin to specific version, auto-update to latest build (requires version field)
+                  - build-pin: pin to specific version and build (requires version and build fields)
                 enum:
                 - latest
                 - auto
                 - pin
                 - build-pin
+                type: string
+              version:
+                description: |-
+                  Version specifies the target Paper version (required for pin and build-pin strategies).
+                  Example: "1.21.1" for a Minecraft version.
                 type: string
             required:
             - gracefulShutdown
@@ -8556,15 +8559,12 @@ spec:
                 description: AvailableUpdate contains the next available update if
                   any.
                 properties:
+                  build:
+                    description: Build is the available Paper build number.
+                    type: integer
                   foundAt:
                     description: FoundAt is when this update was discovered.
                     format: date-time
-                    type: string
-                  paperBuild:
-                    description: PaperBuild is the available Paper build number.
-                    type: integer
-                  paperVersion:
-                    description: PaperVersion is the available Paper version.
                     type: string
                   plugins:
                     description: Plugins lists plugin versions for this update.
@@ -8596,12 +8596,15 @@ spec:
                     description: ReleasedAt is when this Paper version was released.
                     format: date-time
                     type: string
+                  version:
+                    description: Version is the available Paper version.
+                    type: string
                 required:
+                - build
                 - foundAt
-                - paperBuild
-                - paperVersion
                 - plugins
                 - releasedAt
+                - version
                 type: object
               conditions:
                 description: Conditions represent the current state of the PaperMCServer
@@ -8664,19 +8667,18 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              currentPaperBuild:
-                description: CurrentPaperBuild is the currently running Paper build
-                  number.
+              currentBuild:
+                description: CurrentBuild is the currently running Paper build number.
                 type: integer
-              currentPaperVersion:
-                description: CurrentPaperVersion is the currently running Paper version.
+              currentVersion:
+                description: CurrentVersion is the currently running Paper version.
                 type: string
-              desiredPaperBuild:
-                description: DesiredPaperBuild is the target Paper build number the
-                  operator wants to run.
+              desiredBuild:
+                description: DesiredBuild is the target Paper build number the operator
+                  wants to run.
                 type: integer
-              desiredPaperVersion:
-                description: DesiredPaperVersion is the target Paper version the operator
+              desiredVersion:
+                description: DesiredVersion is the target Paper version the operator
                   wants to run.
                 type: string
               lastUpdate:
@@ -8686,16 +8688,15 @@ spec:
                     description: AppliedAt is when the update was applied.
                     format: date-time
                     type: string
-                  previousPaperVersion:
-                    description: PreviousPaperVersion is the Paper version before
-                      the update.
+                  previousVersion:
+                    description: PreviousVersion is the Paper version before the update.
                     type: string
                   successful:
                     description: Successful indicates if the update succeeded.
                     type: boolean
                 required:
                 - appliedAt
-                - previousPaperVersion
+                - previousVersion
                 - successful
                 type: object
               plugins:
@@ -8758,9 +8759,9 @@ spec:
                         description: Plugin is the name of the Plugin resource blocking
                           the update.
                         type: string
-                      supportedPaperVersions:
-                        description: SupportedPaperVersions lists Paper versions this
-                          plugin supports.
+                      supportedVersions:
+                        description: SupportedVersions lists Paper versions this plugin
+                          supports.
                         items:
                           type: string
                         type: array

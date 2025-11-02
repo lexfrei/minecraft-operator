@@ -1,0 +1,21 @@
+apiVersion: mc.k8s.lex.la/v1alpha1
+kind: Plugin
+metadata:
+  name: luckperms-auto
+  namespace: default
+spec:
+  # Plugin source from Hangar (PaperMC plugin repository)
+  source:
+    type: hangar
+    project: "LuckPerms"
+
+  # Auto mode: Solver picks best version for matched servers
+  updateStrategy: auto
+
+  # Wait 3 days before applying new plugin versions
+  updateDelay: 72h
+
+  # Apply this plugin to all modded servers
+  instanceSelector:
+    matchLabels:
+      type: modded

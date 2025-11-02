@@ -39,6 +39,11 @@ spec:
           spec:
             description: spec defines the desired state of Plugin
             properties:
+              build:
+                description: |-
+                  Build specifies the target plugin build number (optional, only used with build-pin strategy).
+                  If set, the operator will pin to this exact build of the specified version.
+                type: integer
               compatibilityOverride:
                 description: CompatibilityOverride allows manual compatibility specification
                   for edge cases.
@@ -101,10 +106,6 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-map-type: atomic
-              pinnedVersion:
-                description: PinnedVersion specifies the exact version if versionPolicy
-                  is pinned.
-                type: string
               source:
                 description: Source specifies where to fetch the plugin.
                 properties:
@@ -129,16 +130,29 @@ spec:
                 description: UpdateDelay is the grace period before auto-applying
                   new versions.
                 type: string
-              versionPolicy:
-                description: VersionPolicy determines version selection strategy.
+              updateStrategy:
+                default: latest
+                description: |-
+                  UpdateStrategy defines how plugin versions are managed.
+                  Valid values: "latest", "auto", "pin", "build-pin".
+                  - latest: always use the latest available version from the repository
+                  - auto: use constraint solver to find best version compatible with matched servers
+                  - pin: pin to specific version (requires version field), auto-update to latest build
+                  - build-pin: pin to specific version and build (requires version and build fields)
                 enum:
                 - latest
-                - pinned
+                - auto
+                - pin
+                - build-pin
+                type: string
+              version:
+                description: |-
+                  Version specifies the target plugin version (required for pin and build-pin strategies).
+                  Example: "2.5.0" for a semantic version.
                 type: string
             required:
             - instanceSelector
             - source
-            - versionPolicy
             type: object
           status:
             description: status defines the observed state of Plugin
@@ -263,14 +277,14 @@ spec:
                     namespace:
                       description: Namespace is the server namespace.
                       type: string
-                    paperVersion:
-                      description: PaperVersion is the server's current Paper version.
+                    version:
+                      description: Version is the server's current Paper version.
                       type: string
                   required:
                   - compatible
                   - name
                   - namespace
-                  - paperVersion
+                  - version
                   type: object
                 type: array
               repositoryStatus:

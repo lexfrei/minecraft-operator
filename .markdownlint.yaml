@@ -7,6 +7,10 @@
 # Disable line length limit - too restrictive for technical docs
 MD013: false
 
+# Allow duplicate headings in different sections (e.g., same strategy names for different resources)
+MD024:
+  siblings_only: true
+
 # Keep other important rules enabled
 MD040: true  # Require language for code blocks
 MD031: true  # Blank lines around fenced code blocks

@@ -130,18 +130,18 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	r.setUpdatingCondition(&server, true, "Update in progress")
 
 	// Determine update type
-	paperChanged := server.Status.DesiredPaperVersion != server.Status.CurrentPaperVersion ||
-		server.Status.DesiredPaperBuild != server.Status.CurrentPaperBuild
+	paperChanged := server.Status.DesiredVersion != server.Status.CurrentVersion ||
+		server.Status.DesiredBuild != server.Status.CurrentBuild
 
 	var updateErr error
 	if paperChanged {
 		// Combined update: Paper + plugins
 		slog.InfoContext(ctx, "Starting Paper and plugins update",
 			"server", server.Name,
-			"currentVersion", server.Status.CurrentPaperVersion,
-			"currentBuild", server.Status.CurrentPaperBuild,
-			"desiredVersion", server.Status.DesiredPaperVersion,
-			"desiredBuild", server.Status.DesiredPaperBuild)
+			"currentVersion", server.Status.CurrentVersion,
+			"currentBuild", server.Status.CurrentBuild,
+			"desiredVersion", server.Status.DesiredVersion,
+			"desiredBuild", server.Status.DesiredBuild)
 
 		updateErr = r.performCombinedUpdate(ctx, &server)
 	} else {
@@ -682,8 +682,8 @@ func (r *UpdateReconciler) performCombinedUpdate(
 
 	// Step 1: Update StatefulSet image to new Paper version
 	newImage := fmt.Sprintf("lexfrei/papermc:%s-%d",
-		server.Status.DesiredPaperVersion,
-		server.Status.DesiredPaperBuild)
+		server.Status.DesiredVersion,
+		server.Status.DesiredBuild)
 
 	if err := r.updateStatefulSetImage(ctx, server, newImage); err != nil {
 		return errors.Wrap(err, "failed to update StatefulSet image")
@@ -758,9 +758,9 @@ func (r *UpdateReconciler) updateServerStatus(
 
 	// Record update history
 	server.Status.LastUpdate = &mcv1alpha1.UpdateHistory{
-		AppliedAt:            now,
-		PreviousPaperVersion: server.Status.CurrentPaperVersion,
-		Successful:           successful,
+		AppliedAt:       now,
+		PreviousVersion: server.Status.CurrentVersion,
+		Successful:      successful,
 	}
 
 	// Clear availableUpdate if successful

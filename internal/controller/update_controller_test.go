@@ -79,7 +79,7 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "1.21.0",
+					Version:        "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -144,7 +144,7 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "1.21.0",
+					Version:        "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -199,7 +199,7 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "1.21.0",
+					Version:        "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -251,7 +251,7 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "1.21.0",
+					Version:        "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -324,7 +324,7 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "1.21.0",
+					Version:        "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -403,7 +403,7 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "1.21.0",
+					Version:        "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -441,7 +441,7 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "1.21.0",
+					Version:        "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -522,7 +522,7 @@ var _ = Describe("UpdateController", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "latest",
+					Version:        "latest",
 					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour}, // 3 days
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
@@ -553,12 +553,12 @@ var _ = Describe("UpdateController", func() {
 					},
 				},
 				Status: mcv1alpha1.PaperMCServerStatus{
-					CurrentPaperVersion: "1.21.0",
-					CurrentPaperBuild:   100,
+					CurrentVersion: "1.21.0",
+					CurrentBuild:   100,
 					AvailableUpdate: &mcv1alpha1.AvailableUpdate{
-						PaperVersion: "1.21.1",
-						PaperBuild:   150,
-						ReleasedAt:   recentRelease, // Too recent
+						Version:    "1.21.1",
+						Build:      150,
+						ReleasedAt: recentRelease, // Too recent
 					},
 				},
 			}
@@ -577,7 +577,7 @@ var _ = Describe("UpdateController", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "latest",
+					Version:        "latest",
 					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour}, // 3 days
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
@@ -608,12 +608,12 @@ var _ = Describe("UpdateController", func() {
 					},
 				},
 				Status: mcv1alpha1.PaperMCServerStatus{
-					CurrentPaperVersion: "1.21.0",
-					CurrentPaperBuild:   100,
+					CurrentVersion: "1.21.0",
+					CurrentBuild:   100,
 					AvailableUpdate: &mcv1alpha1.AvailableUpdate{
-						PaperVersion: "1.21.1",
-						PaperBuild:   150,
-						ReleasedAt:   oldRelease, // Old enough
+						Version:    "1.21.1",
+						Build:      150,
+						ReleasedAt: oldRelease, // Old enough
 					},
 				},
 			}
@@ -631,7 +631,7 @@ var _ = Describe("UpdateController", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "latest",
+					Version:        "latest",
 					// No updateDelay specified
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
@@ -662,12 +662,12 @@ var _ = Describe("UpdateController", func() {
 					},
 				},
 				Status: mcv1alpha1.PaperMCServerStatus{
-					CurrentPaperVersion: "1.21.0",
-					CurrentPaperBuild:   100,
+					CurrentVersion: "1.21.0",
+					CurrentBuild:   100,
 					AvailableUpdate: &mcv1alpha1.AvailableUpdate{
-						PaperVersion: "1.21.1",
-						PaperBuild:   150,
-						ReleasedAt:   recentRelease, // Recent but no delay configured
+						Version:    "1.21.1",
+						Build:      150,
+						ReleasedAt: recentRelease, // Recent but no delay configured
 					},
 				},
 			}
@@ -682,7 +682,7 @@ var _ = Describe("UpdateController", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "latest",
+					Version:        "latest",
 					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour},
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
@@ -713,8 +713,8 @@ var _ = Describe("UpdateController", func() {
 					},
 				},
 				Status: mcv1alpha1.PaperMCServerStatus{
-					CurrentPaperVersion: "1.21.0",
-					CurrentPaperBuild:   100,
+					CurrentVersion: "1.21.0",
+					CurrentBuild:   100,
 					// No availableUpdate
 				},
 			}
@@ -892,7 +892,7 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "latest",
+					Version:        "latest",
 					RCON: mcv1alpha1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
@@ -948,7 +948,7 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "latest",
+					Version:        "latest",
 					RCON: mcv1alpha1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
@@ -1061,11 +1061,11 @@ var _ = Describe("UpdateController", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "1.21.1",
+					Version:        "1.21.1",
 				},
 				Status: mcv1alpha1.PaperMCServerStatus{
-					CurrentPaperVersion: "1.21.0",
-					CurrentPaperBuild:   100,
+					CurrentVersion: "1.21.0",
+					CurrentBuild:   100,
 				},
 			}
 
@@ -1074,17 +1074,17 @@ var _ = Describe("UpdateController", func() {
 			// Verify lastUpdate was set
 			Expect(server.Status.LastUpdate).NotTo(BeNil())
 			Expect(server.Status.LastUpdate.Successful).To(BeTrue())
-			Expect(server.Status.LastUpdate.PreviousPaperVersion).To(Equal("1.21.0"))
+			Expect(server.Status.LastUpdate.PreviousVersion).To(Equal("1.21.0"))
 		})
 
 		It("should record failed update in status", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "1.21.1",
+					Version:        "1.21.1",
 				},
 				Status: mcv1alpha1.PaperMCServerStatus{
-					CurrentPaperVersion: "1.21.0",
+					CurrentVersion: "1.21.0",
 				},
 			}
 
@@ -1099,13 +1099,13 @@ var _ = Describe("UpdateController", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					PaperVersion:   "1.21.1",
+					Version:        "1.21.1",
 				},
 				Status: mcv1alpha1.PaperMCServerStatus{
-					CurrentPaperVersion: "1.21.0",
+					CurrentVersion: "1.21.0",
 					AvailableUpdate: &mcv1alpha1.AvailableUpdate{
-						PaperVersion: "1.21.1",
-						PaperBuild:   150,
+						Version: "1.21.1",
+						Build:   150,
 					},
 				},
 			}

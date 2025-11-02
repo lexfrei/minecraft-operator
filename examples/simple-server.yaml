@@ -10,8 +10,8 @@ spec:
   # Update strategy controls version management:
   # - "latest": Always use the latest available Paper version from Docker Hub
   # - "auto": Solver automatically picks best version compatible with all plugins
-  # - "pin": Pin specific version (paperVersion), auto-update to latest build
-  # - "build-pin": Pin specific version and build (requires paperVersion and paperBuild)
+  # - "pin": Pin specific version (requires version field), auto-update to latest build
+  # - "build-pin": Pin specific version and build (requires version and build fields)
   updateStrategy: "latest"
 
   # Update schedule
@@ -34,12 +34,12 @@ spec:
       key: password
 
   # Pod template
-  # Note: The operator will override the container image based on paperVersion setting
+  # Note: The operator will override the container image based on version setting
   podTemplate:
     spec:
       containers:
       - name: minecraft
-        image: docker.io/lexfrei/papermc:latest
+        image: docker.io/lexfrei/papermc:1.21.1-91
         resources:
           requests:
             memory: "2Gi"

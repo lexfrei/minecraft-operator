@@ -27,8 +27,8 @@ Three main controllers work together:
 
 - **Plugin → PaperMCServer**: Many-to-many via `instanceSelector` (label selector)
 - **Selector Conflict Resolution**: When multiple Plugins with same `source.project` match same servers:
-  - If any has `versionPolicy: latest`: constraint solver picks optimal version
-  - If all have `versionPolicy: pinned`: highest semver wins (with warning)
+  - If any has `updateStrategy: latest`: constraint solver picks optimal version
+  - If all have `updateStrategy: pinned`: highest semver wins (with warning)
 
 ### Cross-Resource Triggers
 
@@ -43,7 +43,8 @@ Three main controllers work together:
 **Spec:**
 
 - `source`: Plugin repository (hangar/modrinth/spigot/url)
-- `versionPolicy`: `latest` or `pinned`
+- `updateStrategy`: `latest` or `pinned` (defines version management behavior)
+- `version`: Specific version when using `pinned` strategy
 - `updateDelay`: Grace period before auto-applying new releases (e.g., `168h` for 7 days)
 - `instanceSelector`: Label selector to match PaperMCServer instances
 - `compatibilityOverride`: Manual compatibility specification for edge cases
@@ -59,38 +60,52 @@ Three main controllers work together:
 
 **Spec:**
 
-- `paperVersion`: `latest` or specific version (e.g., `1.21.1`)
+- `updateStrategy`: `latest`, `auto`, `pin`, or `build-pin` (defines version management behavior)
+- `version`: Paper version (e.g., `1.21.1`), required for `pin` and `build-pin` strategies
+- `build`: Paper build number (e.g., `91`), required for `build-pin` strategy
 - `updateDelay`: Grace period before auto-applying Paper updates
 - `updateSchedule.checkCron`: Daily update check schedule
 - `updateSchedule.maintenanceWindow.cron`: When to actually apply updates
 - `gracefulShutdown.timeout`: Must match StatefulSet `terminationGracePeriodSeconds`
 - `rcon`: RCON configuration for graceful shutdown
-- `podTemplate`: StatefulSet pod spec (uses `lexfrei/papermc:latest` image)
+- `podTemplate`: StatefulSet pod spec
 
 **Status:**
 
 - `currentPaperVersion`: Observed running version
-- `plugins`: List of matched Plugins with resolved versions
+- `currentPaperBuild`: Observed running build number
+- `desiredPaperVersion`: Target version (resolved from updateStrategy)
+- `desiredPaperBuild`: Target build (resolved from updateStrategy)
+- `plugins`: List of matched Plugins with current/desired versions
 - `availableUpdate`: Solver result for next possible update
 - `lastUpdate`: History of previous update attempt
+- `updateBlocked`: Indicates if updates are blocked due to compatibility issues
 
 ## Constraint Solver
 
 **Problem**: Find maximum Paper version AND plugin versions that satisfy ALL compatibility constraints.
 
-**Algorithm (for Plugin with versionPolicy: latest):**
+**Algorithm (for Plugin with updateStrategy: latest):**
 
 1. Collect all matched PaperMCServer instances
 2. Filter plugin versions by `updateDelay` (skip versions newer than `now - updateDelay`)
-3. Find MAX plugin version where: `∀ server ∈ servers: compatible(plugin_version, server.paperVersion)`
+3. Find MAX plugin version where: `∀ server ∈ servers: compatible(plugin_version, server.version)`
 4. If no solution: emit warning in Plugin.status
 
-**Algorithm (for PaperMCServer update):**
+**Algorithm (for PaperMCServer with updateStrategy: auto):**
 
 1. Collect all matched Plugin resources
 2. Filter Paper versions by `updateDelay`
 3. Find MAX Paper version where: `∀ plugin ∈ plugins: ∃ plugin_version compatible with paper_version`
-4. Store result in `status.availableUpdate`
+4. Store result in `status.desiredPaperVersion` and `status.desiredPaperBuild`
+5. Compare with current version to determine if update is available
+
+**Update Strategy Behaviors:**
+
+- `latest`: Always use newest available Paper version from Docker Hub (ignores plugin compatibility)
+- `auto`: Use constraint solver to find best Paper version compatible with ALL plugins
+- `pin`: Stay on specified version, auto-update to latest build
+- `build-pin`: Fully pinned, no automatic updates
 
 **Edge Cases:**
 
@@ -102,12 +117,18 @@ Three main controllers work together:
 
 1. **Check Phase** (daily via `checkCron`):
    - Plugin Controller: Fetch metadata, run solver, update `resolvedVersion`
-   - PaperMCServer Controller: Run solver, update `availableUpdate`
+   - PaperMCServer Controller: Based on `updateStrategy`, resolve desired version:
+     - `latest`: Query Docker Hub for newest version-build
+     - `auto`: Run constraint solver for plugin compatibility
+     - `pin`: Find latest build for pinned version
+     - `build-pin`: Validate specified version-build exists
+   - Update `status.desiredPaperVersion` and `status.desiredPaperBuild`
 
 2. **Maintenance Window** (via `maintenanceWindow.cron`):
-   - Check if `availableUpdate` exists and `updateDelay` satisfied
+   - Check if `desiredPaperVersion` differs from `currentPaperVersion` and `updateDelay` satisfied
    - Download Paper JAR (if changed) and plugin JARs to PVC
    - Copy plugins to `/data/plugins/update/` (Paper hot-swap mechanism)
+   - Update StatefulSet image to `docker.io/lexfrei/papermc:{version}-{build}` (never uses `:latest` tag)
    - `kubectl delete pod` → StatefulSet recreates with same PVC
    - Paper startup: moves `/plugins/update/*.jar` to `/plugins/`, deletes old versions
 
@@ -453,6 +474,9 @@ See `.architecture.yaml` for complete ADR history and technical stack details.
 ## Important Notes
 
 - **Single source of truth**: `.architecture.yaml` contains all technical decisions (ADRs), dependencies, and standards
+- **NEVER use :latest Docker tag**: All update strategies resolve to concrete version-build tags (e.g., `docker.io/lexfrei/papermc:1.21.1-91`) for predictable deployments (ADR-029)
+- **Four update strategies**: `latest`, `auto`, `pin`, `build-pin` for different use cases - see `docs/update-strategies.md` for detailed guide (ADR-029)
+- **Breaking API changes**: v1.5.0 renamed fields: `paperVersion`→`version`, `paperBuild`→`build`, `versionPolicy`→`updateStrategy` (ADR-029)
 - **NEVER push directly to master**: All changes via feature branches + PR
 - **GPG signing**: Required for all commits (see global CLAUDE.md)
 - **Linting**: ALL errors must be fixed before push, no exceptions
@@ -470,6 +494,7 @@ See `.architecture.yaml` for complete ADR history and technical stack details.
 
 - **Architecture**: `DESIGN.md` - Complete architectural details, CRD schemas, solver algorithms
 - **Technical decisions**: `.architecture.yaml` - ADRs, dependencies, tech stack
+- **Update strategies**: `docs/update-strategies.md` - Comprehensive guide to version management strategies (ADR-029)
 - **Project config**: `PROJECT` - Kubebuilder metadata
 - **Development guide**: This file (`CLAUDE.md`)
 - **Examples**: `examples/` - Example custom resources

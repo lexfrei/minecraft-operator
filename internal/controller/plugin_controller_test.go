@@ -55,7 +55,7 @@ var _ = Describe("Plugin Controller", func() {
 							Type:    "hangar",
 							Project: "EssentialsX",
 						},
-						VersionPolicy: "latest",
+						UpdateStrategy: "latest",
 						InstanceSelector: metav1.LabelSelector{
 							MatchLabels: map[string]string{
 								"test": "true",
@@ -82,7 +82,7 @@ var _ = Describe("Plugin Controller", func() {
 			resource := &mck8slexlav1alpha1.Plugin{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resource.Spec.VersionPolicy).To(Equal("latest"))
+			Expect(resource.Spec.UpdateStrategy).To(Equal("latest"))
 			Expect(resource.Spec.Source.Type).To(Equal("hangar"))
 			// TODO(user): Add integration tests with full reconciler setup including PluginClient and Solver.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.

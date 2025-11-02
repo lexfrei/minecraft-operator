@@ -53,7 +53,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 					},
 					Spec: mck8slexlav1alpha1.PaperMCServerSpec{
 						UpdateStrategy: "latest",
-						PaperVersion:   "latest",
+						Version:        "latest",
 						UpdateSchedule: mck8slexlav1alpha1.UpdateSchedule{
 							CheckCron: "0 3 * * *",
 							MaintenanceWindow: mck8slexlav1alpha1.MaintenanceWindow{
@@ -102,7 +102,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 			resource := &mck8slexlav1alpha1.PaperMCServer{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resource.Spec.PaperVersion).To(Equal("latest"))
+			Expect(resource.Spec.Version).To(Equal("latest"))
 			// TODO(user): Add integration tests with full reconciler setup including PaperClient and Solver.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})

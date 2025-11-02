@@ -114,7 +114,7 @@ func TestDetermineServerStatusUnknownWithFalseCondition(t *testing.T) {
 func TestDetermineServerStatusRunningWithVersionFallback(t *testing.T) {
 	t.Parallel()
 	server := &mck8slexlav1alpha1.PaperMCServer{
-		Status: mck8slexlav1alpha1.PaperMCServerStatus{CurrentPaperVersion: "1.21.10"},
+		Status: mck8slexlav1alpha1.PaperMCServerStatus{CurrentVersion: "1.21.10"},
 	}
 	if got := determineServerStatus(server); got != statusRunning {
 		t.Errorf("expected %s, got %q", statusRunning, got)

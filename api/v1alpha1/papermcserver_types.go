@@ -73,19 +73,22 @@ type PaperMCServerSpec struct {
 	// UpdateStrategy defines the update strategy for Paper version.
 	// Valid values: "latest", "auto", "pin", "build-pin".
 	// - latest: always use latest available version from Docker Hub
-	// - auto: use solver to find best version compatible with plugins
-	// - pin: pin to specific version, auto-update to latest build (requires paperVersion)
-	// - build-pin: pin to specific version and build (requires paperVersion and paperBuild)
+	// - auto: use constraint solver to find best version compatible with plugins
+	// - pin: pin to specific version, auto-update to latest build (requires version field)
+	// - build-pin: pin to specific version and build (requires version and build fields)
 	// +kubebuilder:validation:Enum=latest;auto;pin;build-pin
 	UpdateStrategy string `json:"updateStrategy"`
 
-	// PaperVersion specifies the Paper version when using "pin" or "build-pin" strategy.
+	// Version specifies the target Paper version (required for pin and build-pin strategies).
+	// Example: "1.21.1" for a Minecraft version.
 	// +optional
-	PaperVersion string `json:"paperVersion,omitempty"`
+	Version string `json:"version,omitempty"`
 
-	// PaperBuild specifies the exact Paper build number when using "build-pin" strategy.
+	// Build specifies the target Paper build number (required for build-pin strategy, optional for pin).
+	// If set with pin strategy, it serves as a minimum build; operator will still auto-update to newer builds.
+	// If set with build-pin strategy, operator will pin to this exact build.
 	// +optional
-	PaperBuild *int `json:"paperBuild,omitempty"`
+	Build *int `json:"build,omitempty"`
 
 	// UpdateDelay is the grace period before applying Paper updates.
 	// +optional
@@ -147,11 +150,11 @@ type PluginVersionPair struct {
 
 // AvailableUpdate represents an available server update.
 type AvailableUpdate struct {
-	// PaperVersion is the available Paper version.
-	PaperVersion string `json:"paperVersion"`
+	// Version is the available Paper version.
+	Version string `json:"version"`
 
-	// PaperBuild is the available Paper build number.
-	PaperBuild int `json:"paperBuild"`
+	// Build is the available Paper build number.
+	Build int `json:"build"`
 
 	// ReleasedAt is when this Paper version was released.
 	ReleasedAt metav1.Time `json:"releasedAt"`
@@ -168,8 +171,8 @@ type UpdateHistory struct {
 	// AppliedAt is when the update was applied.
 	AppliedAt metav1.Time `json:"appliedAt"`
 
-	// PreviousPaperVersion is the Paper version before the update.
-	PreviousPaperVersion string `json:"previousPaperVersion"`
+	// PreviousVersion is the Paper version before the update.
+	PreviousVersion string `json:"previousVersion"`
 
 	// Successful indicates if the update succeeded.
 	Successful bool `json:"successful"`
@@ -197,28 +200,28 @@ type BlockedByInfo struct {
 	// Version is the current/desired version of the blocking plugin.
 	Version string `json:"version"`
 
-	// SupportedPaperVersions lists Paper versions this plugin supports.
+	// SupportedVersions lists Paper versions this plugin supports.
 	// +optional
-	SupportedPaperVersions []string `json:"supportedPaperVersions,omitempty"`
+	SupportedVersions []string `json:"supportedVersions,omitempty"`
 }
 
 // PaperMCServerStatus defines the observed state of PaperMCServer.
 type PaperMCServerStatus struct {
-	// CurrentPaperVersion is the currently running Paper version.
+	// CurrentVersion is the currently running Paper version.
 	// +optional
-	CurrentPaperVersion string `json:"currentPaperVersion,omitempty"`
+	CurrentVersion string `json:"currentVersion,omitempty"`
 
-	// CurrentPaperBuild is the currently running Paper build number.
+	// CurrentBuild is the currently running Paper build number.
 	// +optional
-	CurrentPaperBuild int `json:"currentPaperBuild,omitempty"`
+	CurrentBuild int `json:"currentBuild,omitempty"`
 
-	// DesiredPaperVersion is the target Paper version the operator wants to run.
+	// DesiredVersion is the target Paper version the operator wants to run.
 	// +optional
-	DesiredPaperVersion string `json:"desiredPaperVersion,omitempty"`
+	DesiredVersion string `json:"desiredVersion,omitempty"`
 
-	// DesiredPaperBuild is the target Paper build number the operator wants to run.
+	// DesiredBuild is the target Paper build number the operator wants to run.
 	// +optional
-	DesiredPaperBuild int `json:"desiredPaperBuild,omitempty"`
+	DesiredBuild int `json:"desiredBuild,omitempty"`
 
 	// Plugins lists matched Plugin resources and their versions.
 	// +optional

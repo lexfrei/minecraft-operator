@@ -11,7 +11,7 @@ metadata:
 spec:
   # Pin mode: Pin to version, auto-update to latest build
   updateStrategy: "pin"
-  paperVersion: "1.21.10"
+  version: "1.21.10"
 
   # Update schedule
   updateSchedule:
@@ -38,7 +38,7 @@ spec:
     spec:
       containers:
       - name: minecraft
-        image: docker.io/lexfrei/papermc:latest
+        image: docker.io/lexfrei/papermc:1.21.10-91
         resources:
           requests:
             memory: "3Gi"

@@ -50,13 +50,25 @@ type PluginSpec struct {
 	// Source specifies where to fetch the plugin.
 	Source PluginSource `json:"source"`
 
-	// VersionPolicy determines version selection strategy.
-	// +kubebuilder:validation:Enum=latest;pinned
-	VersionPolicy string `json:"versionPolicy"`
+	// UpdateStrategy defines how plugin versions are managed.
+	// Valid values: "latest", "auto", "pin", "build-pin".
+	// - latest: always use the latest available version from the repository
+	// - auto: use constraint solver to find best version compatible with matched servers
+	// - pin: pin to specific version (requires version field), auto-update to latest build
+	// - build-pin: pin to specific version and build (requires version and build fields)
+	// +kubebuilder:validation:Enum=latest;auto;pin;build-pin
+	// +kubebuilder:default=latest
+	UpdateStrategy string `json:"updateStrategy,omitempty"`
 
-	// PinnedVersion specifies the exact version if versionPolicy is pinned.
+	// Version specifies the target plugin version (required for pin and build-pin strategies).
+	// Example: "2.5.0" for a semantic version.
 	// +optional
-	PinnedVersion string `json:"pinnedVersion,omitempty"`
+	Version string `json:"version,omitempty"`
+
+	// Build specifies the target plugin build number (optional, only used with build-pin strategy).
+	// If set, the operator will pin to this exact build of the specified version.
+	// +optional
+	Build *int `json:"build,omitempty"`
 
 	// UpdateDelay is the grace period before auto-applying new versions.
 	// +optional
@@ -99,8 +111,8 @@ type MatchedInstance struct {
 	// Namespace is the server namespace.
 	Namespace string `json:"namespace"`
 
-	// PaperVersion is the server's current Paper version.
-	PaperVersion string `json:"paperVersion"`
+	// Version is the server's current Paper version.
+	Version string `json:"version"`
 
 	// Compatible indicates if the plugin is compatible with this server.
 	Compatible bool `json:"compatible"`

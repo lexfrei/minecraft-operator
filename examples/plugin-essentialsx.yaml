@@ -10,7 +10,7 @@ spec:
     project: "Essentials"
 
   # Use latest compatible version
-  versionPolicy: latest
+  updateStrategy: latest
 
   # Wait 7 days before applying new plugin versions
   # This allows community to report issues with new releases

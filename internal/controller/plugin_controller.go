@@ -353,10 +353,10 @@ func buildMatchedInstances(servers []mcv1alpha1.PaperMCServer) []mcv1alpha1.Matc
 
 	for _, server := range servers {
 		instances = append(instances, mcv1alpha1.MatchedInstance{
-			Name:         server.Name,
-			Namespace:    server.Namespace,
-			PaperVersion: server.Status.CurrentPaperVersion,
-			Compatible:   true, // Compatibility check moved to PaperMCServer controller
+			Name:       server.Name,
+			Namespace:  server.Namespace,
+			Version:    server.Status.CurrentVersion,
+			Compatible: true, // Compatibility check moved to PaperMCServer controller
 		})
 	}
 

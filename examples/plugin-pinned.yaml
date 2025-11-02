@@ -1,0 +1,19 @@
+apiVersion: mc.k8s.lex.la/v1alpha1
+kind: Plugin
+metadata:
+  name: vault-pinned
+  namespace: default
+spec:
+  # Plugin source from Hangar (PaperMC plugin repository)
+  source:
+    type: hangar
+    project: "Vault"
+
+  # Pin to specific version (no automatic updates)
+  updateStrategy: pin
+  version: "1.7.3"
+
+  # Apply this plugin to all production servers
+  instanceSelector:
+    matchLabels:
+      environment: production

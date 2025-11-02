@@ -12,7 +12,7 @@ metadata:
   language:
     primary: "go"
     version: "1.25"  # Go 1.25+ required for controller-runtime v0.22
-  version: "1.4.0"  # .architecture.yaml version (MINOR: Logging migration to slog)
+  version: "1.5.0"  # .architecture.yaml version (MINOR: Unified update strategies refactoring)
   last_updated: "2025-11-02"
   license: "BSD-3-Clause"
 
@@ -236,8 +236,8 @@ custom_resources:
     key_fields:
       - "source.type - hangar/modrinth/spigot/url"
       - "source.project - Plugin project identifier"
-      - "versionPolicy - latest or pinned"
-      - "pinnedVersion - Specific version if pinned"
+      - "updateStrategy - latest or pinned (ADR-029: renamed from versionPolicy)"
+      - "version - Specific version if pinned (ADR-029: renamed from pinnedVersion)"
       - "updateDelay - Grace period before auto-apply (e.g., 168h)"
       - "instanceSelector - Label selector for PaperMCServer matching"
       - "compatibilityOverride - Manual compatibility specification"
@@ -254,7 +254,9 @@ custom_resources:
     scope: "Namespaced"
     description: "Minecraft server instance with automatic updates"
     key_fields:
-      - "paperVersion - latest or specific version"
+      - "updateStrategy - latest/auto/pin/build-pin (ADR-029: defines update behavior)"
+      - "version - Paper version, required for pin/build-pin strategies (ADR-029: renamed from paperVersion)"
+      - "build - Paper build number, required for build-pin strategy (ADR-029: renamed from paperBuild)"
       - "updateDelay - Grace period before Paper updates"
       - "updateSchedule.checkCron - Daily update check schedule"
       - "updateSchedule.maintenanceWindow.cron - Update application schedule"
@@ -264,8 +266,8 @@ custom_resources:
     status_fields:
       - "currentPaperVersion - Observed running version"
       - "currentPaperBuild - Observed running build number"
-      - "desiredPaperVersion - Target Paper version"
-      - "desiredPaperBuild - Target Paper build number"
+      - "desiredPaperVersion - Target Paper version (ADR-029: resolved from updateStrategy)"
+      - "desiredPaperBuild - Target Paper build number (ADR-029: resolved from updateStrategy)"
       - "plugins - Matched Plugin resources with current/desired versions"
       - "availableUpdate - Solver result for next update"
       - "lastUpdate - History of previous update"
@@ -1035,6 +1037,121 @@ decisions:
         approach: "ctrl.Log remains unchanged for tests"
         compatibility: "Full backward compatibility with envtest"
 
+  - id: ADR-029
+    date: 2025-11-02
+    status: accepted
+    decision: "Unified Update Strategies and Concrete Version Resolution"
+    reasoning: "PaperMCServer and Plugin resources previously used inconsistent field names (paperVersion/versionPolicy, paperBuild) and lacked a comprehensive strategy for version management. Unifying to updateStrategy/versionPolicy with four clearly defined strategies (latest, auto, pin, build-pin) provides consistency across CRDs. CRITICAL: Never use :latest Docker tag - always resolve to concrete version-build combinations (e.g., docker.io/lexfrei/papermc:1.21.1-91) for predictable deployments, proper version tracking, and GitOps compatibility."
+    alternatives:
+      - "Keep inconsistent naming: Confusing for users, harder to document, API feels disjointed"
+      - "Use :latest Docker tags: Unpredictable updates, poor version tracking, breaks GitOps workflows"
+      - "Three strategies only: Missing build-pin for maximum control, less flexible"
+      - "Separate pin-version and pin-build: More fields, complex API surface"
+    impact: "Breaking changes in v1alpha1 API (acceptable in alpha phase), all example manifests, documentation, controller logic for version resolution, status field updates"
+    components:
+      unified_field_naming:
+        papermcserver:
+          old_fields:
+            - "paperVersion: string (version or 'latest')"
+            - "paperBuild: int (optional build number)"
+          new_fields:
+            - "updateStrategy: string (latest|auto|pin|build-pin)"
+            - "version: string (Paper version, required for pin/build-pin)"
+            - "build: int (Paper build, required for build-pin)"
+          rationale: "Consistent with Plugin.updateStrategy pattern, clearer intent, separates strategy from version data"
+
+        plugin:
+          old_fields:
+            - "versionPolicy: string (latest|pinned)"
+            - "pinnedVersion: string (version if pinned)"
+          new_fields:
+            - "updateStrategy: string (latest|pinned)"
+            - "version: string (version if pinned)"
+          rationale: "Consistent naming across both CRDs, simpler field names"
+
+      update_strategies:
+        strategy_latest:
+          description: "Always run newest available version from Docker Hub/repository"
+          paper_behavior: "Query Docker Hub, resolve to highest version-build (e.g., 1.21.1-91)"
+          plugin_behavior: "Query repository API, resolve to highest compatible version with ALL matched servers"
+          use_cases: ["Development environments", "Vanilla servers", "Bleeding-edge testing"]
+          compatibility_check: "No for Paper (latest wins), Yes for Plugin (must match servers)"
+
+        strategy_auto:
+          description: "Automatically pick best version compatible with all matched plugins/servers"
+          paper_behavior: "Constraint solver finds maximum Paper version where ALL matched plugins have compatible versions"
+          plugin_behavior: "Same as latest (auto is paper-specific)"
+          use_cases: ["Production servers with plugins", "Balanced automation and stability"]
+          compatibility_check: "Yes - comprehensive constraint solving"
+
+        strategy_pin:
+          description: "Pin to specific version, auto-update to latest build"
+          paper_behavior: "Stay on spec.version (e.g., 1.21.1), auto-update to newer builds (91 → 92 → 95)"
+          plugin_behavior: "N/A (plugins use 'pinned' policy)"
+          use_cases: ["Stable version + bug fixes", "Gradual version migration", "Plugin compatibility constraints"]
+          compatibility_check: "Yes - validates version is compatible with matched plugins"
+
+        strategy_build_pin:
+          description: "Pin to both version AND build - no automatic updates"
+          paper_behavior: "Exact version-build from spec (spec.version + spec.build), zero automation"
+          plugin_behavior: "N/A (plugins use 'pinned' policy with spec.version)"
+          use_cases: ["Maximum stability", "Compliance requirements", "Exact reproducibility", "Regression testing"]
+          compatibility_check: "Informational only - logs warnings if incompatible"
+
+      docker_tag_resolution:
+        principle: "NEVER use :latest Docker tag"
+        enforcement: "All strategies resolve to concrete version-build tags"
+        examples:
+          latest_strategy: "lexfrei/papermc:1.21.1-91 (highest available from Docker Hub)"
+          auto_strategy: "lexfrei/papermc:1.21.1-91 (constraint solver result)"
+          pin_strategy: "lexfrei/papermc:1.21.1-95 (pinned version, latest build)"
+          build_pin_strategy: "lexfrei/papermc:1.21.1-91 (exact specification)"
+        image_path: "Always use full docker.io/ prefix for cross-runtime compatibility"
+        rationale: "Predictable deployments, proper version tracking in status, GitOps compatible, reproducible rollbacks"
+
+      status_tracking:
+        papermcserver_status:
+          current_fields:
+            - "currentPaperVersion: string (observed running version)"
+            - "currentPaperBuild: int (observed running build)"
+          desired_fields:
+            - "desiredPaperVersion: string (target version from strategy resolution)"
+            - "desiredPaperBuild: int (target build from strategy resolution)"
+          rationale: "Separation enables transparency - users see what's running vs what operator wants to deploy"
+
+        plugin_status:
+          current_fields:
+            - "currentVersion: string (installed version on servers)"
+          desired_fields:
+            - "desiredVersion: string (target version from solver)"
+          rationale: "Same transparency for plugin updates"
+
+      breaking_changes:
+        api_version: "v1alpha1 (breaking changes acceptable in alpha)"
+        affected_resources:
+          - "PaperMCServer: paperVersion → version, paperBuild → build, add updateStrategy field"
+          - "Plugin: versionPolicy → updateStrategy (rename only), pinnedVersion → version"
+        migration_path:
+          step_1: "Update CRD definitions via controller-gen"
+          step_2: "Update controller reconciliation logic for new field names"
+          step_3: "Update all example manifests in examples/"
+          step_4: "Update documentation (CLAUDE.md, DESIGN.md, docs/update-strategies.md)"
+          step_5: "Warn users via release notes about manifest changes"
+        backward_compatibility: "None - clean break for alpha phase, will provide migration guide"
+
+      documentation_updates:
+        new_document: "docs/update-strategies.md (comprehensive strategy guide)"
+        updated_documents:
+          - ".architecture.yaml (this ADR)"
+          - "CLAUDE.md (CRD Design section, Important Notes)"
+          - "DESIGN.md (CRD schemas, algorithms)"
+          - "examples/ (all example manifests)"
+        key_messages:
+          - "Never uses :latest Docker tag"
+          - "Four update strategies for different use cases"
+          - "Unified field naming across CRDs"
+          - "Breaking changes from v1.4.0"
+
 phases:
   phase_1_mvp:
     description: "Minimum viable product"
@@ -1296,6 +1413,9 @@ quick_reference:
 
 important_notes:
   - "This is NOT a high-availability system - 5-10 min downtime during updates is acceptable"
+  - "NEVER uses :latest Docker tag - all strategies resolve to concrete version-build (ADR-029)"
+  - "Four update strategies: latest/auto/pin/build-pin for different use cases (ADR-029)"
+  - "Breaking API changes in v1.5.0: paperVersion→version, paperBuild→build, versionPolicy→updateStrategy (ADR-029)"
   - "Helm-only deployment (NO Kustomize) - CRDs in separate chart with independent lifecycle"
   - "CRDs generated to charts/minecraft-operator-crds/crds/ via make manifests"
   - "RBAC generated to charts/minecraft-operator/templates/rbac/ via make manifests"
