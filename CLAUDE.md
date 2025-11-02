@@ -124,6 +124,8 @@ Three main controllers work together:
 - `controller-runtime`: Kubernetes operator framework
 - `robfig/cron`: Cron scheduling
 - `Masterminds/semver`: Version comparison
+- `log/slog`: Structured logging (Go stdlib, no external dependency)
+- `github.com/go-logr/logr`: Logging bridge for controller-runtime integration
 
 ### Container Images (Both Customizable)
 
@@ -299,6 +301,70 @@ helm list --namespace minecraft-operator-system
 helm get values minecraft-operator --namespace minecraft-operator-system
 ```
 
+### Logging Standards
+
+**This project uses stdlib `log/slog` for structured logging.**
+
+**Configuration:**
+
+The operator exposes two flags for logging configuration:
+- `--log-level`: Set log level (`debug`, `info`, `warn`, `error`). Default: `info`
+- `--log-format`: Set log format (`json`, `text`). Default: `json`
+
+```bash
+# Production (default): JSON format, Info level
+./bin/manager
+
+# Development: Text format, Debug level
+./bin/manager --log-level=debug --log-format=text
+
+# Silent: Error-only logging
+./bin/manager --log-level=error --log-format=json
+```
+
+**slog Philosophy - Key-Value Structured Logging:**
+
+All logging must follow slog best practices:
+
+1. **Constant Message Strings**: Log messages MUST be constant, never interpolate variables into message text
+2. **Variable Data in KV Pairs**: All variable data goes into separate key-value pairs
+3. **Context Propagation**: Always use `slog.*Context(ctx, ...)` variants to propagate context
+
+**Examples:**
+
+❌ **BAD** (variable data in message):
+```go
+slog.InfoContext(ctx, fmt.Sprintf("Update to %s available", version))
+slog.InfoContext(ctx, "Creating StatefulSet: " + name)
+slog.ErrorContext(ctx, "Failed to get server "+key, "error", err)
+```
+
+✅ **GOOD** (constant message + KV pairs):
+```go
+slog.InfoContext(ctx, "Update available", "version", version)
+slog.InfoContext(ctx, "Creating StatefulSet", "name", name)
+slog.ErrorContext(ctx, "Failed to get server", "error", err, "key", key)
+```
+
+**Log Level Guidelines:**
+
+- `slog.DebugContext()`: Detailed information for debugging (verbose)
+- `slog.InfoContext()`: Normal operational messages (reconciliation events, resource creation)
+- `slog.WarnContext()`: Warning conditions (deprecated features, potential issues)
+- `slog.ErrorContext()`: Error conditions (failed operations, exceptions)
+
+**Error Logging:**
+
+Always include the error as a key-value pair with the key "error":
+```go
+slog.ErrorContext(ctx, "Failed to reconcile resource", "error", err, "resource", resourceName)
+```
+
+**Integration with controller-runtime:**
+
+The operator bridges slog to controller-runtime's logr interface using `logr.FromSlogHandler()`.
+This allows controller-runtime to use slog while maintaining compatibility with the Kubernetes ecosystem.
+
 ### Development Workflow
 
 **Typical development iteration:**
@@ -308,6 +374,7 @@ helm get values minecraft-operator --namespace minecraft-operator-system
 3. **Run tests**: `make test`
 4. **Check linting**: `make lint` (fix ALL errors before commit)
 5. **Test locally**: `make run` (runs against your kubeconfig cluster)
+   - Use `--log-level=debug --log-format=text` for better local debugging
 6. **Commit changes** with semantic commit message and GPG signature
 7. **Push to feature branch** (NEVER directly to master)
 8. **Create PR** for review
@@ -371,6 +438,7 @@ All architectural decisions are documented as ADRs in `.architecture.yaml` (sing
 - **Framework**: controller-runtime v0.22.3 with Kubebuilder v4 scaffolding (ADR-001, ADR-009)
 - **Solver**: Simple linear search for MVP, SAT solver in Phase 2 (ADR-010)
 - **Testing**: envtest for integration, Ginkgo/Gomega framework (ADR-011, ADR-017)
+- **Logging**: stdlib log/slog with configurable level and format (ADR-028)
 - **Container runtime**: Podman (per global CLAUDE.md)
 - **Container base**: distroless/static-debian12:nonroot for security (ADR-006)
 - **Error handling**: cockroachdb/errors for stack traces (ADR-007)
@@ -388,6 +456,7 @@ See `.architecture.yaml` for complete ADR history and technical stack details.
 - **NEVER push directly to master**: All changes via feature branches + PR
 - **GPG signing**: Required for all commits (see global CLAUDE.md)
 - **Linting**: ALL errors must be fixed before push, no exceptions
+- **Logging**: Use stdlib slog with constant messages and KV pairs (see Logging Standards section)
 - **API domain**: `mc.k8s.lex.la` (NOT `paperstack.io`)
 - **License**: BSD-3-Clause
 - **Main entrypoint**: `cmd/main.go` (not root `main.go`)
