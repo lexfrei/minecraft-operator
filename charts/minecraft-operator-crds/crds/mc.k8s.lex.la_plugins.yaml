@@ -247,14 +247,15 @@ spec:
                 format: date-time
                 type: string
               matchedInstances:
-                description: MatchedInstances lists servers this plugin applies to.
+                description: MatchedInstances lists servers this plugin applies to
+                  with per-server resolved versions.
                 items:
                   description: MatchedInstance represents a PaperMCServer instance
                     matched by the selector.
                   properties:
                     compatible:
-                      description: Compatible indicates if the resolved plugin version
-                        is compatible.
+                      description: Compatible indicates if the plugin is compatible
+                        with this server.
                       type: boolean
                     name:
                       description: Name is the server name.
@@ -278,10 +279,6 @@ spec:
                 - available
                 - unavailable
                 - orphaned
-                type: string
-              resolvedVersion:
-                description: ResolvedVersion is the version selected by the constraint
-                  solver.
                 type: string
             type: object
         required:

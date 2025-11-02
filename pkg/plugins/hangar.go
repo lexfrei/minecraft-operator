@@ -66,9 +66,10 @@ func (c *HangarClient) GetVersions(ctx context.Context, project string) ([]Plugi
 		}
 
 		// Use GameVersions for Minecraft versions (may be nil/empty)
+		// If GameVersions is empty, fallback to platformDependencies.PAPER
 		minecraftVersions := v.GameVersions
-		if minecraftVersions == nil {
-			minecraftVersions = []string{}
+		if len(minecraftVersions) == 0 {
+			minecraftVersions = paperVersions
 		}
 
 		versions = append(versions, PluginVersion{
@@ -104,9 +105,10 @@ func (c *HangarClient) GetCompatibility(
 	}
 
 	// Use GameVersions for Minecraft versions (may be nil/empty)
+	// If GameVersions is empty, fallback to platformDependencies.PAPER
 	minecraftVersions := v.GameVersions
-	if minecraftVersions == nil {
-		minecraftVersions = []string{}
+	if len(minecraftVersions) == 0 {
+		minecraftVersions = paperVersions
 	}
 
 	return CompatibilityInfo{

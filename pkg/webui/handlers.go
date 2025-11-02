@@ -48,6 +48,7 @@ func (s *Server) fetchDashboardData(ctx context.Context, filterNamespace string)
 			Strategy:            server.Spec.UpdateStrategy,
 			PluginCount:         len(server.Status.Plugins),
 			Status:              determineServerStatus(&server),
+			Plugins:             buildPluginSummaries(server.Status.Plugins),
 		}
 
 		// Check actual StatefulSet status if condition is stale
@@ -60,6 +61,9 @@ func (s *Server) fetchDashboardData(ctx context.Context, filterNamespace string)
 				server.Status.AvailableUpdate.PaperVersion,
 				server.Status.AvailableUpdate.PaperBuild,
 			)
+
+			// Build update plan
+			summary.UpdatePlan = buildUpdatePlan(&server)
 		}
 
 		if server.Spec.UpdateSchedule.MaintenanceWindow.Enabled {
@@ -337,6 +341,74 @@ func (s *Server) fetchPluginInfo(
 	}
 
 	return plugins
+}
+
+// buildPluginSummaries builds a list of plugin summaries from server plugin status.
+func buildPluginSummaries(pluginStatuses []mck8slexlav1alpha1.ServerPluginStatus) []templates.PluginSummary {
+	plugins := make([]templates.PluginSummary, 0, len(pluginStatuses))
+
+	for _, ps := range pluginStatuses {
+		plugins = append(plugins, templates.PluginSummary{
+			Name:           ps.PluginRef.Name,
+			CurrentVersion: "", // Not tracked yet
+			DesiredVersion: ps.ResolvedVersion,
+		})
+	}
+
+	return plugins
+}
+
+// buildUpdatePlan builds an update plan from server status.
+func buildUpdatePlan(server *mck8slexlav1alpha1.PaperMCServer) *templates.UpdatePlan {
+	plan := &templates.UpdatePlan{}
+
+	// Check if Paper version is changing
+	if server.Status.AvailableUpdate != nil {
+		currentPaper := formatVersionWithBuild(server.Status.CurrentPaperVersion, server.Status.CurrentPaperBuild)
+		availablePaper := formatVersionWithBuild(
+			server.Status.AvailableUpdate.PaperVersion,
+			server.Status.AvailableUpdate.PaperBuild,
+		)
+
+		if currentPaper != availablePaper && availablePaper != "Unknown" {
+			plan.PaperUpdate = fmt.Sprintf("%s → %s", currentPaper, availablePaper)
+		}
+	}
+
+	// Build plugin updates - check for plugins needing installation or update
+	pluginUpdates := make([]templates.PluginUpdate, 0)
+
+	for _, pluginStatus := range server.Status.Plugins {
+		// Use resolvedVersion as target
+		targetVer := pluginStatus.ResolvedVersion
+
+		// Skip if no target version
+		if targetVer == "" {
+			continue
+		}
+
+		// For now, always show as "Not installed → version" since we don't track current version yet
+		// TODO: Track actual installed plugin versions
+		pluginUpdates = append(pluginUpdates, templates.PluginUpdate{
+			Name:        pluginStatus.PluginRef.Name,
+			FromVersion: "Not installed",
+			ToVersion:   targetVer,
+		})
+	}
+
+	plan.PluginUpdates = pluginUpdates
+
+	// Add maintenance window information
+	if server.Spec.UpdateSchedule.MaintenanceWindow.Enabled {
+		plan.AppliesAt = formatCronSchedule(server.Spec.UpdateSchedule.MaintenanceWindow.Cron)
+	}
+
+	// Only return plan if there are actual changes
+	if plan.PaperUpdate == "" && len(plan.PluginUpdates) == 0 {
+		return nil
+	}
+
+	return plan
 }
 
 // startWatching starts watching Kubernetes resources and sends SSE updates.

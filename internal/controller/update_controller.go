@@ -23,6 +23,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,8 +32,11 @@ import (
 	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
+	"github.com/lexfrei/minecraft-operator/pkg/rcon"
 	"github.com/lexfrei/minecraft-operator/pkg/testutil"
 	"github.com/robfig/cron/v3"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,11 +69,14 @@ type UpdateReconciler struct {
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=plugins,verbs=get;list;watch
+//+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;delete
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 //nolint:revive // kubebuilder markers require no space after //
 
 // Reconcile reconciles PaperMCServer resources for update management.
+//
+//nolint:funlen // Complex update orchestration logic, hard to simplify further
 func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 
@@ -100,9 +108,64 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	// Note: Actual update logic will be implemented in later iterations
-	// For now, we just manage cron schedules
+	// Check if update is ready to apply
+	shouldApply, remainingDelay := r.shouldApplyUpdate(&server)
+	if !shouldApply {
+		log.Info("Update not ready to apply",
+			"server", server.Name,
+			"remainingDelay", remainingDelay)
+		// Requeue after remaining delay
+		if remainingDelay > 0 {
+			return ctrl.Result{RequeueAfter: remainingDelay}, nil
+		}
+		return ctrl.Result{}, nil
+	}
 
+	// Check if there's an available update
+	if server.Status.AvailableUpdate == nil {
+		log.V(1).Info("No available update", "server", server.Name)
+		return ctrl.Result{}, nil
+	}
+
+	// Set updating condition
+	r.setUpdatingCondition(&server, true, "Update in progress")
+
+	// Determine update type
+	paperChanged := server.Status.DesiredPaperVersion != server.Status.CurrentPaperVersion ||
+		server.Status.DesiredPaperBuild != server.Status.CurrentPaperBuild
+
+	var updateErr error
+	if paperChanged {
+		// Combined update: Paper + plugins
+		log.Info("Starting Paper + plugins update",
+			"server", server.Name,
+			"from", fmt.Sprintf("%s-%d", server.Status.CurrentPaperVersion, server.Status.CurrentPaperBuild),
+			"to", fmt.Sprintf("%s-%d", server.Status.DesiredPaperVersion, server.Status.DesiredPaperBuild))
+
+		updateErr = r.performCombinedUpdate(ctx, &server)
+	} else {
+		// Plugin-only update
+		log.Info("Starting plugin-only update", "server", server.Name)
+		updateErr = r.performPluginOnlyUpdate(ctx, &server)
+	}
+
+	// Update status based on result
+	successful := updateErr == nil
+	r.updateServerStatus(&server, successful)
+	r.setUpdatingCondition(&server, false, "Update completed")
+
+	// Update the server resource status
+	if err := r.Status().Update(ctx, &server); err != nil {
+		log.Error(err, "Failed to update server status")
+		return ctrl.Result{}, errors.Wrap(err, "failed to update status")
+	}
+
+	if updateErr != nil {
+		log.Error(updateErr, "Update failed")
+		return ctrl.Result{}, updateErr
+	}
+
+	log.Info("Update completed successfully", "server", server.Name)
 	return ctrl.Result{}, nil
 }
 
@@ -284,6 +347,374 @@ func (r *UpdateReconciler) verifyChecksum(filePath, expectedHash string) error {
 	if actualHash != expectedHash {
 		return errors.Newf("checksum mismatch: expected %s, got %s", expectedHash, actualHash)
 	}
+
+	return nil
+}
+
+// downloadPluginToServer downloads a plugin JAR to the server's /data/plugins/update/ directory.
+func (r *UpdateReconciler) downloadPluginToServer(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+	pluginName string,
+	downloadURL string,
+	expectedHash string,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	// Get pod for this server
+	podName := server.Name + "-0" // StatefulSet pod naming convention
+	namespace := server.Namespace
+
+	// Build curl command to download directly to /data/plugins/update/
+	// Using -L to follow redirects, -f to fail on HTTP errors
+	curlCmd := fmt.Sprintf(
+		"curl -fsSL -o /data/plugins/update/%s.jar '%s'",
+		pluginName,
+		downloadURL,
+	)
+
+	log.Info("Downloading plugin to server",
+		"server", server.Name,
+		"plugin", pluginName,
+		"url", downloadURL)
+
+	// Execute kubectl exec
+	cmd := exec.CommandContext(ctx,
+		"kubectl", "exec", "-n", namespace, podName,
+		"--", "sh", "-c", curlCmd)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "failed to download plugin: %s", string(output))
+	}
+
+	// Verify checksum if provided
+	if expectedHash != "" {
+		checksumCmd := fmt.Sprintf(
+			"sha256sum /data/plugins/update/%s.jar | awk '{print $1}'",
+			pluginName,
+		)
+
+		cmd = exec.CommandContext(ctx,
+			"kubectl", "exec", "-n", namespace, podName,
+			"--", "sh", "-c", checksumCmd)
+
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			return errors.Wrapf(err, "failed to verify checksum: %s", string(output))
+		}
+
+		actualHash := strings.TrimSpace(string(output))
+		if actualHash != expectedHash {
+			return errors.Newf("checksum mismatch: expected %s, got %s",
+				expectedHash, actualHash)
+		}
+
+		log.Info("Plugin checksum verified", "plugin", pluginName)
+	}
+
+	log.Info("Plugin downloaded successfully",
+		"server", server.Name,
+		"plugin", pluginName)
+
+	return nil
+}
+
+// applyPluginUpdates downloads and applies plugin updates for the server.
+//
+//nolint:funlen // Complex plugin download orchestration with error handling
+func (r *UpdateReconciler) applyPluginUpdates(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	// Get current Plugin CRDs to access download URLs
+	var pluginList mcv1alpha1.PluginList
+	if err := r.List(ctx, &pluginList, client.InNamespace(server.Namespace)); err != nil {
+		return errors.Wrap(err, "failed to list plugins")
+	}
+
+	// Build map of plugin name -> Plugin CRD for quick lookup
+	pluginMap := make(map[string]*mcv1alpha1.Plugin)
+	for i := range pluginList.Items {
+		plugin := &pluginList.Items[i]
+		pluginMap[plugin.Name] = plugin
+	}
+
+	// Download each plugin that needs update
+	updatedCount := 0
+	for _, pluginStatus := range server.Status.Plugins {
+		pluginName := pluginStatus.PluginRef.Name
+
+		plugin, exists := pluginMap[pluginName]
+		if !exists {
+			log.Info("Plugin not found in cluster, skipping",
+				"plugin", pluginName)
+			continue
+		}
+
+		if pluginStatus.ResolvedVersion == "" {
+			log.Info("No resolved version for plugin, skipping",
+				"plugin", pluginName)
+			continue
+		}
+
+		// Find download URL and hash for resolved version
+		var downloadURL, hash string
+		for _, v := range plugin.Status.AvailableVersions {
+			if v.Version == pluginStatus.ResolvedVersion {
+				downloadURL = v.DownloadURL
+				hash = v.Hash
+				break
+			}
+		}
+
+		if downloadURL == "" {
+			log.Error(nil, "Download URL not found for plugin version",
+				"plugin", pluginName,
+				"version", pluginStatus.ResolvedVersion)
+			continue
+		}
+
+		// Download plugin
+		if err := r.downloadPluginToServer(ctx, server, pluginName, downloadURL, hash); err != nil {
+			log.Error(err, "Failed to download plugin",
+				"plugin", pluginName)
+			// Continue with other plugins even if one fails
+			continue
+		}
+
+		updatedCount++
+	}
+
+	log.Info("Plugin updates applied",
+		"server", server.Name,
+		"updated", updatedCount,
+		"total", len(server.Status.Plugins))
+
+	return nil
+}
+
+// waitForPodReady waits for the server pod to become ready after restart.
+func (r *UpdateReconciler) waitForPodReady(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	podName := server.Name + "-0"
+	namespace := server.Namespace
+
+	log.Info("Waiting for pod to become ready", "pod", podName)
+
+	// Timeout after 10 minutes
+	ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctxTimeout.Done():
+			return errors.New("timeout waiting for pod to become ready")
+
+		case <-ticker.C:
+			var pod corev1.Pod
+			if err := r.Get(ctx, client.ObjectKey{
+				Name:      podName,
+				Namespace: namespace,
+			}, &pod); err != nil {
+				log.Info("Pod not found yet", "pod", podName)
+				continue
+			}
+
+			// Check if pod is ready
+			for _, condition := range pod.Status.Conditions {
+				if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+					log.Info("Pod is ready", "pod", podName)
+					return nil
+				}
+			}
+
+			log.Info("Pod not ready yet", "pod", podName, "phase", pod.Status.Phase)
+		}
+	}
+}
+
+// createRCONClient creates an RCON client for the server by fetching Pod IP and password from Secret.
+func (r *UpdateReconciler) createRCONClient(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+) (*rcon.RCONClient, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	podName := server.Name + "-0"
+	namespace := server.Namespace
+
+	// Get Pod to obtain IP address
+	var pod corev1.Pod
+	if err := r.Get(ctx, client.ObjectKey{
+		Name:      podName,
+		Namespace: namespace,
+	}, &pod); err != nil {
+		return nil, errors.Wrap(err, "failed to get pod for RCON connection")
+	}
+
+	if pod.Status.PodIP == "" {
+		return nil, errors.New("pod IP not available")
+	}
+
+	// Get password from Secret
+	var secret corev1.Secret
+	if err := r.Get(ctx, client.ObjectKey{
+		Name:      server.Spec.RCON.PasswordSecret.Name,
+		Namespace: namespace,
+	}, &secret); err != nil {
+		return nil, errors.Wrap(err, "failed to get RCON password secret")
+	}
+
+	passwordBytes, exists := secret.Data[server.Spec.RCON.PasswordSecret.Key]
+	if !exists {
+		return nil, errors.Newf("key %s not found in secret %s",
+			server.Spec.RCON.PasswordSecret.Key,
+			server.Spec.RCON.PasswordSecret.Name)
+	}
+
+	password := string(passwordBytes)
+
+	// Get RCON port (use default if not specified)
+	port := server.Spec.RCON.Port
+	if port == 0 {
+		port = 25575 // Default RCON port
+	}
+
+	log.Info("Creating RCON client",
+		"host", pod.Status.PodIP,
+		"port", port)
+
+	// Create RCON client
+	rconClient, err := rcon.NewRCONClient(pod.Status.PodIP, int(port), password)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create RCON client")
+	}
+
+	return rconClient, nil
+}
+
+// performPluginOnlyUpdate handles updates when only plugins changed (Paper version unchanged).
+func (r *UpdateReconciler) performPluginOnlyUpdate(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	log.Info("Starting plugin-only update", "server", server.Name)
+
+	// Step 1: Download plugins to /data/plugins/update/
+	if err := r.applyPluginUpdates(ctx, server); err != nil {
+		return errors.Wrap(err, "failed to download plugins")
+	}
+
+	// Step 2: Create RCON client
+	rconClient, err := r.createRCONClient(ctx, server)
+	if err != nil {
+		return errors.Wrap(err, "failed to create RCON client")
+	}
+
+	// Step 3: Execute graceful shutdown via RCON
+	if err := r.executeGracefulShutdownWithClient(ctx, server, rconClient); err != nil {
+		return errors.Wrap(err, "failed to execute graceful shutdown")
+	}
+
+	// Step 3: Wait for pod to restart (StatefulSet will recreate it automatically)
+	if err := r.waitForPodReady(ctx, server); err != nil {
+		return errors.Wrap(err, "failed to wait for pod ready")
+	}
+
+	log.Info("Plugin-only update completed successfully", "server", server.Name)
+
+	return nil
+}
+
+// updateStatefulSetImage updates the Paper container image in the StatefulSet.
+func (r *UpdateReconciler) updateStatefulSetImage(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+	newImage string,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	log.Info("Updating StatefulSet image",
+		"server", server.Name,
+		"newImage", newImage)
+
+	var sts appsv1.StatefulSet
+	if err := r.Get(ctx, client.ObjectKey{
+		Name:      server.Name,
+		Namespace: server.Namespace,
+	}, &sts); err != nil {
+		return errors.Wrap(err, "failed to get StatefulSet")
+	}
+
+	// Update container image
+	updated := false
+	for i := range sts.Spec.Template.Spec.Containers {
+		if sts.Spec.Template.Spec.Containers[i].Name == "papermc" {
+			sts.Spec.Template.Spec.Containers[i].Image = newImage
+			updated = true
+			break
+		}
+	}
+
+	if !updated {
+		return errors.New("papermc container not found in StatefulSet")
+	}
+
+	// Apply update
+	if err := r.Update(ctx, &sts); err != nil {
+		return errors.Wrap(err, "failed to update StatefulSet")
+	}
+
+	log.Info("StatefulSet image updated successfully",
+		"server", server.Name,
+		"newImage", newImage)
+
+	return nil
+}
+
+// performCombinedUpdate handles updates when both Paper and plugins need updating.
+func (r *UpdateReconciler) performCombinedUpdate(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	log.Info("Starting combined Paper + plugins update", "server", server.Name)
+
+	// Step 1: Update StatefulSet image to new Paper version
+	newImage := fmt.Sprintf("lexfrei/papermc:%s-%d",
+		server.Status.DesiredPaperVersion,
+		server.Status.DesiredPaperBuild)
+
+	if err := r.updateStatefulSetImage(ctx, server, newImage); err != nil {
+		return errors.Wrap(err, "failed to update StatefulSet image")
+	}
+
+	// Step 2: Download plugins to /data/plugins/update/
+	// This must happen BEFORE pod restarts to ensure plugins are ready
+	if err := r.applyPluginUpdates(ctx, server); err != nil {
+		return errors.Wrap(err, "failed to download plugins")
+	}
+
+	// Step 3: StatefulSet will do rolling update automatically with graceful shutdown
+	// We just need to wait for pod to be ready with new image
+	if err := r.waitForPodReady(ctx, server); err != nil {
+		return errors.Wrap(err, "failed to wait for pod ready")
+	}
+
+	log.Info("Combined update completed successfully", "server", server.Name)
 
 	return nil
 }

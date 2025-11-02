@@ -102,21 +102,17 @@ type MatchedInstance struct {
 	// PaperVersion is the server's current Paper version.
 	PaperVersion string `json:"paperVersion"`
 
-	// Compatible indicates if the resolved plugin version is compatible.
+	// Compatible indicates if the plugin is compatible with this server.
 	Compatible bool `json:"compatible"`
 }
 
 // PluginStatus defines the observed state of Plugin.
 type PluginStatus struct {
-	// ResolvedVersion is the version selected by the constraint solver.
-	// +optional
-	ResolvedVersion string `json:"resolvedVersion,omitempty"`
-
 	// AvailableVersions contains cached metadata from the plugin repository.
 	// +optional
 	AvailableVersions []PluginVersionInfo `json:"availableVersions,omitempty"`
 
-	// MatchedInstances lists servers this plugin applies to.
+	// MatchedInstances lists servers this plugin applies to with per-server resolved versions.
 	// +optional
 	MatchedInstances []MatchedInstance `json:"matchedInstances,omitempty"`
 

@@ -19,6 +19,26 @@ type ServerSummary struct {
 	PluginCount         int
 	NextMaintenance     string
 	Status              string
+	Plugins             []PluginSummary
+	UpdatePlan          *UpdatePlan
+}
+
+type PluginSummary struct {
+	Name           string
+	CurrentVersion string
+	DesiredVersion string
+}
+
+type UpdatePlan struct {
+	PaperUpdate    string
+	PluginUpdates  []PluginUpdate
+	AppliesAt      string
+}
+
+type PluginUpdate struct {
+	Name        string
+	FromVersion string
+	ToVersion   string
 }
 
 templ Dashboard(data DashboardData) {
@@ -67,7 +87,7 @@ templ Dashboard(data DashboardData) {
 templ ServerCard(server ServerSummary) {
 	<div class="card" style="margin-bottom: 15px;">
 		<div style="display: flex; justify-content: space-between; align-items: start;">
-			<div>
+			<div style="flex: 1;">
 				<h3 style="font-size: 18px; margin-bottom: 10px;">
 					<a href={ templ.URL(fmt.Sprintf("/ui/server/%s", server.Name)) }>
 						{ server.Name }
@@ -77,7 +97,15 @@ templ ServerCard(server ServerSummary) {
 					Namespace: { server.Namespace }
 				</p>
 			</div>
-			<div>
+			<div style="display: flex; gap: 10px; align-items: center;">
+				<button
+					hx-post={ fmt.Sprintf("/ui/server/resolve?name=%s&namespace=%s", server.Name, server.Namespace) }
+					hx-swap="none"
+					style="background-color: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; white-space: nowrap;"
+					onclick="this.textContent='⏳ Resolving...'; this.disabled=true;"
+				>
+					🔄 Resolve Server
+				</button>
 				if server.Status == "running" {
 					<span class="badge badge-success">Running</span>
 				} else if server.Status == "updating" {
@@ -113,5 +141,57 @@ templ ServerCard(server ServerSummary) {
 				</div>
 			}
 		</div>
+		if len(server.Plugins) > 0 {
+			<div style="margin-top: 20px;">
+				<p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 10px;">Installed Plugins</p>
+				<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px;">
+					for _, plugin := range server.Plugins {
+						<div style="background-color: var(--bg-secondary); padding: 10px; border-radius: 4px; border: 1px solid var(--border);">
+							<div style="display: flex; justify-content: space-between; align-items: start; gap: 10px;">
+								<div style="flex: 1;">
+									<p style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">{ plugin.Name }</p>
+									if plugin.CurrentVersion != "" {
+										<p style="color: var(--text-secondary); font-size: 12px;">Current: { plugin.CurrentVersion }</p>
+									} else if plugin.DesiredVersion != "" {
+										<p style="color: var(--text-secondary); font-size: 12px;">Pending: { plugin.DesiredVersion }</p>
+									} else {
+										<p style="color: var(--text-secondary); font-size: 12px;">Not configured</p>
+									}
+								</div>
+								<div style="display: flex; gap: 6px; align-items: center;">
+									if plugin.CurrentVersion == "" && plugin.DesiredVersion != "" {
+										<span style="background-color: var(--accent); color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px;">Install</span>
+									} else if plugin.DesiredVersion != "" && plugin.DesiredVersion != plugin.CurrentVersion {
+										<span style="background-color: var(--accent); color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px;">Update</span>
+									}
+								</div>
+							</div>
+						</div>
+					}
+				</div>
+			</div>
+		}
+		if server.UpdatePlan != nil {
+			<div style="margin-top: 20px; padding: 15px; background-color: rgba(255, 165, 0, 0.1); border-left: 4px solid var(--accent); border-radius: 4px;">
+				<p style="font-weight: 600; font-size: 14px; margin-bottom: 10px; color: var(--accent);">📋 Update Plan</p>
+				if server.UpdatePlan.PaperUpdate != "" {
+					<p style="font-size: 13px; margin-bottom: 6px;">
+						<span style="color: var(--text-secondary);">Paper:</span> { server.UpdatePlan.PaperUpdate }
+					</p>
+				}
+				if len(server.UpdatePlan.PluginUpdates) > 0 {
+					for _, update := range server.UpdatePlan.PluginUpdates {
+						<p style="font-size: 13px; margin-bottom: 6px;">
+							<span style="color: var(--text-secondary);">{ update.Name }:</span> { update.FromVersion } → { update.ToVersion }
+						</p>
+					}
+				}
+				if server.UpdatePlan.AppliesAt != "" {
+					<p style="font-size: 12px; margin-top: 10px; color: var(--text-secondary);">
+						Will apply { server.UpdatePlan.AppliesAt }
+					</p>
+				}
+			</div>
+		}
 	</div>
 }

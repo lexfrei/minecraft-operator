@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -34,6 +35,8 @@ func NewServer(k8sClient client.Client, namespace string, bindAddress string) *S
 	mux.HandleFunc("/ui", srv.handleDashboard)
 	mux.HandleFunc("/ui/server/", srv.handleServerDetail)
 	mux.HandleFunc("/ui/events", srv.handleSSE)
+	mux.HandleFunc("/ui/server/resolve", srv.handleServerResolve)
+	mux.HandleFunc("/ui/plugin/resolve", srv.handlePluginResolve)
 
 	srv.server = &http.Server{
 		Addr:              bindAddress,
@@ -132,4 +135,104 @@ func (s *Server) handleServerDetail(w http.ResponseWriter, r *http.Request) {
 // handleSSE serves Server-Sent Events endpoint for real-time updates.
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	s.sse.ServeHTTP(w, r)
+}
+
+// handleServerResolve triggers server reconciliation by adding an annotation.
+func (s *Server) handleServerResolve(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx := r.Context()
+	serverName := r.URL.Query().Get("name")
+	namespace := r.URL.Query().Get("namespace")
+
+	if serverName == "" || namespace == "" {
+		http.Error(w, "Missing name or namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.triggerServerReconciliation(ctx, serverName, namespace); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to trigger reconciliation: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintf(w, "Server %s reconciliation triggered", serverName)
+}
+
+// handlePluginResolve triggers plugin reconciliation by adding an annotation.
+func (s *Server) handlePluginResolve(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx := r.Context()
+	pluginName := r.URL.Query().Get("name")
+	namespace := r.URL.Query().Get("namespace")
+
+	if pluginName == "" || namespace == "" {
+		http.Error(w, "Missing name or namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.triggerPluginReconciliation(ctx, pluginName, namespace); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to trigger reconciliation: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintf(w, "Plugin %s reconciliation triggered", pluginName)
+}
+
+// triggerPluginReconciliation triggers plugin reconciliation by adding an annotation.
+func (s *Server) triggerPluginReconciliation(ctx context.Context, name, namespace string) error {
+	var plugin mck8slexlav1alpha1.Plugin
+
+	// Get plugin from cluster
+	if err := s.client.Get(ctx, client.ObjectKey{
+		Name:      name,
+		Namespace: namespace,
+	}, &plugin); err != nil {
+		return errors.Wrap(err, "failed to get plugin")
+	}
+
+	// Add reconciliation trigger annotation
+	if plugin.Annotations == nil {
+		plugin.Annotations = make(map[string]string)
+	}
+	plugin.Annotations["mc.k8s.lex.la/reconcile"] = fmt.Sprintf("%d", time.Now().Unix())
+
+	if err := s.client.Update(ctx, &plugin); err != nil {
+		return errors.Wrap(err, "failed to update plugin")
+	}
+
+	return nil
+}
+
+// triggerServerReconciliation triggers server reconciliation by adding an annotation.
+func (s *Server) triggerServerReconciliation(ctx context.Context, name, namespace string) error {
+	var server mck8slexlav1alpha1.PaperMCServer
+
+	// Get server from cluster
+	if err := s.client.Get(ctx, client.ObjectKey{
+		Name:      name,
+		Namespace: namespace,
+	}, &server); err != nil {
+		return errors.Wrap(err, "failed to get server")
+	}
+
+	// Add reconciliation trigger annotation
+	if server.Annotations == nil {
+		server.Annotations = make(map[string]string)
+	}
+	server.Annotations["mc.k8s.lex.la/reconcile"] = fmt.Sprintf("%d", time.Now().Unix())
+
+	if err := s.client.Update(ctx, &server); err != nil {
+		return errors.Wrap(err, "failed to update server")
+	}
+
+	return nil
 }

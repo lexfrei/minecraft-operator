@@ -70,7 +70,7 @@ func (s *SimpleSolver) FindBestPluginVersion(
 			server := &servers[i]
 
 			// Check if this plugin version is compatible with server's Paper version
-			if !isPluginCompatibleWithServer(pv, server) {
+			if !isPluginCompatibleWithServer(pv, server, plugin) {
 				compatible = false
 				break
 			}
@@ -243,11 +243,25 @@ func sortPaperVersionsDesc(versions []string) []string {
 }
 
 // isPluginCompatibleWithServer checks if a plugin version is compatible with a server's Paper version.
-func isPluginCompatibleWithServer(pv plugins.PluginVersion, server *mcv1alpha1.PaperMCServer) bool {
+func isPluginCompatibleWithServer(
+	pv plugins.PluginVersion,
+	server *mcv1alpha1.PaperMCServer,
+	plugin *mcv1alpha1.Plugin,
+) bool {
 	// Use the current Paper version from status, fallback to spec
 	paperVersion := server.Status.CurrentPaperVersion
 	if paperVersion == "" {
 		paperVersion = server.Spec.PaperVersion
+	}
+
+	// Check if compatibilityOverride is enabled
+	if plugin.Spec.CompatibilityOverride != nil && plugin.Spec.CompatibilityOverride.Enabled {
+		// Use override versions instead of API metadata
+		if len(plugin.Spec.CompatibilityOverride.MinecraftVersions) > 0 {
+			return containsVersion(plugin.Spec.CompatibilityOverride.MinecraftVersions, paperVersion)
+		}
+		// If override is enabled but no versions specified, assume compatible
+		return true
 	}
 
 	// Check if the plugin's compatible versions include this Paper version
