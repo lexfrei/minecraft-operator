@@ -89,14 +89,24 @@ templ ServerCard(server ServerSummary) {
 	<div class="card" style="margin-bottom: 15px;">
 		<div style="display: flex; justify-content: space-between; align-items: start;">
 			<div style="flex: 1;">
-				<h3 style="font-size: 18px; margin-bottom: 10px;">
+				<h3 style="font-size: 18px; margin-bottom: 8px;">
 					<a href={ templ.URL(fmt.Sprintf("/ui/server/%s", server.Name)) }>
 						{ server.Name }
 					</a>
 				</h3>
-				<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 5px;">
-					Namespace: { server.Namespace }
-				</p>
+				<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+					<p style="color: var(--text-secondary); font-size: 14px;">
+						Namespace: { server.Namespace }
+					</p>
+					if len(server.Labels) > 0 {
+						<span style="color: var(--text-muted); font-size: 12px;">•</span>
+						for key, value := range server.Labels {
+							<span style="background-color: var(--accent-bg); color: var(--accent); padding: 2px 8px; border-radius: 3px; font-size: 11px; font-family: monospace; border: 1px solid var(--accent-border);">
+								{ key }: { value }
+							</span>
+						}
+					}
+				</div>
 			</div>
 			<div style="display: flex; gap: 10px; align-items: center;">
 				<div id={ fmt.Sprintf("resolve-button-%s", server.Name) }>
@@ -145,20 +155,6 @@ templ ServerCard(server ServerSummary) {
 				</div>
 			}
 		</div>
-		if len(server.Labels) > 0 {
-			<div style="margin-top: 15px; padding: 12px; background-color: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border);">
-				<p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">
-					Labels <span style="color: var(--text-muted);">(for instanceSelector)</span>
-				</p>
-				<div style="display: flex; flex-wrap: wrap; gap: 6px;">
-					for key, value := range server.Labels {
-						<span style="background-color: var(--accent-bg); color: var(--accent); padding: 4px 10px; border-radius: 4px; font-size: 12px; font-family: monospace; border: 1px solid var(--accent-border);">
-							{ key }={ value }
-						</span>
-					}
-				</div>
-			</div>
-		}
 		if len(server.Plugins) > 0 {
 			<div style="margin-top: 20px;">
 				<p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 10px;">Installed Plugins</p>
@@ -178,9 +174,9 @@ templ ServerCard(server ServerSummary) {
 								</div>
 								<div style="display: flex; gap: 6px; align-items: center;">
 									if plugin.CurrentVersion == "" && plugin.DesiredVersion != "" {
-										<span style="background-color: var(--accent); color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px;">Install</span>
+										<span style="background-color: rgba(74, 158, 255, 0.15); color: var(--accent); padding: 2px 8px; border-radius: 3px; font-size: 11px; border: 1px solid var(--accent-border);">⬇ Pending install</span>
 									} else if plugin.DesiredVersion != "" && plugin.DesiredVersion != plugin.CurrentVersion {
-										<span style="background-color: var(--accent); color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px;">Update</span>
+										<span style="background-color: rgba(255, 193, 7, 0.15); color: #ffc107; padding: 2px 8px; border-radius: 3px; font-size: 11px; border: 1px solid rgba(255, 193, 7, 0.3);">⬆ Pending update</span>
 									}
 								</div>
 							</div>
