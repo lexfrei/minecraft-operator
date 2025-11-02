@@ -52,7 +52,8 @@ var _ = Describe("PaperMCServer Controller", func() {
 						Namespace: "default",
 					},
 					Spec: mck8slexlav1alpha1.PaperMCServerSpec{
-						PaperVersion: "latest",
+						UpdateStrategy: "latest",
+						PaperVersion:   "latest",
 						UpdateSchedule: mck8slexlav1alpha1.UpdateSchedule{
 							CheckCron: "0 3 * * *",
 							MaintenanceWindow: mck8slexlav1alpha1.MaintenanceWindow{

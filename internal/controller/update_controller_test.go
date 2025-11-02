@@ -78,7 +78,8 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "1.21.0",
+					UpdateStrategy: "latest",
+					PaperVersion:   "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -142,7 +143,8 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "1.21.0",
+					UpdateStrategy: "latest",
+					PaperVersion:   "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -196,7 +198,8 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "1.21.0",
+					UpdateStrategy: "latest",
+					PaperVersion:   "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -247,7 +250,8 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "1.21.0",
+					UpdateStrategy: "latest",
+					PaperVersion:   "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -319,7 +323,8 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "1.21.0",
+					UpdateStrategy: "latest",
+					PaperVersion:   "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -397,7 +402,8 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "1.21.0",
+					UpdateStrategy: "latest",
+					PaperVersion:   "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -434,7 +440,8 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "1.21.0",
+					UpdateStrategy: "latest",
+					PaperVersion:   "1.21.0",
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -514,8 +521,9 @@ var _ = Describe("UpdateController", func() {
 
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "latest",
-					UpdateDelay:  &metav1.Duration{Duration: 72 * time.Hour}, // 3 days
+					UpdateStrategy: "latest",
+					PaperVersion:   "latest",
+					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour}, // 3 days
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -568,8 +576,9 @@ var _ = Describe("UpdateController", func() {
 
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "latest",
-					UpdateDelay:  &metav1.Duration{Duration: 72 * time.Hour}, // 3 days
+					UpdateStrategy: "latest",
+					PaperVersion:   "latest",
+					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour}, // 3 days
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -621,7 +630,8 @@ var _ = Describe("UpdateController", func() {
 
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "latest",
+					UpdateStrategy: "latest",
+					PaperVersion:   "latest",
 					// No updateDelay specified
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
@@ -671,8 +681,9 @@ var _ = Describe("UpdateController", func() {
 		It("should return true when no availableUpdate exists", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "latest",
-					UpdateDelay:  &metav1.Duration{Duration: 72 * time.Hour},
+					UpdateStrategy: "latest",
+					PaperVersion:   "latest",
+					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour},
 					UpdateSchedule: mcv1alpha1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
 						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
@@ -880,7 +891,8 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "latest",
+					UpdateStrategy: "latest",
+					PaperVersion:   "latest",
 					RCON: mcv1alpha1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
@@ -935,7 +947,8 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "latest",
+					UpdateStrategy: "latest",
+					PaperVersion:   "latest",
 					RCON: mcv1alpha1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
@@ -974,6 +987,7 @@ var _ = Describe("UpdateController", func() {
 		It("should continue with pod deletion if RCON fails", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
 					RCON: mcv1alpha1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
@@ -996,6 +1010,7 @@ var _ = Describe("UpdateController", func() {
 		It("should handle context cancellation during RCON", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
 					RCON: mcv1alpha1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
@@ -1045,7 +1060,8 @@ var _ = Describe("UpdateController", func() {
 		It("should update lastUpdate in status after successful update", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "1.21.1",
+					UpdateStrategy: "latest",
+					PaperVersion:   "1.21.1",
 				},
 				Status: mcv1alpha1.PaperMCServerStatus{
 					CurrentPaperVersion: "1.21.0",
@@ -1064,7 +1080,8 @@ var _ = Describe("UpdateController", func() {
 		It("should record failed update in status", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "1.21.1",
+					UpdateStrategy: "latest",
+					PaperVersion:   "1.21.1",
 				},
 				Status: mcv1alpha1.PaperMCServerStatus{
 					CurrentPaperVersion: "1.21.0",
@@ -1081,7 +1098,8 @@ var _ = Describe("UpdateController", func() {
 		It("should clear availableUpdate after successful update", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				Spec: mcv1alpha1.PaperMCServerSpec{
-					PaperVersion: "1.21.1",
+					UpdateStrategy: "latest",
+					PaperVersion:   "1.21.1",
 				},
 				Status: mcv1alpha1.PaperMCServerStatus{
 					CurrentPaperVersion: "1.21.0",
