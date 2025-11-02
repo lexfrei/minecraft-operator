@@ -1,5 +1,5 @@
 image:
-  tag: v0.4.3
+  tag: v0.4.4
 webui:
   httproute:
     enabled: true
