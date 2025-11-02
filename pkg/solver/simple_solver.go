@@ -264,6 +264,12 @@ func isPluginCompatibleWithServer(
 		return true
 	}
 
+	// Per DESIGN.md: "Plugin without version metadata: assume compatibility, log warning"
+	// If both MinecraftVersions and PaperVersions are empty, assume compatible
+	if len(pv.MinecraftVersions) == 0 && len(pv.PaperVersions) == 0 {
+		return true
+	}
+
 	// Check if the plugin's compatible versions include this Paper version
 	// For MVP, we check MinecraftVersions which should include the Minecraft version
 	// corresponding to the Paper version

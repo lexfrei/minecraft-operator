@@ -1091,6 +1091,19 @@ func (r *PaperMCServerReconciler) resolvePluginVersionForServer(
 			server.Namespace, server.Name, server.Status.CurrentPaperVersion)
 	}
 
+	// Check if the resolved version has metadata (warn if missing)
+	for _, v := range filteredVersions {
+		if v.Version == resolvedVersion {
+			if len(v.MinecraftVersions) == 0 && len(v.PaperVersions) == 0 {
+				log.Info("Plugin version has no compatibility metadata, assuming compatible",
+					"plugin", plugin.Name,
+					"version", resolvedVersion,
+					"server", server.Name)
+			}
+			break
+		}
+	}
+
 	log.Info("Resolved plugin version for server",
 		"plugin", plugin.Name,
 		"server", server.Name,
@@ -1422,6 +1435,15 @@ func serverStatusEqual(a, b *mcv1alpha1.PaperMCServerStatus) bool {
 	}
 	if len(a.Plugins) != len(b.Plugins) {
 		return false
+	}
+	// Compare plugin status content
+	for i := range a.Plugins {
+		if a.Plugins[i].ResolvedVersion != b.Plugins[i].ResolvedVersion {
+			return false
+		}
+		if a.Plugins[i].Compatible != b.Plugins[i].Compatible {
+			return false
+		}
 	}
 	if (a.AvailableUpdate == nil) != (b.AvailableUpdate == nil) {
 		return false
