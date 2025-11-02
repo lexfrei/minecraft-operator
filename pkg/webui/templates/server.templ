@@ -13,6 +13,7 @@ type ServerDetailData struct {
 	Plugins             []PluginInfo
 	MaintenanceSchedule MaintenanceInfo
 	LastUpdate          UpdateInfo
+	Labels              map[string]string
 }
 
 type PluginInfo struct {
@@ -44,6 +45,20 @@ templ ServerDetail(data ServerDetailData) {
 			<div class="card">
 				<h2>{ data.Name }</h2>
 				<p style="color: var(--text-secondary); margin-top: 5px;">Namespace: { data.Namespace }</p>
+				if len(data.Labels) > 0 {
+					<div style="margin-top: 15px; padding: 12px; background-color: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border);">
+						<p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">
+							Labels <span style="color: var(--text-muted);">(for instanceSelector)</span>
+						</p>
+						<div style="display: flex; flex-wrap: wrap; gap: 6px;">
+							for key, value := range data.Labels {
+								<span style="background-color: var(--accent-bg); color: var(--accent); padding: 4px 10px; border-radius: 4px; font-size: 12px; font-family: monospace; border: 1px solid var(--accent-border);">
+									{ key }={ value }
+								</span>
+							}
+						</div>
+					</div>
+				}
 			</div>
 
 			<div class="card">

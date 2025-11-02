@@ -49,6 +49,7 @@ func (s *Server) fetchDashboardData(ctx context.Context, filterNamespace string)
 			PluginCount:         len(server.Status.Plugins),
 			Status:              determineServerStatus(&server),
 			Plugins:             buildPluginSummaries(server.Status.Plugins),
+			Labels:              server.Labels,
 		}
 
 		// Check actual StatefulSet status if condition is stale
@@ -113,6 +114,7 @@ func (s *Server) fetchServerDetailData(ctx context.Context, serverName string) (
 		CurrentPaperVersion: formatVersionWithBuild(server.Status.CurrentVersion, server.Status.CurrentBuild),
 		DesiredPaperVersion: formatVersionWithBuild(server.Status.DesiredVersion, server.Status.DesiredBuild),
 		Plugins:             make([]templates.PluginInfo, 0, len(server.Status.Plugins)),
+		Labels:              server.Labels,
 	}
 
 	if server.Status.AvailableUpdate != nil {

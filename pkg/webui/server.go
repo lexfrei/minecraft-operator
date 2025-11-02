@@ -36,6 +36,7 @@ func NewServer(k8sClient client.Client, namespace string, bindAddress string) *S
 	mux.HandleFunc("/ui/server/", srv.handleServerDetail)
 	mux.HandleFunc("/ui/events", srv.handleSSE)
 	mux.HandleFunc("/ui/server/resolve", srv.handleServerResolve)
+	mux.HandleFunc("/ui/server/status", srv.handleServerStatus)
 	mux.HandleFunc("/ui/plugin/resolve", srv.handlePluginResolve)
 
 	srv.server = &http.Server{
@@ -158,8 +159,80 @@ func (s *Server) handleServerResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprintf(w, "Server %s reconciliation triggered", serverName)
+	// Return progress indicator that starts polling for status
+	w.Header().Set("Content-Type", "text/html")
+	resolvingHTML := `<button disabled style="background-color: #ccc; color: #666; border: none; ` +
+		`padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: not-allowed; ` +
+		`white-space: nowrap;">⏳ Resolving...</button><script>setTimeout(function(){` +
+		`htmx.ajax('GET','/ui/server/status?name=%s&namespace=%s',` +
+		`{target:'#solver-status-%s',swap:'innerHTML'});},1000);</script>`
+	_, _ = fmt.Fprintf(w, resolvingHTML, serverName, namespace, serverName)
+}
+
+// handleServerStatus returns current solver status for a server.
+func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx := r.Context()
+	serverName := r.URL.Query().Get("name")
+	namespace := r.URL.Query().Get("namespace")
+
+	if serverName == "" || namespace == "" {
+		http.Error(w, "Missing name or namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	var server mck8slexlav1alpha1.PaperMCServer
+	if err := s.client.Get(ctx, client.ObjectKey{Name: serverName, Namespace: namespace}, &server); err != nil {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = fmt.Fprintf(w, `<span style="color: red;">❌ Error</span>`)
+		return
+	}
+
+	// Check if reconciliation is complete by examining status conditions
+	hasError := false
+
+	for _, cond := range server.Status.Conditions {
+		if cond.Type == "Ready" {
+			if cond.Status == "True" {
+				// Reconciliation completed successfully
+				w.Header().Set("Content-Type", "text/html")
+				successHTML := `<span style="color: green;">✓ Resolved</span><script>setTimeout(function(){` +
+					`var btn=document.querySelector('#resolve-button-%s');if(btn){` +
+					`btn.innerHTML='<button hx-post="/ui/server/resolve?name=%s&namespace=%s" ` +
+					`hx-swap="outerHTML" hx-target="#resolve-button-%s" ` +
+					`style="background-color: var(--accent); color: white; border: none; ` +
+					`padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; ` +
+					`white-space: nowrap;">🔄 Resolve Server</button>';}},2000);</script>`
+				_, _ = fmt.Fprintf(w, successHTML, serverName, serverName, namespace, serverName)
+				return
+			} else if cond.Reason == "ReconciliationFailed" {
+				hasError = true
+			}
+		}
+	}
+
+	if hasError {
+		w.Header().Set("Content-Type", "text/html")
+		failedHTML := `<span style="color: red;">❌ Failed</span><script>setTimeout(function(){` +
+			`var btn=document.querySelector('#resolve-button-%s');if(btn){` +
+			`btn.innerHTML='<button hx-post="/ui/server/resolve?name=%s&namespace=%s" ` +
+			`hx-swap="outerHTML" hx-target="#resolve-button-%s" ` +
+			`style="background-color: var(--accent); color: white; border: none; ` +
+			`padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; ` +
+			`white-space: nowrap;">🔄 Resolve Server</button>';}},2000);</script>`
+		_, _ = fmt.Fprintf(w, failedHTML, serverName, serverName, namespace, serverName)
+		return
+	}
+
+	// Still reconciling - continue polling
+	w.Header().Set("Content-Type", "text/html")
+	workingHTML := `<span style="color: orange;" hx-get="/ui/server/status?name=%s&namespace=%s" ` +
+		`hx-trigger="load delay:2s" hx-target="this" hx-swap="outerHTML">⏳ Working...</span>`
+	_, _ = fmt.Fprintf(w, workingHTML, serverName, namespace)
 }
 
 // handlePluginResolve triggers plugin reconciliation by adding an annotation.

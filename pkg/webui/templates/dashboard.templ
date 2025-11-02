@@ -21,6 +21,7 @@ type ServerSummary struct {
 	Status              string
 	Plugins             []PluginSummary
 	UpdatePlan          *UpdatePlan
+	Labels              map[string]string
 }
 
 type PluginSummary struct {
@@ -98,16 +99,17 @@ templ ServerCard(server ServerSummary) {
 				</p>
 			</div>
 			<div style="display: flex; gap: 10px; align-items: center;">
-				<button
-					hx-post={ fmt.Sprintf("/ui/server/resolve?name=%s&namespace=%s", server.Name, server.Namespace) }
-					hx-swap="none"
-					hx-disabled-elt="this"
-					hx-on::after-request="this.disabled=false"
-					style="background-color: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; white-space: nowrap;"
-					onclick="this.disabled=true"
-				>
-					🔄 Resolve Server
-				</button>
+				<div id={ fmt.Sprintf("resolve-button-%s", server.Name) }>
+					<button
+						hx-post={ fmt.Sprintf("/ui/server/resolve?name=%s&namespace=%s", server.Name, server.Namespace) }
+						hx-swap="outerHTML"
+						hx-target={ fmt.Sprintf("#resolve-button-%s", server.Name) }
+						style="background-color: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; white-space: nowrap;"
+					>
+						🔄 Resolve Server
+					</button>
+				</div>
+				<div id={ fmt.Sprintf("solver-status-%s", server.Name) } role="status" aria-live="polite" style="min-width: 100px; font-size: 13px;"></div>
 				if server.Status == "running" {
 					<span class="badge badge-success">Running</span>
 				} else if server.Status == "updating" {
@@ -143,6 +145,20 @@ templ ServerCard(server ServerSummary) {
 				</div>
 			}
 		</div>
+		if len(server.Labels) > 0 {
+			<div style="margin-top: 15px; padding: 12px; background-color: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border);">
+				<p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">
+					Labels <span style="color: var(--text-muted);">(for instanceSelector)</span>
+				</p>
+				<div style="display: flex; flex-wrap: wrap; gap: 6px;">
+					for key, value := range server.Labels {
+						<span style="background-color: var(--accent-bg); color: var(--accent); padding: 4px 10px; border-radius: 4px; font-size: 12px; font-family: monospace; border: 1px solid var(--accent-border);">
+							{ key }={ value }
+						</span>
+					}
+				</div>
+			</div>
+		}
 		if len(server.Plugins) > 0 {
 			<div style="margin-top: 20px;">
 				<p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 10px;">Installed Plugins</p>
