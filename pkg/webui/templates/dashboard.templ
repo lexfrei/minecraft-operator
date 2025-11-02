@@ -101,8 +101,10 @@ templ ServerCard(server ServerSummary) {
 				<button
 					hx-post={ fmt.Sprintf("/ui/server/resolve?name=%s&namespace=%s", server.Name, server.Namespace) }
 					hx-swap="none"
+					hx-disabled-elt="this"
+					hx-on::after-request="this.disabled=false"
 					style="background-color: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; white-space: nowrap;"
-					onclick="this.textContent='⏳ Resolving...'; this.disabled=true;"
+					onclick="this.disabled=true"
 				>
 					🔄 Resolve Server
 				</button>
