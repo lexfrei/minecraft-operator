@@ -159,14 +159,44 @@ func (s *Server) handleServerResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return progress indicator that starts polling for status
+	// Return disabled button and trigger status polling
 	w.Header().Set("Content-Type", "text/html")
-	resolvingHTML := `<button disabled style="background-color: #ccc; color: #666; border: none; ` +
+	buttonHTML := `<button disabled style="background-color: #ccc; color: #666; border: none; ` +
 		`padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: not-allowed; ` +
-		`white-space: nowrap;">⏳ Resolving...</button><script>setTimeout(function(){` +
-		`htmx.ajax('GET','/ui/server/status?name=%s&namespace=%s',` +
-		`{target:'#solver-status-%s',swap:'innerHTML'});},1000);</script>`
-	_, _ = fmt.Fprintf(w, resolvingHTML, serverName, namespace, serverName)
+		`white-space: nowrap;">⏳ Resolving...</button>` +
+		`<div hx-get="/ui/server/status?name=%s&namespace=%s&attempt=1" ` +
+		`hx-trigger="load delay:1s" hx-target="#solver-status-%s" hx-swap="innerHTML"></div>`
+	_, _ = fmt.Fprintf(w, buttonHTML, serverName, namespace, serverName)
+}
+
+// solverStatusInfo holds parsed solver status from conditions.
+type solverStatusInfo struct {
+	solverRunning   bool
+	solverCompleted bool
+	solverFailed    bool
+	readySuccess    bool
+	readyFailed     bool
+}
+
+// parseSolverStatus extracts solver status from server conditions.
+func parseSolverStatus(server *mck8slexlav1alpha1.PaperMCServer) solverStatusInfo {
+	var info solverStatusInfo
+	for _, cond := range server.Status.Conditions {
+		if cond.Type == "SolverRunning" {
+			info.solverRunning = (cond.Status == "True")
+			if cond.Reason == "SolverCompleted" {
+				info.solverCompleted = true
+			}
+			if cond.Reason == "SolverFailed" {
+				info.solverFailed = true
+			}
+		}
+		if cond.Type == "Ready" {
+			info.readySuccess = (cond.Status == "True")
+			info.readyFailed = (cond.Reason == "ReconciliationFailed")
+		}
+	}
+	return info
 }
 
 // handleServerStatus returns current solver status for a server.
@@ -179,9 +209,23 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	serverName := r.URL.Query().Get("name")
 	namespace := r.URL.Query().Get("namespace")
+	attemptStr := r.URL.Query().Get("attempt")
 
 	if serverName == "" || namespace == "" {
 		http.Error(w, "Missing name or namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Parse attempt number for timeout
+	attempt := 1
+	if attemptStr != "" {
+		_, _ = fmt.Sscanf(attemptStr, "%d", &attempt)
+	}
+
+	// Timeout after 30 attempts (60 seconds with 2s delay)
+	if attempt > 30 {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = fmt.Fprintf(w, `<span style="color: orange;">⏱ Timeout - check logs</span>`)
 		return
 	}
 
@@ -192,47 +236,51 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if reconciliation is complete by examining status conditions
-	hasError := false
+	status := parseSolverStatus(&server)
+	w.Header().Set("Content-Type", "text/html")
 
-	for _, cond := range server.Status.Conditions {
-		if cond.Type == "Ready" {
-			if cond.Status == "True" {
-				// Reconciliation completed successfully
-				w.Header().Set("Content-Type", "text/html")
-				successHTML := `<span style="color: green;">✓ Resolved</span><script>setTimeout(function(){` +
-					`var btn=document.querySelector('#resolve-button-%s');if(btn){` +
-					`btn.innerHTML='<button hx-post="/ui/server/resolve?name=%s&namespace=%s" ` +
-					`hx-swap="outerHTML" hx-target="#resolve-button-%s" ` +
-					`style="background-color: var(--accent); color: white; border: none; ` +
-					`padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; ` +
-					`white-space: nowrap;">🔄 Resolve Server</button>';}},2000);</script>`
-				_, _ = fmt.Fprintf(w, successHTML, serverName, serverName, namespace, serverName)
-				return
-			} else if cond.Reason == "ReconciliationFailed" {
-				hasError = true
-			}
-		}
-	}
+	s.renderSolverStatus(w, status, serverName, namespace, attempt)
+}
 
-	if hasError {
-		w.Header().Set("Content-Type", "text/html")
-		failedHTML := `<span style="color: red;">❌ Failed</span><script>setTimeout(function(){` +
-			`var btn=document.querySelector('#resolve-button-%s');if(btn){` +
-			`btn.innerHTML='<button hx-post="/ui/server/resolve?name=%s&namespace=%s" ` +
-			`hx-swap="outerHTML" hx-target="#resolve-button-%s" ` +
-			`style="background-color: var(--accent); color: white; border: none; ` +
-			`padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; ` +
-			`white-space: nowrap;">🔄 Resolve Server</button>';}},2000);</script>`
-		_, _ = fmt.Fprintf(w, failedHTML, serverName, serverName, namespace, serverName)
+// renderSolverStatus renders the appropriate HTML based on solver status.
+func (s *Server) renderSolverStatus(
+	w http.ResponseWriter,
+	status solverStatusInfo,
+	serverName, namespace string,
+	attempt int,
+) {
+	nextAttempt := attempt + 1
+
+	// Solver is actively running
+	if status.solverRunning {
+		statusHTML := `<span style="color: orange;" hx-get="/ui/server/status?name=%s&namespace=%s&attempt=%d" ` +
+			`hx-trigger="load delay:2s" hx-target="this" hx-swap="outerHTML">⏳ Running solver...</span>`
+		_, _ = fmt.Fprintf(w, statusHTML, serverName, namespace, nextAttempt)
 		return
 	}
 
-	// Still reconciling - continue polling
-	w.Header().Set("Content-Type", "text/html")
-	workingHTML := `<span style="color: orange;" hx-get="/ui/server/status?name=%s&namespace=%s" ` +
+	// Solver failed
+	if status.solverFailed {
+		_, _ = fmt.Fprintf(w, `<span style="color: red;">❌ Solver failed</span>`)
+		return
+	}
+
+	// Solver completed and reconciliation succeeded
+	if status.solverCompleted && status.readySuccess {
+		_, _ = fmt.Fprintf(w, `<span style="color: green;">✓ Resolved</span>`)
+		return
+	}
+
+	// Reconciliation failed
+	if status.readyFailed {
+		_, _ = fmt.Fprintf(w, `<span style="color: red;">❌ Failed</span>`)
+		return
+	}
+
+	// Still working - continue polling
+	statusHTML := `<span style="color: orange;" hx-get="/ui/server/status?name=%s&namespace=%s&attempt=%d" ` +
 		`hx-trigger="load delay:2s" hx-target="this" hx-swap="outerHTML">⏳ Working...</span>`
-	_, _ = fmt.Fprintf(w, workingHTML, serverName, namespace)
+	_, _ = fmt.Fprintf(w, statusHTML, serverName, namespace, nextAttempt)
 }
 
 // handlePluginResolve triggers plugin reconciliation by adding an annotation.

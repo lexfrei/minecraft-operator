@@ -53,6 +53,7 @@ const (
 	conditionTypeStatefulSetReady = "StatefulSetReady"
 	conditionTypeUpdateAvailable  = "UpdateAvailable"
 	conditionTypeUpdateBlocked    = "UpdateBlocked"
+	conditionTypeSolverRunning    = "SolverRunning"
 	reasonServerReconcileSuccess  = "ReconcileSuccess"
 	reasonServerReconcileError    = "ReconcileError"
 	reasonStatefulSetCreated      = "StatefulSetCreated"
@@ -62,6 +63,9 @@ const (
 	reasonNoUpdate                = "NoUpdate"
 	reasonUpdateBlocked           = "UpdateBlocked"
 	reasonUpdateUnblocked         = "UpdateUnblocked"
+	reasonSolverStarted           = "SolverStarted"
+	reasonSolverCompleted         = "SolverCompleted"
+	reasonSolverFailed            = "SolverFailed"
 	// DEPRECATED: This constant is for documentation only.
 	// All deployments MUST use concrete version-build tags (e.g., "1.21.1-91").
 	// The :latest tag is never used in actual deployments.
@@ -1202,11 +1206,22 @@ func (r *PaperMCServerReconciler) findVersionUpdate(
 
 	slog.InfoContext(ctx, "Fetched Paper versions", "count", len(paperVersions))
 
+	// Set solver running condition
+	r.setCondition(server, conditionTypeSolverRunning, metav1.ConditionTrue,
+		reasonSolverStarted, "Resolving optimal Paper version")
+
 	// Run solver
 	bestVersion, err := r.Solver.FindBestPaperVersion(ctx, server, matchedPlugins, paperVersions)
 	if err != nil {
+		// Mark solver as failed
+		r.setCondition(server, conditionTypeSolverRunning, metav1.ConditionFalse,
+			reasonSolverFailed, fmt.Sprintf("Solver failed: %v", err))
 		return nil, errors.Wrap(err, "solver failed to find best version")
 	}
+
+	// Mark solver as completed
+	r.setCondition(server, conditionTypeSolverRunning, metav1.ConditionFalse,
+		reasonSolverCompleted, "Version resolved successfully")
 
 	// Check if update is needed
 	if bestVersion == server.Status.CurrentVersion || bestVersion == "" {
