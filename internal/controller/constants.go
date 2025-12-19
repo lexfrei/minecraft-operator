@@ -26,3 +26,14 @@ const (
 	versionPolicyLatest = "latest"
 	versionPolicyPinned = "pinned"
 )
+
+// Finalizer and annotation constants.
+const (
+	// PluginFinalizer is the finalizer added to Plugin resources to ensure JAR cleanup.
+	PluginFinalizer = "mc.k8s.lex.la/plugin-cleanup"
+
+	// AnnotationApplyNow triggers immediate update application, bypassing maintenance window.
+	// Value should be a Unix timestamp (seconds since epoch) of when the annotation was set.
+	// Annotations older than 5 minutes are ignored to prevent stale triggers.
+	AnnotationApplyNow = "mc.k8s.lex.la/apply-now"
+)

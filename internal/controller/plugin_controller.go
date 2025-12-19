@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -79,6 +80,22 @@ func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 		slog.ErrorContext(ctx, "Failed to get Plugin resource", "error", err)
 		return ctrl.Result{}, errors.Wrap(err, "failed to get plugin")
+	}
+
+	// Handle deletion
+	if !plugin.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, &plugin)
+	}
+
+	// Ensure finalizer is present
+	if !controllerutil.ContainsFinalizer(&plugin, PluginFinalizer) {
+		slog.InfoContext(ctx, "Adding finalizer to Plugin", "plugin", plugin.Name)
+		controllerutil.AddFinalizer(&plugin, PluginFinalizer)
+		if err := r.Update(ctx, &plugin); err != nil {
+			slog.ErrorContext(ctx, "Failed to add finalizer", "error", err)
+			return ctrl.Result{}, errors.Wrap(err, "failed to add finalizer")
+		}
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// Store original status for comparison
@@ -442,6 +459,181 @@ func statusEqual(a, b *mcv1alpha1.PluginStatus) bool {
 		return false
 	}
 	return true
+}
+
+// reconcileDelete handles Plugin deletion with finalizer.
+// It ensures JARs are deleted from all matched servers before removing the finalizer.
+func (r *PluginReconciler) reconcileDelete(
+	ctx context.Context,
+	plugin *mcv1alpha1.Plugin,
+) (ctrl.Result, error) {
+	slog.InfoContext(ctx, "Reconciling Plugin deletion", "plugin", plugin.Name)
+
+	// Check if finalizer is present
+	if !controllerutil.ContainsFinalizer(plugin, PluginFinalizer) {
+		slog.InfoContext(ctx, "Finalizer already removed, deletion can proceed")
+		return ctrl.Result{}, nil
+	}
+
+	// Step 1: Initialize DeletionProgress if empty
+	if err := r.initDeletionProgressIfNeeded(ctx, plugin); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Step 2: Mark plugins as PendingDeletion in each server's status
+	if err := r.markPluginForDeletionOnServers(ctx, plugin); err != nil {
+		slog.ErrorContext(ctx, "Failed to mark plugin for deletion on servers", "error", err)
+		return ctrl.Result{}, errors.Wrap(err, "failed to mark plugin for deletion")
+	}
+
+	// Step 3: Check if all JARs have been deleted
+	if !r.allJARsDeleted(plugin) {
+		slog.InfoContext(ctx, "Waiting for JAR deletion on servers",
+			"plugin", plugin.Name,
+			"progress", plugin.Status.DeletionProgress)
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Step 4: All JARs deleted, remove finalizer
+	return r.removeFinalizer(ctx, plugin)
+}
+
+// initDeletionProgressIfNeeded initializes DeletionProgress for all matched servers.
+func (r *PluginReconciler) initDeletionProgressIfNeeded(
+	ctx context.Context,
+	plugin *mcv1alpha1.Plugin,
+) error {
+	if len(plugin.Status.DeletionProgress) > 0 {
+		return nil // Already initialized
+	}
+
+	matchedServers, err := r.findMatchedServers(ctx, plugin)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to find matched servers during deletion", "error", err)
+		return errors.Wrap(err, "failed to find matched servers")
+	}
+
+	plugin.Status.DeletionProgress = make([]mcv1alpha1.DeletionProgressEntry, len(matchedServers))
+	for i, server := range matchedServers {
+		plugin.Status.DeletionProgress[i] = mcv1alpha1.DeletionProgressEntry{
+			ServerName: server.Name,
+			Namespace:  server.Namespace,
+			JARDeleted: false,
+		}
+	}
+
+	if err := r.Status().Update(ctx, plugin); err != nil {
+		slog.ErrorContext(ctx, "Failed to initialize DeletionProgress", "error", err)
+		return errors.Wrap(err, "failed to initialize deletion progress")
+	}
+
+	slog.InfoContext(ctx, "Initialized DeletionProgress",
+		"plugin", plugin.Name,
+		"servers", len(matchedServers))
+	return nil
+}
+
+// allJARsDeleted checks if all JARs have been deleted from servers.
+func (r *PluginReconciler) allJARsDeleted(plugin *mcv1alpha1.Plugin) bool {
+	for _, progress := range plugin.Status.DeletionProgress {
+		if !progress.JARDeleted {
+			return false
+		}
+	}
+	return true
+}
+
+// removeFinalizer removes the finalizer from the plugin after all cleanup is done.
+func (r *PluginReconciler) removeFinalizer(
+	ctx context.Context,
+	plugin *mcv1alpha1.Plugin,
+) (ctrl.Result, error) {
+	slog.InfoContext(ctx, "All JARs deleted, removing finalizer", "plugin", plugin.Name)
+	controllerutil.RemoveFinalizer(plugin, PluginFinalizer)
+	if err := r.Update(ctx, plugin); err != nil {
+		slog.ErrorContext(ctx, "Failed to remove finalizer", "error", err)
+		return ctrl.Result{}, errors.Wrap(err, "failed to remove finalizer")
+	}
+	slog.InfoContext(ctx, "Plugin deletion completed", "plugin", plugin.Name)
+	return ctrl.Result{}, nil
+}
+
+// markPluginForDeletionOnServers sets PendingDeletion=true for this plugin
+// in all matched server statuses.
+func (r *PluginReconciler) markPluginForDeletionOnServers(
+	ctx context.Context,
+	plugin *mcv1alpha1.Plugin,
+) error {
+	for _, progress := range plugin.Status.DeletionProgress {
+		if progress.JARDeleted {
+			continue // Already handled
+		}
+
+		// Get the server
+		var server mcv1alpha1.PaperMCServer
+		serverKey := client.ObjectKey{Name: progress.ServerName, Namespace: progress.Namespace}
+		if err := r.Get(ctx, serverKey, &server); err != nil {
+			if apierrors.IsNotFound(err) {
+				// Server doesn't exist, mark as deleted
+				if err := r.markJARAsDeleted(ctx, plugin, progress.ServerName, progress.Namespace); err != nil {
+					return err
+				}
+				continue
+			}
+			return errors.Wrapf(err, "failed to get server %s/%s", progress.Namespace, progress.ServerName)
+		}
+
+		// Find and mark the plugin status in server
+		updated := false
+		for i := range server.Status.Plugins {
+			if server.Status.Plugins[i].PluginRef.Name == plugin.Name &&
+				server.Status.Plugins[i].PluginRef.Namespace == plugin.Namespace {
+				if !server.Status.Plugins[i].PendingDeletion {
+					server.Status.Plugins[i].PendingDeletion = true
+					updated = true
+				}
+				break
+			}
+		}
+
+		if updated {
+			if err := r.Status().Update(ctx, &server); err != nil {
+				return errors.Wrapf(err, "failed to mark plugin for deletion on server %s", server.Name)
+			}
+			slog.InfoContext(ctx, "Marked plugin for deletion on server",
+				"plugin", plugin.Name,
+				"server", server.Name)
+		}
+	}
+
+	return nil
+}
+
+// markJARAsDeleted updates the DeletionProgress to indicate JAR was deleted.
+func (r *PluginReconciler) markJARAsDeleted(
+	ctx context.Context,
+	plugin *mcv1alpha1.Plugin,
+	serverName,
+	namespace string,
+) error {
+	now := metav1.Now()
+	for i := range plugin.Status.DeletionProgress {
+		if plugin.Status.DeletionProgress[i].ServerName == serverName &&
+			plugin.Status.DeletionProgress[i].Namespace == namespace {
+			plugin.Status.DeletionProgress[i].JARDeleted = true
+			plugin.Status.DeletionProgress[i].DeletedAt = &now
+			break
+		}
+	}
+
+	if err := r.Status().Update(ctx, plugin); err != nil {
+		return errors.Wrap(err, "failed to update deletion progress")
+	}
+
+	slog.InfoContext(ctx, "Marked JAR as deleted",
+		"plugin", plugin.Name,
+		"server", serverName)
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

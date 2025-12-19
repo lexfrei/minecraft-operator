@@ -265,6 +265,34 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              deletionProgress:
+                description: |-
+                  DeletionProgress tracks JAR cleanup per server during plugin deletion.
+                  This field is populated when the plugin is being deleted (has DeletionTimestamp).
+                items:
+                  description: DeletionProgressEntry tracks JAR cleanup status for
+                    one server during plugin deletion.
+                  properties:
+                    deletedAt:
+                      description: DeletedAt is when the JAR was actually deleted.
+                      format: date-time
+                      type: string
+                    jarDeleted:
+                      description: JARDeleted indicates the JAR file has been removed
+                        from disk.
+                      type: boolean
+                    namespace:
+                      description: Namespace is the PaperMCServer namespace.
+                      type: string
+                    serverName:
+                      description: ServerName is the PaperMCServer name.
+                      type: string
+                  required:
+                  - jarDeleted
+                  - namespace
+                  - serverName
+                  type: object
+                type: array
               lastFetched:
                 description: LastFetched is the timestamp of the last API fetch.
                 format: date-time

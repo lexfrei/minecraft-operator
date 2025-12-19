@@ -126,6 +126,22 @@ type MatchedInstance struct {
 	Compatible bool `json:"compatible"`
 }
 
+// DeletionProgressEntry tracks JAR cleanup status for one server during plugin deletion.
+type DeletionProgressEntry struct {
+	// ServerName is the PaperMCServer name.
+	ServerName string `json:"serverName"`
+
+	// Namespace is the PaperMCServer namespace.
+	Namespace string `json:"namespace"`
+
+	// JARDeleted indicates the JAR file has been removed from disk.
+	JARDeleted bool `json:"jarDeleted"`
+
+	// DeletedAt is when the JAR was actually deleted.
+	// +optional
+	DeletedAt *metav1.Time `json:"deletedAt,omitempty"`
+}
+
 // PluginStatus defines the observed state of Plugin.
 type PluginStatus struct {
 	// AvailableVersions contains cached metadata from the plugin repository.
@@ -144,6 +160,11 @@ type PluginStatus struct {
 	// LastFetched is the timestamp of the last API fetch.
 	// +optional
 	LastFetched *metav1.Time `json:"lastFetched,omitempty"`
+
+	// DeletionProgress tracks JAR cleanup per server during plugin deletion.
+	// This field is populated when the plugin is being deleted (has DeletionTimestamp).
+	// +optional
+	DeletionProgress []DeletionProgressEntry `json:"deletionProgress,omitempty"`
 
 	// Conditions represent the current state of the Plugin resource.
 	// +listType=map

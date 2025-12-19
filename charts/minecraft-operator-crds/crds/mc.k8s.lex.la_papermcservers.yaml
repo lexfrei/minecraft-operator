@@ -8741,6 +8741,16 @@ spec:
                       description: DesiredVersion is the target plugin version the
                         operator wants to install.
                       type: string
+                    installedJarName:
+                      description: |-
+                        InstalledJARName is the filename of the installed JAR in /data/plugins/.
+                        Example: "BlueMap-5.4-paper.jar". Used for targeted deletion.
+                      type: string
+                    pendingDeletion:
+                      description: |-
+                        PendingDeletion marks the plugin for removal on next server restart.
+                        This is set when the Plugin CRD is deleted but the JAR is still on disk.
+                      type: boolean
                     pluginRef:
                       description: PluginRef references the Plugin resource.
                       properties:

@@ -159,6 +159,16 @@ type ServerPluginStatus struct {
 
 	// Source is the plugin repository type.
 	Source string `json:"source"`
+
+	// PendingDeletion marks the plugin for removal on next server restart.
+	// This is set when the Plugin CRD is deleted but the JAR is still on disk.
+	// +optional
+	PendingDeletion bool `json:"pendingDeletion,omitempty"`
+
+	// InstalledJARName is the filename of the installed JAR in /data/plugins/.
+	// Example: "BlueMap-5.4-paper.jar". Used for targeted deletion.
+	// +optional
+	InstalledJARName string `json:"installedJarName,omitempty"`
 }
 
 // PluginVersionPair pairs a plugin with its version.
