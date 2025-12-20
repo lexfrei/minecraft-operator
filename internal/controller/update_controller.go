@@ -954,6 +954,79 @@ func (r *UpdateReconciler) deletePluginJAR(
 	return nil
 }
 
+// applyNowMaxAge is the maximum age for apply-now annotation (5 minutes).
+const applyNowMaxAge = 5 * time.Minute
+
+// shouldApplyNow checks if the apply-now annotation is present and valid.
+func (r *UpdateReconciler) shouldApplyNow(server *mcv1alpha1.PaperMCServer) bool {
+	if server.Annotations == nil {
+		return false
+	}
+
+	tsStr, exists := server.Annotations[AnnotationApplyNow]
+	if !exists {
+		return false
+	}
+
+	// Parse Unix timestamp
+	var ts int64
+	if _, err := fmt.Sscanf(tsStr, "%d", &ts); err != nil {
+		slog.WarnContext(context.Background(), "Invalid apply-now annotation format",
+			"value", tsStr,
+			"server", server.Name)
+
+		return false
+	}
+
+	annotationTime := time.Unix(ts, 0)
+	age := time.Since(annotationTime)
+
+	// Reject stale annotations
+	if age > applyNowMaxAge {
+		slog.InfoContext(context.Background(), "Ignoring stale apply-now annotation",
+			"age", age,
+			"maxAge", applyNowMaxAge,
+			"server", server.Name)
+
+		return false
+	}
+
+	return true
+}
+
+// removeApplyNowAnnotation removes the apply-now annotation from the server.
+func (r *UpdateReconciler) removeApplyNowAnnotation(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+) error {
+	if server.Annotations == nil {
+		return nil
+	}
+
+	if _, exists := server.Annotations[AnnotationApplyNow]; !exists {
+		return nil
+	}
+
+	// Re-fetch to avoid conflicts
+	var currentServer mcv1alpha1.PaperMCServer
+	if err := r.Get(ctx, client.ObjectKey{
+		Name:      server.Name,
+		Namespace: server.Namespace,
+	}, &currentServer); err != nil {
+		return errors.Wrap(err, "failed to get server for annotation removal")
+	}
+
+	delete(currentServer.Annotations, AnnotationApplyNow)
+
+	if err := r.Update(ctx, &currentServer); err != nil {
+		return errors.Wrap(err, "failed to remove apply-now annotation")
+	}
+
+	slog.InfoContext(ctx, "Removed apply-now annotation", "server", server.Name)
+
+	return nil
+}
+
 // SetCron sets the cron scheduler for the reconciler.
 func (r *UpdateReconciler) SetCron(scheduler testutil.CronScheduler) {
 	r.cron = scheduler

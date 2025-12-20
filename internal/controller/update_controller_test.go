@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -1370,6 +1371,269 @@ var _ = Describe("UpdateController", func() {
 			names := []string{pluginsToDelete[0].PluginRef.Name, pluginsToDelete[1].PluginRef.Name}
 			Expect(names).To(ContainElement("plugin-1"))
 			Expect(names).To(ContainElement("plugin-2"))
+		})
+	})
+
+	Context("Immediate apply annotation", func() {
+		var (
+			ctx        context.Context
+			reconciler *UpdateReconciler
+			serverName string
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			reconciler = &UpdateReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			serverName = "test-server-immediate-apply"
+			namespace = testNamespace
+		})
+
+		AfterEach(func() {
+			server := &mcv1alpha1.PaperMCServer{}
+			_ = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      serverName,
+				Namespace: namespace,
+			}, server)
+			_ = k8sClient.Delete(ctx, server)
+		})
+
+		It("should detect valid apply-now annotation", func() {
+			By("creating a server with apply-now annotation")
+			now := time.Now()
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+					Annotations: map[string]string{
+						AnnotationApplyNow: fmt.Sprintf("%d", now.Unix()),
+					},
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: false,
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:1.21.1-100",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+			By("checking if apply-now is valid")
+			valid := reconciler.shouldApplyNow(server)
+			Expect(valid).To(BeTrue())
+		})
+
+		It("should reject stale apply-now annotation older than 5 minutes", func() {
+			By("creating a server with stale apply-now annotation")
+			staleTime := time.Now().Add(-10 * time.Minute) // 10 minutes ago
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+					Annotations: map[string]string{
+						AnnotationApplyNow: fmt.Sprintf("%d", staleTime.Unix()),
+					},
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: false,
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:1.21.1-100",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+			By("checking if apply-now is valid")
+			valid := reconciler.shouldApplyNow(server)
+			Expect(valid).To(BeFalse())
+		})
+
+		It("should reject invalid apply-now annotation format", func() {
+			By("creating a server with invalid apply-now annotation")
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+					Annotations: map[string]string{
+						AnnotationApplyNow: "not-a-timestamp",
+					},
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: false,
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:1.21.1-100",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+			By("checking if apply-now is valid")
+			valid := reconciler.shouldApplyNow(server)
+			Expect(valid).To(BeFalse())
+		})
+
+		It("should return false when no apply-now annotation present", func() {
+			By("creating a server without apply-now annotation")
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: false,
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:1.21.1-100",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+			By("checking if apply-now is valid")
+			valid := reconciler.shouldApplyNow(server)
+			Expect(valid).To(BeFalse())
+		})
+
+		It("should remove annotation after processing", func() {
+			By("creating a server with apply-now annotation")
+			now := time.Now()
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+					Annotations: map[string]string{
+						AnnotationApplyNow: fmt.Sprintf("%d", now.Unix()),
+					},
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: false,
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:1.21.1-100",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+			By("removing the annotation")
+			err := reconciler.removeApplyNowAnnotation(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying annotation is removed")
+			updatedServer := &mcv1alpha1.PaperMCServer{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      serverName,
+				Namespace: namespace,
+			}, updatedServer)).To(Succeed())
+			_, exists := updatedServer.Annotations[AnnotationApplyNow]
+			Expect(exists).To(BeFalse())
 		})
 	})
 
