@@ -42,13 +42,11 @@ const (
 	conditionTypeRepositoryAvailable = "RepositoryAvailable"
 	conditionTypeVersionResolved     = "VersionResolved"
 
-	reasonReconcileSuccess    = "ReconcileSuccess"
-	reasonReconcileError      = "ReconcileError"
-	reasonAvailable           = "Available"
-	reasonUnavailable         = "Unavailable"
-	reasonResolved            = "Resolved"
-	reasonNoCompatibleVersion = "NoCompatibleVersion"
-	reasonPinnedNotFound      = "PinnedVersionNotFound"
+	reasonReconcileSuccess = "ReconcileSuccess"
+	reasonReconcileError   = "ReconcileError"
+	reasonAvailable        = "Available"
+	reasonUnavailable      = "Unavailable"
+	reasonResolved         = "Resolved"
 
 	repositoryStatusAvailable   = "available"
 	repositoryStatusUnavailable = "unavailable"
@@ -218,40 +216,6 @@ func (r *PluginReconciler) findMatchedServers(
 	return servers, nil
 }
 
-// DEPRECATED: Version resolution moved to PaperMCServer controller.
-// Plugin controller no longer resolves versions - it only fetches metadata.
-// Each PaperMCServer resolves plugin versions individually for its specific Paper version.
-//
-// resolveVersion resolves the plugin version based on matched servers and policy.
-// func (r *PluginReconciler) resolveVersion(
-// 	ctx context.Context,
-// 	plugin *mcv1alpha1.Plugin,
-// 	matchedServers []mcv1alpha1.PaperMCServer,
-// 	allVersions []plugins.PluginVersion,
-// ) string {
-// 	log := ctrl.LoggerFrom(ctx)
-//
-// 	if len(matchedServers) == 0 {
-// 		log.Info("No matched servers, skipping solver")
-// 		r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,
-// 			reasonResolved, "No servers matched")
-// 		return ""
-// 	}
-//
-// 	resolvedVersion, err := r.resolvePluginVersion(ctx, plugin, matchedServers, allVersions)
-// 	if err != nil {
-// 		log.Error(err, "Failed to resolve plugin version")
-// 		r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionFalse,
-// 			reasonNoCompatibleVersion, err.Error())
-// 		return ""
-// 	}
-//
-// 	log.Info("Resolved plugin version", "version", resolvedVersion)
-// 	r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,
-// 		reasonResolved, "Version resolved successfully")
-// 	return resolvedVersion
-// }
-
 // fetchPluginMetadata fetches plugin metadata from the repository.
 func (r *PluginReconciler) fetchPluginMetadata(
 	ctx context.Context,
@@ -268,100 +232,6 @@ func (r *PluginReconciler) fetchPluginMetadata(
 
 	return versions, nil
 }
-
-// DEPRECATED: Version resolution moved to PaperMCServer controller.
-// This logic will be used in PaperMCServer controller for per-server version resolution.
-//
-// resolvePluginVersion runs the constraint solver to find the best plugin version.
-// func (r *PluginReconciler) resolvePluginVersion(
-// 	ctx context.Context,
-// 	plugin *mcv1alpha1.Plugin,
-// 	matchedServers []mcv1alpha1.PaperMCServer,
-// 	allVersions []plugins.PluginVersion,
-// ) (string, error) {
-// 	log := ctrl.LoggerFrom(ctx)
-//
-// 	// Handle pinned version policy
-// 	if plugin.Spec.VersionPolicy == versionPolicyPinned {
-// 		if plugin.Spec.PinnedVersion == "" {
-// 			return "", errors.New("versionPolicy is pinned but pinnedVersion is not set")
-// 		}
-//
-// 		// Verify pinned version exists
-// 		found := false
-// 		for _, v := range allVersions {
-// 			if v.Version == plugin.Spec.PinnedVersion {
-// 				found = true
-// 				break
-// 			}
-// 		}
-//
-// 		if !found {
-// 			r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionFalse,
-// 				reasonPinnedNotFound, "Pinned version not found in repository")
-// 			return "", errors.Newf("pinned version %s not found", plugin.Spec.PinnedVersion)
-// 		}
-//
-// 		log.Info("Using pinned version", "version", plugin.Spec.PinnedVersion)
-// 		return plugin.Spec.PinnedVersion, nil
-// 	}
-//
-// 	// Apply update delay filter
-// 	filteredVersions := applyUpdateDelay(allVersions, plugin.Spec.UpdateDelay)
-// 	log.Info("Applied update delay filter",
-// 		"original", len(allVersions),
-// 		"filtered", len(filteredVersions))
-//
-// 	if len(filteredVersions) == 0 {
-// 		return "", errors.New("no versions available after applying update delay")
-// 	}
-//
-// 	// Run solver
-// 	resolvedVersion, err := r.Solver.FindBestPluginVersion(ctx, plugin, matchedServers, filteredVersions)
-// 	if err != nil {
-// 		return "", errors.Wrap(err, "solver failed to find compatible version")
-// 	}
-//
-// 	if resolvedVersion == "" {
-// 		return "", errors.New("no compatible version found for all matched servers")
-// 	}
-//
-// 	return resolvedVersion, nil
-// }
-
-// DEPRECATED: Version resolution moved to PaperMCServer controller.
-// This utility function may be reused in PaperMCServer controller.
-//
-// applyUpdateDelay filters versions based on the update delay policy.
-// func applyUpdateDelay(versions []plugins.PluginVersion, updateDelay *metav1.Duration) []plugins.PluginVersion {
-// 	if updateDelay == nil {
-// 		return versions
-// 	}
-//
-// 	// Convert to version.VersionInfo for filtering
-// 	versionInfos := make([]version.VersionInfo, len(versions))
-// 	for i, v := range versions {
-// 		versionInfos[i] = version.VersionInfo{
-// 			Version:     v.Version,
-// 			ReleaseDate: v.ReleaseDate,
-// 		}
-// 	}
-//
-// 	filtered := version.FilterByUpdateDelay(versionInfos, updateDelay.Duration)
-//
-// 	// Convert back to plugins.PluginVersion
-// 	result := make([]plugins.PluginVersion, 0, len(filtered))
-// 	for _, f := range filtered {
-// 		for _, v := range versions {
-// 			if v.Version == f.Version {
-// 				result = append(result, v)
-// 				break
-// 			}
-// 		}
-// 	}
-//
-// 	return result
-// }
 
 // buildMatchedInstances constructs the list of matched instances.
 // Compatibility check is now done in PaperMCServer controller during version resolution.
