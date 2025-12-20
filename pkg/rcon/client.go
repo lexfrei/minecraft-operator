@@ -17,9 +17,16 @@ type Client interface {
 	Close() error
 }
 
+// rconConn is an internal interface for dependency injection in tests.
+// It abstracts the gorcon/rcon.Conn type.
+type rconConn interface {
+	Execute(cmd string) (string, error)
+	Close() error
+}
+
 // RCONClient wraps gorcon/rcon for Minecraft server communication.
 type RCONClient struct {
-	conn     *rcon.Conn
+	conn     rconConn
 	host     string
 	port     int
 	password string
