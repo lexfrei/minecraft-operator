@@ -1301,8 +1301,8 @@ func (r *PaperMCServerReconciler) findVersionUpdate(
 		return nil, errors.Wrap(err, "failed to get build info")
 	}
 
-	// Build plugin version pairs
-	pluginPairs := r.buildPluginVersionPairs(matchedPlugins)
+	// Build plugin version pairs using solver to find compatible versions
+	pluginPairs := r.buildPluginVersionPairs(ctx, bestVersion, matchedPlugins)
 
 	return &mcv1alpha1.AvailableUpdate{
 		Version:    bestVersion,
@@ -1340,8 +1340,8 @@ func (r *PaperMCServerReconciler) findBuildUpdate(
 		slog.InfoContext(ctx, "Update delay check skipped (not implemented yet)")
 	}
 
-	// Build plugin version pairs
-	pluginPairs := r.buildPluginVersionPairs(matchedPlugins)
+	// Build plugin version pairs using solver to find compatible versions
+	pluginPairs := r.buildPluginVersionPairs(ctx, server.Spec.Version, matchedPlugins)
 
 	slog.InfoContext(ctx, "Build update available", "current", server.Status.CurrentBuild, "available", buildInfo.Build)
 
@@ -1355,31 +1355,61 @@ func (r *PaperMCServerReconciler) findBuildUpdate(
 }
 
 // buildPluginVersionPairs constructs plugin version pairs from matched plugins.
+// It uses the solver to find the best plugin version compatible with the candidate Paper version.
 func (r *PaperMCServerReconciler) buildPluginVersionPairs(
+	ctx context.Context,
+	candidatePaperVersion string,
 	matchedPlugins []mcv1alpha1.Plugin,
 ) []mcv1alpha1.PluginVersionPair {
 	pluginPairs := make([]mcv1alpha1.PluginVersionPair, 0, len(matchedPlugins))
-	// TODO: This function needs rework after moving version resolution to per-server.
-	// For now, we'll use the solver to resolve versions for each plugin with candidate Paper version.
-	// This is called during Paper upgrade compatibility checks.
 
 	for i := range matchedPlugins {
 		plugin := &matchedPlugins[i]
-		// Try to resolve version for this plugin with the candidate Paper version
-		// For now, skip if no available versions (will be resolved during actual reconciliation)
-		if len(plugin.Status.AvailableVersions) > 0 {
-			// Use first available version as placeholder
-			// TODO: Use solver to find best version for candidate Paper version
-			pluginVersion := plugin.Status.AvailableVersions[0].Version
-			pluginPairs = append(pluginPairs, mcv1alpha1.PluginVersionPair{
-				PluginRef: mcv1alpha1.PluginRef{
-					Name:      plugin.Name,
-					Namespace: plugin.Namespace,
-				},
-				Version: pluginVersion,
+
+		if len(plugin.Status.AvailableVersions) == 0 {
+			continue
+		}
+
+		// Convert to plugins.PluginVersion for solver
+		allVersions := make([]plugins.PluginVersion, 0, len(plugin.Status.AvailableVersions))
+		for _, v := range plugin.Status.AvailableVersions {
+			allVersions = append(allVersions, plugins.PluginVersion{
+				Version:           v.Version,
+				MinecraftVersions: v.MinecraftVersions,
+				DownloadURL:       v.DownloadURL,
+				Hash:              v.Hash,
+				ReleaseDate:       v.ReleasedAt.Time,
 			})
 		}
+
+		// Create temporary server with candidate version for solver compatibility check
+		tempServer := mcv1alpha1.PaperMCServer{
+			Status: mcv1alpha1.PaperMCServerStatus{
+				CurrentVersion: candidatePaperVersion,
+			},
+		}
+
+		// Use solver to find best compatible version
+		resolvedVersion, err := r.Solver.FindBestPluginVersion(
+			ctx, plugin, []mcv1alpha1.PaperMCServer{tempServer}, allVersions)
+		if err != nil {
+			slog.WarnContext(ctx, "Failed to resolve plugin version for candidate Paper",
+				"plugin", plugin.Name,
+				"candidatePaperVersion", candidatePaperVersion,
+				"error", err)
+			// Fall back to first available (best effort)
+			resolvedVersion = plugin.Status.AvailableVersions[0].Version
+		}
+
+		pluginPairs = append(pluginPairs, mcv1alpha1.PluginVersionPair{
+			PluginRef: mcv1alpha1.PluginRef{
+				Name:      plugin.Name,
+				Namespace: plugin.Namespace,
+			},
+			Version: resolvedVersion,
+		})
 	}
+
 	return pluginPairs
 }
 
