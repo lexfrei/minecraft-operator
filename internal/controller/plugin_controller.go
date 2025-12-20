@@ -480,13 +480,19 @@ func (r *PluginReconciler) reconcileDelete(
 		return ctrl.Result{}, err
 	}
 
-	// Step 2: Mark plugins as PendingDeletion in each server's status
+	// Step 2: Remove entries for deleted servers (prevents deadlock)
+	if err := r.cleanupDeletedServers(ctx, plugin); err != nil {
+		slog.ErrorContext(ctx, "Failed to cleanup deleted servers", "error", err)
+		return ctrl.Result{}, errors.Wrap(err, "failed to cleanup deleted servers")
+	}
+
+	// Step 3: Mark plugins as PendingDeletion in each server's status
 	if err := r.markPluginForDeletionOnServers(ctx, plugin); err != nil {
 		slog.ErrorContext(ctx, "Failed to mark plugin for deletion on servers", "error", err)
 		return ctrl.Result{}, errors.Wrap(err, "failed to mark plugin for deletion")
 	}
 
-	// Step 3: Check if all JARs have been deleted
+	// Step 4: Check if all JARs have been deleted
 	if !r.allJARsDeleted(plugin) {
 		slog.InfoContext(ctx, "Waiting for JAR deletion on servers",
 			"plugin", plugin.Name,
@@ -494,7 +500,7 @@ func (r *PluginReconciler) reconcileDelete(
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Step 4: All JARs deleted, remove finalizer
+	// Step 5: All JARs deleted, remove finalizer
 	return r.removeFinalizer(ctx, plugin)
 }
 
@@ -541,6 +547,64 @@ func (r *PluginReconciler) allJARsDeleted(plugin *mcv1alpha1.Plugin) bool {
 		}
 	}
 	return true
+}
+
+// cleanupDeletedServers removes DeletionProgress entries for servers that no longer exist.
+// This prevents deadlock when a server is deleted before the plugin JAR cleanup completes.
+func (r *PluginReconciler) cleanupDeletedServers(
+	ctx context.Context,
+	plugin *mcv1alpha1.Plugin,
+) error {
+	if len(plugin.Status.DeletionProgress) == 0 {
+		return nil
+	}
+
+	remaining := make([]mcv1alpha1.DeletionProgressEntry, 0, len(plugin.Status.DeletionProgress))
+
+	for _, entry := range plugin.Status.DeletionProgress {
+		// Keep entries that are already marked as deleted
+		if entry.JARDeleted {
+			remaining = append(remaining, entry)
+			continue
+		}
+
+		// Check if server still exists
+		var server mcv1alpha1.PaperMCServer
+		err := r.Get(ctx, client.ObjectKey{Name: entry.ServerName, Namespace: entry.Namespace}, &server)
+		if apierrors.IsNotFound(err) {
+			// Server deleted - remove entry entirely (no cleanup needed)
+			slog.InfoContext(ctx, "Server deleted, removing from DeletionProgress",
+				"plugin", plugin.Name,
+				"server", entry.ServerName,
+				"namespace", entry.Namespace)
+			continue // Don't add to remaining
+		}
+		if err != nil {
+			// Unexpected error - keep entry and retry later
+			slog.ErrorContext(ctx, "Failed to check server existence",
+				"error", err,
+				"server", entry.ServerName)
+			remaining = append(remaining, entry)
+			continue
+		}
+
+		// Server exists, keep the entry
+		remaining = append(remaining, entry)
+	}
+
+	// Update status only if entries were removed
+	if len(remaining) != len(plugin.Status.DeletionProgress) {
+		slog.InfoContext(ctx, "Cleaned up DeletionProgress entries for deleted servers",
+			"plugin", plugin.Name,
+			"original", len(plugin.Status.DeletionProgress),
+			"remaining", len(remaining))
+		plugin.Status.DeletionProgress = remaining
+		if err := r.Status().Update(ctx, plugin); err != nil {
+			return errors.Wrap(err, "failed to update deletion progress after cleanup")
+		}
+	}
+
+	return nil
 }
 
 // removeFinalizer removes the finalizer from the plugin after all cleanup is done.
