@@ -1755,5 +1755,122 @@ var _ = Describe("UpdateController", func() {
 			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 			Expect(cond.Reason).To(Equal(reasonUpdateComplete))
 		})
+
+		It("should update CurrentVersion to DesiredVersion after successful update", func() {
+			server := &mcv1alpha1.PaperMCServer{
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+				},
+				Status: mcv1alpha1.PaperMCServerStatus{
+					CurrentVersion:  "1.21.0",
+					CurrentBuild:    100,
+					DesiredVersion:  "1.21.1",
+					DesiredBuild:    150,
+					AvailableUpdate: &mcv1alpha1.AvailableUpdate{},
+				},
+			}
+
+			reconciler.updateServerStatus(server, true)
+
+			// Verify CurrentVersion is updated to DesiredVersion
+			Expect(server.Status.CurrentVersion).To(Equal("1.21.1"),
+				"CurrentVersion should be updated to DesiredVersion after successful update")
+			Expect(server.Status.CurrentBuild).To(Equal(150),
+				"CurrentBuild should be updated to DesiredBuild after successful update")
+		})
+
+		It("should update plugin CurrentVersion to ResolvedVersion after successful update", func() {
+			server := &mcv1alpha1.PaperMCServer{
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+				},
+				Status: mcv1alpha1.PaperMCServerStatus{
+					CurrentVersion: "1.21.0",
+					DesiredVersion: "1.21.1",
+					Plugins: []mcv1alpha1.ServerPluginStatus{
+						{
+							PluginRef:       mcv1alpha1.PluginRef{Name: "plugin1", Namespace: "default"},
+							CurrentVersion:  "1.0.0",
+							ResolvedVersion: "1.1.0",
+						},
+						{
+							PluginRef:       mcv1alpha1.PluginRef{Name: "plugin2", Namespace: "default"},
+							CurrentVersion:  "2.0.0",
+							ResolvedVersion: "2.1.0",
+						},
+					},
+					AvailableUpdate: &mcv1alpha1.AvailableUpdate{},
+				},
+			}
+
+			reconciler.updateServerStatus(server, true)
+
+			// Verify plugin CurrentVersions are updated to ResolvedVersions
+			Expect(server.Status.Plugins[0].CurrentVersion).To(Equal("1.1.0"),
+				"Plugin CurrentVersion should be updated to ResolvedVersion")
+			Expect(server.Status.Plugins[1].CurrentVersion).To(Equal("2.1.0"),
+				"Plugin CurrentVersion should be updated to ResolvedVersion")
+		})
+	})
+
+	Context("Pod deletion in plugin-only update", func() {
+		var (
+			ctx        context.Context
+			reconciler *UpdateReconciler
+			serverName string
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			reconciler = &UpdateReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			serverName = "test-server-pod-deletion"
+			namespace = testNamespace
+		})
+
+		AfterEach(func() {
+			// Clean up server
+			server := &mcv1alpha1.PaperMCServer{}
+			_ = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      serverName,
+				Namespace: namespace,
+			}, server)
+			_ = k8sClient.Delete(ctx, server)
+		})
+
+		It("should have deletePod method available", func() {
+			// Verify the reconciler has a deletePod method
+			// This is a structural test to ensure the method exists
+
+			// This call should not panic - method should exist
+			// The actual deletion will fail because the pod doesn't exist, but that's expected
+			err := reconciler.deletePod(ctx, serverName+"-0", namespace)
+
+			// We expect an error (pod not found), but the method should exist
+			Expect(err).To(HaveOccurred()) // Pod doesn't exist, that's fine
+			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+	})
+
+	Context("Download error aggregation", func() {
+		It("should return aggregate error when plugin downloads fail", func() {
+			// applyPluginUpdates() collects all download errors and returns them
+			// as an aggregate error. Each error includes the plugin name.
+			Skip("Requires complex mocking of download operations")
+		})
+	})
+
+	Context("Delete error handling", func() {
+		It("should propagate error from deleteMarkedPlugins in performPluginOnlyUpdate", func() {
+			// performPluginOnlyUpdate() returns error from deleteMarkedPlugins()
+			// instead of logging and continuing.
+			Skip("Requires complex mocking of delete operations")
+		})
 	})
 })

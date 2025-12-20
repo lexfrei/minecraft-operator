@@ -107,17 +107,30 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	// Check if update is ready to apply
-	shouldApply, remainingDelay := r.shouldApplyUpdate(&server)
-	if !shouldApply {
-		slog.InfoContext(ctx, "Update not ready to apply",
-			"server", server.Name,
-			"remainingDelay", remainingDelay)
-		// Requeue after remaining delay
-		if remainingDelay > 0 {
-			return ctrl.Result{RequeueAfter: remainingDelay}, nil
+	// Check for immediate apply annotation (bypasses maintenance window and updateDelay)
+	applyNow := r.shouldApplyNow(&server)
+	if applyNow {
+		slog.InfoContext(ctx, "Apply-now annotation detected, triggering immediate update",
+			"server", server.Name)
+		// Remove annotation first to prevent loops
+		if err := r.removeApplyNowAnnotation(ctx, &server); err != nil {
+			slog.ErrorContext(ctx, "Failed to remove apply-now annotation", "error", err)
+			return ctrl.Result{}, errors.Wrap(err, "failed to remove apply-now annotation")
 		}
-		return ctrl.Result{}, nil
+		// Continue with update (skip shouldApplyUpdate check)
+	} else {
+		// Check if update is ready to apply based on updateDelay
+		shouldApply, remainingDelay := r.shouldApplyUpdate(&server)
+		if !shouldApply {
+			slog.InfoContext(ctx, "Update not ready to apply",
+				"server", server.Name,
+				"remainingDelay", remainingDelay)
+			// Requeue after remaining delay
+			if remainingDelay > 0 {
+				return ctrl.Result{RequeueAfter: remainingDelay}, nil
+			}
+			return ctrl.Result{}, nil
+		}
 	}
 
 	// Check if there's an available update
@@ -440,6 +453,8 @@ func (r *UpdateReconciler) applyPluginUpdates(
 
 	// Download each plugin that needs update
 	updatedCount := 0
+	var downloadErrors []error
+
 	for _, pluginStatus := range server.Status.Plugins {
 		pluginName := pluginStatus.PluginRef.Name
 
@@ -467,18 +482,16 @@ func (r *UpdateReconciler) applyPluginUpdates(
 		}
 
 		if downloadURL == "" {
-			slog.ErrorContext(ctx, "Download URL not found for plugin version",
-				"plugin", pluginName,
-				"version", pluginStatus.ResolvedVersion)
+			downloadErrors = append(downloadErrors,
+				errors.Newf("plugin %s: download URL not found for version %s",
+					pluginName, pluginStatus.ResolvedVersion))
 			continue
 		}
 
 		// Download plugin
 		if err := r.downloadPluginToServer(ctx, server, pluginName, downloadURL, hash); err != nil {
-			slog.ErrorContext(ctx, "Failed to download plugin",
-				"error", err,
-				"plugin", pluginName)
-			// Continue with other plugins even if one fails
+			downloadErrors = append(downloadErrors,
+				errors.Wrapf(err, "plugin %s", pluginName))
 			continue
 		}
 
@@ -488,7 +501,13 @@ func (r *UpdateReconciler) applyPluginUpdates(
 	slog.InfoContext(ctx, "Plugin updates applied",
 		"server", server.Name,
 		"updated", updatedCount,
-		"total", len(server.Status.Plugins))
+		"total", len(server.Status.Plugins),
+		"errors", len(downloadErrors))
+
+	// Return aggregate error if any downloads failed
+	if len(downloadErrors) > 0 {
+		return errors.Newf("failed to download %d plugins: %v", len(downloadErrors), downloadErrors)
+	}
 
 	return nil
 }
@@ -605,10 +624,7 @@ func (r *UpdateReconciler) performPluginOnlyUpdate(
 
 	// Step 1: Delete plugins marked for deletion (PendingDeletion=true)
 	if err := r.deleteMarkedPlugins(ctx, server); err != nil {
-		slog.ErrorContext(ctx, "Failed to delete marked plugins, continuing with update",
-			"error", err,
-			"server", server.Name)
-		// Continue with update even if some deletions fail
+		return errors.Wrap(err, "failed to delete marked plugins")
 	}
 
 	// Step 2: Download plugins to /data/plugins/update/
@@ -627,7 +643,13 @@ func (r *UpdateReconciler) performPluginOnlyUpdate(
 		return errors.Wrap(err, "failed to execute graceful shutdown")
 	}
 
-	// Step 5: Wait for pod to restart (StatefulSet will recreate it automatically)
+	// Step 5: Delete pod to trigger StatefulSet recreation
+	podName := server.Name + "-0"
+	if err := r.deletePod(ctx, podName, server.Namespace); err != nil {
+		return errors.Wrap(err, "failed to delete pod for recreation")
+	}
+
+	// Step 6: Wait for pod to restart (StatefulSet will recreate it)
 	if err := r.waitForPodReady(ctx, server); err != nil {
 		return errors.Wrap(err, "failed to wait for pod ready")
 	}
@@ -690,10 +712,7 @@ func (r *UpdateReconciler) performCombinedUpdate(
 
 	// Step 1: Delete plugins marked for deletion (PendingDeletion=true)
 	if err := r.deleteMarkedPlugins(ctx, server); err != nil {
-		slog.ErrorContext(ctx, "Failed to delete marked plugins, continuing with update",
-			"error", err,
-			"server", server.Name)
-		// Continue with update even if some deletions fail
+		return errors.Wrap(err, "failed to delete marked plugins")
 	}
 
 	// Step 2: Update StatefulSet image to new Paper version
@@ -779,9 +798,20 @@ func (r *UpdateReconciler) updateServerStatus(
 		Successful:      successful,
 	}
 
-	// Clear availableUpdate if successful
+	// Update versions and clear availableUpdate if successful
 	if successful {
 		server.Status.AvailableUpdate = nil
+
+		// Update current version to match desired (update completed)
+		server.Status.CurrentVersion = server.Status.DesiredVersion
+		server.Status.CurrentBuild = server.Status.DesiredBuild
+
+		// Update plugin current versions to match resolved versions
+		for i := range server.Status.Plugins {
+			if server.Status.Plugins[i].ResolvedVersion != "" {
+				server.Status.Plugins[i].CurrentVersion = server.Status.Plugins[i].ResolvedVersion
+			}
+		}
 	}
 }
 
@@ -1024,6 +1054,29 @@ func (r *UpdateReconciler) removeApplyNowAnnotation(
 
 	slog.InfoContext(ctx, "Removed apply-now annotation", "server", server.Name)
 
+	return nil
+}
+
+// deletePod deletes the pod with the given name in the specified namespace.
+// This is used to trigger StatefulSet recreation after graceful shutdown.
+func (r *UpdateReconciler) deletePod(ctx context.Context, podName, namespace string) error {
+	slog.InfoContext(ctx, "Deleting pod to trigger StatefulSet recreation",
+		"pod", podName,
+		"namespace", namespace)
+
+	pod := &corev1.Pod{}
+	if err := r.Get(ctx, client.ObjectKey{
+		Name:      podName,
+		Namespace: namespace,
+	}, pod); err != nil {
+		return errors.Wrap(err, "failed to get pod for deletion")
+	}
+
+	if err := r.Delete(ctx, pod); err != nil {
+		return errors.Wrap(err, "failed to delete pod")
+	}
+
+	slog.InfoContext(ctx, "Pod deleted successfully", "pod", podName)
 	return nil
 }
 

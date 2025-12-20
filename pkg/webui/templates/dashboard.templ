@@ -119,6 +119,13 @@ templ ServerCard(server ServerSummary) {
 						🔄 Resolve Server
 					</button>
 				</div>
+				<button
+					hx-post={ fmt.Sprintf("/ui/server/%s/delete?namespace=%s", server.Name, server.Namespace) }
+					hx-confirm={ fmt.Sprintf("Are you sure you want to delete server '%s'? This action cannot be undone.", server.Name) }
+					style="background-color: var(--error); color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; white-space: nowrap;"
+				>
+					Delete
+				</button>
 				<div id={ fmt.Sprintf("solver-status-%s", server.Name) } role="status" aria-live="polite" style="min-width: 100px; font-size: 13px;"></div>
 				if server.Status == "running" {
 					<span class="badge badge-success">Running</span>

@@ -465,3 +465,39 @@ func TestHandleApplyNowSetsAnnotation(t *testing.T) {
 		t.Error("expected annotation timestamp to be recent")
 	}
 }
+
+func TestHandleServerDeleteRemovesServer(t *testing.T) {
+	t.Parallel()
+
+	server := &mck8slexlav1alpha1.PaperMCServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "server-to-delete",
+			Namespace: "default",
+		},
+		Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+			UpdateStrategy: "auto",
+		},
+	}
+
+	srv := newTestServer(server)
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/server/server-to-delete/delete?namespace=default", nil)
+	w := httptest.NewRecorder()
+
+	srv.handleServerDelete(w, req)
+
+	// Should redirect after successful deletion
+	if w.Code != http.StatusSeeOther && w.Code != http.StatusFound {
+		t.Errorf("expected redirect status, got %d", w.Code)
+	}
+
+	// Verify server was deleted
+	var deletedServer mck8slexlav1alpha1.PaperMCServer
+	err := srv.client.Get(context.Background(), client.ObjectKey{
+		Name:      "server-to-delete",
+		Namespace: "default",
+	}, &deletedServer)
+	if err == nil {
+		t.Error("expected server to be deleted, but it still exists")
+	}
+}

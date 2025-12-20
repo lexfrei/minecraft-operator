@@ -33,7 +33,7 @@ func NewServer(k8sClient client.Client, namespace string, bindAddress string) *S
 
 	// Register routes
 	mux.HandleFunc("/ui", srv.handleDashboard)
-	mux.HandleFunc("/ui/server/", srv.handleServerDetail)
+	mux.HandleFunc("/ui/server/", srv.handleServerRoutes)
 	mux.HandleFunc("/ui/events", srv.handleSSE)
 	mux.HandleFunc("/ui/server/resolve", srv.handleServerResolve)
 	mux.HandleFunc("/ui/server/status", srv.handleServerStatus)
@@ -116,10 +116,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleServerDetail serves the server details page.
-func (s *Server) handleServerDetail(w http.ResponseWriter, r *http.Request) {
-	// Extract server name from URL path
-	serverName := r.URL.Path[len("/ui/server/"):]
+// handleServerDetailPage serves the server details page.
+func (s *Server) handleServerDetailPage(w http.ResponseWriter, r *http.Request, serverName string) {
 	if serverName == "" {
 		http.NotFound(w, r)
 		return

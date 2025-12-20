@@ -66,10 +66,6 @@ const (
 	reasonSolverStarted           = "SolverStarted"
 	reasonSolverCompleted         = "SolverCompleted"
 	reasonSolverFailed            = "SolverFailed"
-	// DEPRECATED: This constant is for documentation only.
-	// All deployments MUST use concrete version-build tags (e.g., "1.21.1-91").
-	// The :latest tag is never used in actual deployments.
-	defaultPaperImage             = "lexfrei/papermc:latest"
 	defaultStorageSize            = "10Gi"
 	defaultTerminationGracePeriod = int64(300)
 )
@@ -324,7 +320,10 @@ func (r *PaperMCServerReconciler) ensureStatefulSet(
 	// StatefulSet doesn't exist, create it
 	slog.InfoContext(ctx, "Creating new StatefulSet", "name", statefulSetName)
 
-	newStatefulSet := r.buildStatefulSet(server)
+	newStatefulSet, err := r.buildStatefulSet(server)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to build statefulset")
+	}
 
 	// Set owner reference
 	if err := controllerutil.SetControllerReference(server, newStatefulSet, r.Scheme); err != nil {
@@ -342,11 +341,14 @@ func (r *PaperMCServerReconciler) ensureStatefulSet(
 }
 
 // buildStatefulSet constructs a StatefulSet for the PaperMCServer.
-func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1alpha1.PaperMCServer) *appsv1.StatefulSet {
+func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1alpha1.PaperMCServer) (*appsv1.StatefulSet, error) {
 	replicas := int32(1)
 	serviceName := server.Name
 
-	podSpec := r.buildPodSpec(server)
+	podSpec, err := r.buildPodSpec(server)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to build pod spec")
+	}
 
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -363,19 +365,18 @@ func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1alpha1.PaperMCSer
 		},
 	}
 
-	return statefulSet
+	return statefulSet, nil
 }
 
 // buildPodSpec constructs the pod spec with configured container.
 // CRITICAL: This function MUST NEVER generate an image tag with :latest.
 // All images MUST use concrete version-build tags (e.g., docker.io/lexfrei/papermc:1.21.1-91).
-func (r *PaperMCServerReconciler) buildPodSpec(server *mcv1alpha1.PaperMCServer) *corev1.PodSpec {
+func (r *PaperMCServerReconciler) buildPodSpec(server *mcv1alpha1.PaperMCServer) (*corev1.PodSpec, error) {
 	podSpec := server.Spec.PodTemplate.Spec.DeepCopy()
 
 	if len(podSpec.Containers) == 0 {
 		podSpec.Containers = []corev1.Container{{
-			Name:  "papermc",
-			Image: defaultPaperImage,
+			Name: "papermc",
 		}}
 	}
 
@@ -386,18 +387,13 @@ func (r *PaperMCServerReconciler) buildPodSpec(server *mcv1alpha1.PaperMCServer)
 	if server.Status.DesiredVersion == "" || server.Status.DesiredBuild == 0 {
 		// This should never happen - doReconcile() validates DesiredVersion/DesiredBuild are set.
 		// If we reach here, it's a programming error.
-		// Use a reasonable fallback but log error.
-		slog.Error("BUG: buildPodSpec called without DesiredVersion/DesiredBuild set",
-			"server", server.Name,
-			"desiredVersion", server.Status.DesiredVersion,
-			"desiredBuild", server.Status.DesiredBuild)
-		// Fallback: use a known stable version as last resort
-		container.Image = "docker.io/lexfrei/papermc:1.21.1-91"
-	} else {
-		container.Image = fmt.Sprintf("docker.io/lexfrei/papermc:%s-%d",
-			server.Status.DesiredVersion,
-			server.Status.DesiredBuild)
+		return nil, errors.Newf("BUG: buildPodSpec called without DesiredVersion/DesiredBuild set "+
+			"(version=%s, build=%d)", server.Status.DesiredVersion, server.Status.DesiredBuild)
 	}
+
+	container.Image = fmt.Sprintf("docker.io/lexfrei/papermc:%s-%d",
+		server.Status.DesiredVersion,
+		server.Status.DesiredBuild)
 
 	container.Env = r.buildEnvironmentVariables(server, container.Env)
 	container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
@@ -411,7 +407,7 @@ func (r *PaperMCServerReconciler) buildPodSpec(server *mcv1alpha1.PaperMCServer)
 	}
 	podSpec.TerminationGracePeriodSeconds = &terminationGracePeriod
 
-	return podSpec
+	return podSpec, nil
 }
 
 // buildSelector creates the label selector for the StatefulSet.
@@ -1415,9 +1411,8 @@ func (r *PaperMCServerReconciler) checkPluginCompatibility(
 			return false, plugin.Name, reason
 		}
 
-		// TODO: Use solver to check if any plugin version is compatible with candidateVersion
-		// For now, we'll assume compatibility and resolve versions during actual reconciliation
-		isCompatible := r.isPluginCompatibleWithPaper(ctx, plugin)
+		// Check if any plugin version is compatible with candidateVersion
+		isCompatible := r.isPluginCompatibleWithPaper(ctx, plugin, candidateVersion)
 		if !isCompatible {
 			// Use first available version for error message
 			pluginVersion := "unknown"
@@ -1435,10 +1430,12 @@ func (r *PaperMCServerReconciler) checkPluginCompatibility(
 	return true, "", ""
 }
 
-// isPluginCompatibleWithPaper checks if a specific plugin version is compatible with a Paper version.
+// isPluginCompatibleWithPaper checks if any plugin version is compatible with the candidate Paper version.
+// Returns true if at least one available plugin version supports the given Paper/Minecraft version.
 func (r *PaperMCServerReconciler) isPluginCompatibleWithPaper(
 	ctx context.Context,
 	plugin *mcv1alpha1.Plugin,
+	candidateVersion string,
 ) bool {
 	// Check if plugin has CompatibilityOverride
 	if plugin.Spec.CompatibilityOverride != nil {
@@ -1448,14 +1445,25 @@ func (r *PaperMCServerReconciler) isPluginCompatibleWithPaper(
 			"plugin", plugin.Name)
 	}
 
-	// Check plugin.Status.AvailableVersions for compatibility metadata
-	// This would come from Hangar/Modrinth API
-	// For MVP: Use permissive approach if no compatibility info available
-	// TODO: Implement actual compatibility check using plugin metadata from status
+	// Check each available plugin version for compatibility with candidate Paper version
+	for _, ver := range plugin.Status.AvailableVersions {
+		for _, mcVersion := range ver.MinecraftVersions {
+			if mcVersion == candidateVersion {
+				slog.DebugContext(ctx, "Found compatible plugin version",
+					"plugin", plugin.Name,
+					"pluginVersion", ver.Version,
+					"paperVersion", candidateVersion)
+				return true
+			}
+		}
+	}
 
-	// Fallback: assume compatible (permissive mode for MVP)
-	// In production, this should use plugin API metadata
-	return true
+	// No compatible version found
+	slog.InfoContext(ctx, "No compatible plugin version found",
+		"plugin", plugin.Name,
+		"paperVersion", candidateVersion,
+		"availableVersions", len(plugin.Status.AvailableVersions))
+	return false
 }
 
 // setUpdateBlocked marks the server's updates as blocked.
@@ -1540,7 +1548,40 @@ func serverStatusEqual(a, b *mcv1alpha1.PaperMCServerStatus) bool {
 			return false
 		}
 	}
-	return (a.AvailableUpdate == nil) == (b.AvailableUpdate == nil)
+
+	// Compare AvailableUpdate
+	if !availableUpdateEqual(a.AvailableUpdate, b.AvailableUpdate) {
+		return false
+	}
+
+	// Compare LastUpdate
+	if !updateHistoryEqual(a.LastUpdate, b.LastUpdate) {
+		return false
+	}
+
+	return true
+}
+
+// availableUpdateEqual compares two AvailableUpdate pointers for equality.
+func availableUpdateEqual(a, b *mcv1alpha1.AvailableUpdate) bool {
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	if a == nil {
+		return true
+	}
+	return a.Version == b.Version && a.Build == b.Build
+}
+
+// updateHistoryEqual compares two UpdateHistory pointers for equality.
+func updateHistoryEqual(a, b *mcv1alpha1.UpdateHistory) bool {
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	if a == nil {
+		return true
+	}
+	return a.Successful == b.Successful && a.PreviousVersion == b.PreviousVersion
 }
 
 // SetupWithManager sets up the controller with the Manager.

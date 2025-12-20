@@ -20,7 +20,63 @@ const (
 	statusRunning  = "running"
 	statusUpdating = "updating"
 	statusUnknown  = "unknown"
+
+	// URL path actions.
+	actionDelete   = "delete"
+	actionApplyNow = "apply-now"
 )
+
+// parseResourcePathAction extracts resource name, action, and namespace from a URL path.
+// Returns (resourceName, namespace, ok).
+func parseResourcePathAction(r *http.Request, prefix, expectedAction string) (string, string, bool) {
+	path := r.URL.Path
+	parts := strings.Split(strings.TrimPrefix(path, prefix), "/")
+	if len(parts) < 2 || parts[1] != expectedAction {
+		return "", "", false
+	}
+	resourceName := parts[0]
+	namespace := r.URL.Query().Get("namespace")
+	if resourceName == "" || namespace == "" {
+		return "", "", false
+	}
+	return resourceName, namespace, true
+}
+
+// handleResourceDelete is a generic delete handler for Kubernetes resources.
+func handleResourceDelete[T client.Object](
+	s *Server,
+	w http.ResponseWriter,
+	r *http.Request,
+	pathPrefix string,
+	resourceType string,
+	newResource func() T,
+	redirectURL string,
+) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	name, namespace, ok := parseResourcePathAction(r, pathPrefix, actionDelete)
+	if !ok {
+		http.Error(w, fmt.Sprintf("Missing %s name or namespace", resourceType), http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	resource := newResource()
+
+	if err := s.client.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, resource); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get %s: %v", resourceType, err), http.StatusNotFound)
+		return
+	}
+	if err := s.client.Delete(ctx, resource); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to delete %s: %v", resourceType, err), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+}
 
 // fetchDashboardData retrieves all PaperMCServer instances, optionally filtered by namespace.
 func (s *Server) fetchDashboardData(ctx context.Context, filterNamespace string) (templates.DashboardData, error) {
@@ -605,43 +661,9 @@ func (s *Server) parsePluginForm(r *http.Request) (*mck8slexlav1alpha1.Plugin, e
 
 // handlePluginDelete handles plugin deletion.
 func (s *Server) handlePluginDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	ctx := r.Context()
-
-	// Extract plugin name from URL path: /ui/plugin/{name}/delete
-	path := r.URL.Path
-	parts := strings.Split(strings.TrimPrefix(path, "/ui/plugin/"), "/")
-	if len(parts) < 2 || parts[1] != "delete" {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-	pluginName := parts[0]
-	namespace := r.URL.Query().Get("namespace")
-
-	if pluginName == "" || namespace == "" {
-		http.Error(w, "Missing plugin name or namespace", http.StatusBadRequest)
-		return
-	}
-
-	// Get plugin
-	var plugin mck8slexlav1alpha1.Plugin
-	if err := s.client.Get(ctx, client.ObjectKey{Name: pluginName, Namespace: namespace}, &plugin); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get plugin: %v", err), http.StatusNotFound)
-		return
-	}
-
-	// Delete plugin
-	if err := s.client.Delete(ctx, &plugin); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to delete plugin: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Redirect to plugin list
-	http.Redirect(w, r, "/ui/plugins", http.StatusSeeOther)
+	handleResourceDelete(s, w, r, "/ui/plugin/", "plugin",
+		func() *mck8slexlav1alpha1.Plugin { return &mck8slexlav1alpha1.Plugin{} },
+		"/ui/plugins")
 }
 
 // handleApplyNow triggers immediate update application by setting annotation.
@@ -651,22 +673,13 @@ func (s *Server) handleApplyNow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
-
-	// Extract server name from URL path: /ui/server/{name}/apply-now
-	path := r.URL.Path
-	parts := strings.Split(strings.TrimPrefix(path, "/ui/server/"), "/")
-	if len(parts) < 2 || parts[1] != "apply-now" {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-	serverName := parts[0]
-	namespace := r.URL.Query().Get("namespace")
-
-	if serverName == "" || namespace == "" {
+	serverName, namespace, ok := parseResourcePathAction(r, "/ui/server/", actionApplyNow)
+	if !ok {
 		http.Error(w, "Missing server name or namespace", http.StatusBadRequest)
 		return
 	}
+
+	ctx := r.Context()
 
 	// Get server
 	var server mck8slexlav1alpha1.PaperMCServer
@@ -690,6 +703,13 @@ func (s *Server) handleApplyNow(w http.ResponseWriter, r *http.Request) {
 	// Return HTMX response
 	w.Header().Set("Content-Type", "text/html")
 	_, _ = fmt.Fprintf(w, `<span style="color: green;">✓ Apply Now triggered</span>`)
+}
+
+// handleServerDelete handles server deletion.
+func (s *Server) handleServerDelete(w http.ResponseWriter, r *http.Request) {
+	handleResourceDelete(s, w, r, "/ui/server/", "server",
+		func() *mck8slexlav1alpha1.PaperMCServer { return &mck8slexlav1alpha1.PaperMCServer{} },
+		"/ui")
 }
 
 // getAvailableNamespaces returns list of namespaces that have plugins or servers.
@@ -765,10 +785,10 @@ func (s *Server) handlePluginRoutes(w http.ResponseWriter, r *http.Request) {
 	// Route based on action
 	if len(parts) >= 2 {
 		switch parts[1] {
-		case "delete":
+		case actionDelete:
 			s.handlePluginDelete(w, r)
 			return
-		case "apply-now":
+		case actionApplyNow:
 			s.handleApplyNow(w, r)
 			return
 		}
@@ -776,4 +796,30 @@ func (s *Server) handlePluginRoutes(w http.ResponseWriter, r *http.Request) {
 
 	// Default: show plugin detail or 404
 	http.NotFound(w, r)
+}
+
+// handleServerRoutes routes server-specific requests based on URL path.
+func (s *Server) handleServerRoutes(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/ui/server/")
+	parts := strings.Split(path, "/")
+
+	if len(parts) < 1 || parts[0] == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Route based on action
+	if len(parts) >= 2 {
+		switch parts[1] {
+		case actionDelete:
+			s.handleServerDelete(w, r)
+			return
+		case actionApplyNow:
+			s.handleApplyNow(w, r)
+			return
+		}
+	}
+
+	// Default: show server detail
+	s.handleServerDetailPage(w, r, parts[0])
 }

@@ -75,6 +75,16 @@ templ ServerDetail(data ServerDetailData) {
 							<p style="color: var(--text-secondary); font-size: 12px;">Available Update</p>
 							<p style="font-size: 18px; font-weight: 600; color: var(--accent);">{ data.AvailableUpdate }</p>
 						</div>
+						<div style="display: flex; align-items: end;">
+							<button
+								hx-post={ fmt.Sprintf("/ui/server/%s/apply-now?namespace=%s", data.Name, data.Namespace) }
+								hx-confirm="Apply update immediately? This will restart the server."
+								hx-swap="outerHTML"
+								style="background-color: var(--warning); color: white; border: none; padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: pointer;"
+							>
+								Apply Now
+							</button>
+						</div>
 					}
 				</div>
 			</div>
