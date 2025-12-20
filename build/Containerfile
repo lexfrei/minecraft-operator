@@ -1,5 +1,9 @@
 FROM docker.io/library/golang:1.25.3-alpine3.22 AS build
 
+ARG VERSION=dev
+ARG REVISION=unknown
+ARG BUILD_DATE=""
+
 RUN echo 'nobody:x:65534:65534:Nobody:/:' > /tmp/passwd && \
     apk add --no-cache upx=5.0.2-r0
 
@@ -9,7 +13,9 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o manager ./cmd/main.go && \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+    -ldflags="-s -w -X main.version=${VERSION} -X main.gitCommit=${REVISION} -X main.buildDate=${BUILD_DATE}" \
+    -o manager ./cmd/main.go && \
     upx --best --lzma manager
 
 FROM scratch
@@ -20,11 +26,18 @@ COPY --from=build /workspace/manager /
 
 USER 65534
 
+ARG VERSION=dev
+ARG REVISION=unknown
+ARG BUILD_DATE=""
+
 LABEL org.opencontainers.image.title="Minecraft Operator"
 LABEL org.opencontainers.image.description="Kubernetes operator for managing PaperMC Minecraft servers"
 LABEL org.opencontainers.image.source="https://github.com/lexfrei/minecraft-operator"
 LABEL org.opencontainers.image.licenses="BSD-3-Clause"
 LABEL org.opencontainers.image.vendor="Aleksei Sviridkin"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.revision="${REVISION}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL maintainer="f@lex.la"
 
 ENTRYPOINT ["/manager"]
