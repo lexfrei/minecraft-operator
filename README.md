@@ -1,135 +1,141 @@
-# minecraft-operator
-// TODO(user): Add simple overview of use/purpose
+# Minecraft Operator
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+A Kubernetes operator for managing PaperMC servers with automatic version management, plugin compatibility solving, and scheduled updates.
 
-## Getting Started
+## Features
+
+- **Automatic Version Management** — Four update strategies: `latest`, `auto`, `pin`, `build-pin`
+- **Plugin Compatibility Solver** — Constraint solver ensures plugins work with selected Paper version
+- **Scheduled Updates** — Cron-based maintenance windows with graceful RCON shutdown
+- **Declarative Plugin Management** — Plugins are matched to servers via label selectors
+- **Web UI** — Built-in dashboard for monitoring servers and plugins
+- **Hangar Integration** — Automatic plugin downloads from PaperMC Hangar
+
+## Quick Start
 
 ### Prerequisites
-- go version v1.24.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+- Kubernetes 1.27+
+- Helm 3.14+
 
-```sh
-make docker-build docker-push IMG=<some-registry>/minecraft-operator:tag
+### Installation
+
+```bash
+# Add the Helm repository
+helm install minecraft-operator-crds oci://ghcr.io/lexfrei/charts/minecraft-operator-crds \
+  --create-namespace --namespace minecraft-operator-system
+
+helm install minecraft-operator oci://ghcr.io/lexfrei/charts/minecraft-operator \
+  --namespace minecraft-operator-system
 ```
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
+### Create a Minecraft Server
 
-**Install the CRDs into the cluster:**
-
-```sh
-make install
+```yaml
+apiVersion: mc.k8s.lex.la/v1alpha1
+kind: PaperMCServer
+metadata:
+  name: my-server
+  labels:
+    environment: production
+spec:
+  updateStrategy: "auto"  # Solver picks best version for plugins
+  updateSchedule:
+    checkCron: "0 3 * * *"        # Check daily at 3am
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"           # Apply updates Sunday 4am
+  gracefulShutdown:
+    timeout: 300s
+  rcon:
+    enabled: true
+    passwordSecret:
+      name: my-server-rcon
+      key: password
+  podTemplate:
+    spec:
+      containers:
+      - name: minecraft
+        resources:
+          requests:
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
 ```
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
+### Add a Plugin
 
-```sh
-make deploy IMG=<some-registry>/minecraft-operator:tag
+```yaml
+apiVersion: mc.k8s.lex.la/v1alpha1
+kind: Plugin
+metadata:
+  name: essentialsx
+spec:
+  source:
+    type: hangar
+    project: "EssentialsX/Essentials"
+  updateStrategy: "latest"
+  instanceSelector:
+    matchLabels:
+      environment: production
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
+## Update Strategies
 
-**Create instances of your solution**
-You can apply the samples (examples) from the examples directory:
+| Strategy | Description |
+|----------|-------------|
+| `latest` | Always use newest Paper version (ignores plugin compatibility) |
+| `auto` | Solver finds best version compatible with all plugins |
+| `pin` | Stay on specific version, auto-update builds |
+| `build-pin` | Fully pinned version and build |
 
-```sh
-kubectl apply -f examples/
+See [docs/update-strategies.md](docs/update-strategies.md) for detailed guide.
+
+## Architecture
+
+The operator consists of three controllers:
+
+1. **Plugin Controller** — Syncs plugin metadata from Hangar, runs compatibility solver
+2. **PaperMCServer Controller** — Manages StatefulSet, Service, resolves versions
+3. **Update Controller** — Executes scheduled updates with graceful shutdown
+
+For detailed architecture, see [DESIGN.md](DESIGN.md).
+
+## Web UI
+
+Access the built-in dashboard:
+
+```bash
+kubectl port-forward svc/minecraft-operator-webui 8082:8082 -n minecraft-operator-system
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
+Open http://localhost:8082/ui
 
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
+## Development
 
-```sh
-kubectl delete -f examples/
+```bash
+# Generate code and CRDs
+make manifests generate
+
+# Run tests
+make test
+
+# Run linter
+make lint
+
+# Run locally
+make run
 ```
-
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
-make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
-make undeploy
-```
-
-## Project Distribution
-
-Following the options to release and provide this solution to the users.
-
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/minecraft-operator:tag
-```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/minecraft-operator/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-1. Build the chart using the optional helm plugin
-
-```sh
-kubebuilder edit --plugins=helm/v1-alpha
-```
-
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
 
-**NOTE:** Run `make help` for more information on all potential `make` targets
+See [GitHub Issues](https://github.com/lexfrei/minecraft-operator/issues) for roadmap and open tasks.
 
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+Priority areas:
+- Test coverage for `pkg/solver/` and `pkg/plugins/`
+- Modrinth plugin source support
+- Documentation improvements
 
 ## License
 
-Copyright 2025.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
+BSD-3-Clause. See [LICENSE](LICENSE).

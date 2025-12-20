@@ -386,19 +386,87 @@ slog.ErrorContext(ctx, "Failed to reconcile resource", "error", err, "resource",
 The operator bridges slog to controller-runtime's logr interface using `logr.FromSlogHandler()`.
 This allows controller-runtime to use slog while maintaining compatibility with the Kubernetes ecosystem.
 
+### Test-Driven Development (TDD)
+
+**CRITICAL: This project follows strict TDD methodology for ALL code changes.**
+
+TDD applies to:
+- **Go code**: Controllers, packages, utilities
+- **Helm charts**: Use `helm-unittest` for template testing
+
+**TDD Workflow:**
+
+1. **Write test FIRST** — Define expected behavior before implementation
+2. **Run test → see it FAIL** — Confirms test is actually testing something
+3. **Write minimal code** — Just enough to make test pass
+4. **Run test → see it PASS** — Confirms implementation works
+5. **Refactor** — Clean up while keeping tests green
+6. **Repeat** — For each new feature or bug fix
+
+**Go TDD Example:**
+
+```go
+// 1. Write test first (pkg/solver/simple_solver_test.go)
+func TestSolverFindsCompatibleVersion(t *testing.T) {
+    solver := NewSimpleSolver()
+    result, err := solver.Solve(plugins, paperVersions)
+    require.NoError(t, err)
+    assert.Equal(t, "1.21.1", result.PaperVersion)
+}
+
+// 2. Run test → FAIL (function doesn't exist yet)
+// 3. Implement Solve() method
+// 4. Run test → PASS
+// 5. Refactor if needed
+```
+
+**Helm TDD Example (using helm-unittest):**
+
+```yaml
+# charts/minecraft-operator/tests/deployment_test.yaml
+suite: deployment tests
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should set correct replicas
+    set:
+      replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should use non-root security context
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+```
+
+**Why TDD is mandatory:**
+
+- **Prevents regressions** — Tests catch breaking changes immediately
+- **Documents behavior** — Tests serve as executable specifications
+- **Improves design** — Writing tests first forces cleaner APIs
+- **Enables refactoring** — Confidence to improve code without breaking it
+
+**No exceptions**: Even "simple" changes require tests. If it's worth changing, it's worth testing.
+
 ### Development Workflow
 
-**Typical development iteration:**
+**Typical development iteration (TDD-based):**
 
-1. **Modify API types** in `api/v1alpha1/*.go`
-2. **Regenerate code**: `make manifests generate`
-3. **Run tests**: `make test`
-4. **Check linting**: `make lint` (fix ALL errors before commit)
-5. **Test locally**: `make run` (runs against your kubeconfig cluster)
+1. **Write failing test** for new feature/fix
+2. **Modify API types** in `api/v1alpha1/*.go` (if needed)
+3. **Regenerate code**: `make manifests generate`
+4. **Implement minimal code** to make test pass
+5. **Run tests**: `make test` — must pass
+6. **Check linting**: `make lint` (fix ALL errors before commit)
+7. **Test locally**: `make run` (runs against your kubeconfig cluster)
    - Use `--log-level=debug --log-format=text` for better local debugging
-6. **Commit changes** with semantic commit message and GPG signature
-7. **Push to feature branch** (NEVER directly to master)
-8. **Create PR** for review
+8. **Commit changes** with semantic commit message and GPG signature
+9. **Push to feature branch** (NEVER directly to master)
+10. **Create PR** for review
 
 **Testing Strategy:**
 
