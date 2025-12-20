@@ -39,6 +39,11 @@ func NewServer(k8sClient client.Client, namespace string, bindAddress string) *S
 	mux.HandleFunc("/ui/server/status", srv.handleServerStatus)
 	mux.HandleFunc("/ui/plugin/resolve", srv.handlePluginResolve)
 
+	// Plugin CRUD routes
+	mux.HandleFunc("/ui/plugins", srv.handlePluginList)
+	mux.HandleFunc("/ui/plugin/new", srv.handlePluginCreate)
+	mux.HandleFunc("/ui/plugin/", srv.handlePluginRoutes)
+
 	srv.server = &http.Server{
 		Addr:              bindAddress,
 		Handler:           mux,

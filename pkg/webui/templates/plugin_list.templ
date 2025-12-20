@@ -1,0 +1,127 @@
+package templates
+
+import (
+	"fmt"
+)
+
+type PluginListData struct {
+	Plugins           []PluginListItem
+	Namespaces        []string
+	SelectedNamespace string
+}
+
+type PluginListItem struct {
+	Name            string
+	Namespace       string
+	SourceType      string
+	Project         string
+	UpdateStrategy  string
+	Version         string
+	ResolvedVersion string
+	MatchedServers  int
+}
+
+templ PluginList(data PluginListData) {
+	@Layout("Plugins") {
+		<div hx-ext="sse" sse-connect="/ui/events" sse-swap="update">
+			<div class="card">
+				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+					<h2 style="margin: 0;">Plugins</h2>
+					<div style="display: flex; gap: 15px; align-items: center;">
+						if len(data.Namespaces) > 0 {
+							<div>
+								<label for="namespace-filter" style="color: var(--text-secondary); font-size: 14px; margin-right: 10px;">Namespace:</label>
+								<select id="namespace-filter"
+										name="namespace"
+										hx-get="/ui/plugins"
+										hx-trigger="change"
+										hx-target="body"
+										hx-swap="outerHTML"
+										hx-include="[name='namespace']"
+										style="background-color: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border); padding: 8px 12px; border-radius: 4px; font-size: 14px;">
+									<option value="">All Namespaces</option>
+									for _, ns := range data.Namespaces {
+										if ns == data.SelectedNamespace {
+											<option value={ ns } selected>{ ns }</option>
+										} else {
+											<option value={ ns }>{ ns }</option>
+										}
+									}
+								</select>
+							</div>
+						}
+						<a href="/ui/plugin/new" style="background-color: var(--accent); color: white; padding: 8px 16px; border-radius: 4px; font-size: 14px; text-decoration: none;">
+							+ New Plugin
+						</a>
+					</div>
+				</div>
+				<div style="margin-bottom: 20px;">
+					<a href="/ui" style="font-size: 14px;">← Back to Dashboard</a>
+				</div>
+				if len(data.Plugins) == 0 {
+					<p style="color: var(--text-secondary);">No plugins found.</p>
+				} else {
+					<div id="plugin-list">
+						for _, plugin := range data.Plugins {
+							@PluginListCard(plugin)
+						}
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
+templ PluginListCard(plugin PluginListItem) {
+	<div class="card" style="margin-bottom: 15px;">
+		<div style="display: flex; justify-content: space-between; align-items: start;">
+			<div style="flex: 1;">
+				<h3 style="font-size: 18px; margin-bottom: 8px;">{ plugin.Name }</h3>
+				<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 5px;">
+					Namespace: { plugin.Namespace }
+				</p>
+			</div>
+			<div style="display: flex; gap: 10px; align-items: center;">
+				<button
+					hx-post={ fmt.Sprintf("/ui/plugin/%s/delete?namespace=%s", plugin.Name, plugin.Namespace) }
+					hx-confirm={ fmt.Sprintf("Are you sure you want to delete plugin '%s'?", plugin.Name) }
+					hx-target="body"
+					style="background-color: var(--error); color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer;"
+				>
+					Delete
+				</button>
+				if plugin.UpdateStrategy == "latest" {
+					<span class="badge badge-info">Latest</span>
+				} else {
+					<span class="badge badge-warning">Pinned</span>
+				}
+			</div>
+		</div>
+		<div style="margin-top: 15px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+			<div>
+				<p style="color: var(--text-secondary); font-size: 12px;">Source</p>
+				<p style="font-size: 14px; font-weight: 600;">{ plugin.SourceType }</p>
+			</div>
+			<div>
+				<p style="color: var(--text-secondary); font-size: 12px;">Project</p>
+				<p style="font-size: 14px; font-weight: 600;">{ plugin.Project }</p>
+			</div>
+			if plugin.Version != "" {
+				<div>
+					<p style="color: var(--text-secondary); font-size: 12px;">Pinned Version</p>
+					<p style="font-size: 14px; font-weight: 600; font-family: monospace;">{ plugin.Version }</p>
+				</div>
+			}
+			if plugin.ResolvedVersion != "" {
+				<div>
+					<p style="color: var(--text-secondary); font-size: 12px;">Resolved Version</p>
+					<p style="font-size: 14px; font-weight: 600; color: var(--accent); font-family: monospace;">{ plugin.ResolvedVersion }</p>
+				</div>
+			}
+			<div>
+				<p style="color: var(--text-secondary); font-size: 12px;">Matched Servers</p>
+				<p style="font-size: 14px; font-weight: 600;">{ fmt.Sprintf("%d", plugin.MatchedServers) }</p>
+			</div>
+		</div>
+	</div>
+}
