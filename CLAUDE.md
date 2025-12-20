@@ -566,3 +566,62 @@ See `.architecture.yaml` for complete ADR history and technical stack details.
 - **Project config**: `PROJECT` - Kubebuilder metadata
 - **Development guide**: This file (`CLAUDE.md`)
 - **Examples**: `examples/` - Example custom resources
+
+## GitHub Issue Management
+
+### Label System
+
+This project uses a structured label system (borrowed from cloudflare-tunnel-gateway-controller):
+
+**Type Labels (mutually exclusive):**
+
+- `bug` - Something isn't working
+- `enhancement` - New feature or request
+- `documentation` - Improvements or additions to documentation
+- `test` - Test coverage and testing
+- `ci` - CI/CD and automation
+- `security` - Security-related issues
+- `research` - Research and RFC
+
+**Priority Labels (prefix: `priority/`):**
+
+- `priority/critical` - Blocks release, needs immediate attention
+- `priority/high` - Important for milestone
+- `priority/medium` - Should be done for milestone
+- `priority/low` - Nice to have, can defer
+
+**Status Labels (prefix: `status/`):**
+
+- `status/needs-design` - Requires design/RFC
+- `status/needs-triage` - Requires analysis
+- `status/ready` - Ready to work on
+- `status/in-progress` - Currently being worked on
+- `status/blocked` - Blocked by dependency
+- `status/needs-info` - Waiting for clarification from author
+- `status/needs-review` - Waiting for review/feedback
+
+**Area Labels (prefix: `area/`):**
+
+- `area/controller` - Controller code
+- `area/helm` - Helm chart
+- `area/api` - CRD and API types
+- `area/docs` - Documentation
+- `area/plugins` - Plugin sources and resolution
+- `area/solver` - Constraint solver
+- `area/webui` - Web UI
+
+**Size Labels (prefix: `size/`):**
+
+- `size/XS` - < 1 hour
+- `size/S` - 1-4 hours
+- `size/M` - 1-2 days
+- `size/L` - 3-5 days
+- `size/XL` - > 1 week
+
+**Standard GitHub Labels:**
+
+- `good first issue` - Good for newcomers
+- `help wanted` - Extra attention is needed
+- `duplicate` - This issue or pull request already exists
+- `wontfix` - This will not be worked on
+- `dependencies` - Pull requests that update a dependency file
