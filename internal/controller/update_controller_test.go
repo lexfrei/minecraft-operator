@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -1026,6 +1027,349 @@ var _ = Describe("UpdateController", func() {
 
 			err := reconciler.executeGracefulShutdownWithClient(cancelCtx, server, mockRCON)
 			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Context("Plugin deletion during update", func() {
+		var (
+			ctx        context.Context
+			reconciler *UpdateReconciler
+			serverName string
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			reconciler = &UpdateReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			serverName = "test-server-plugin-deletion"
+			namespace = testNamespace
+		})
+
+		AfterEach(func() {
+			// Clean up server
+			server := &mcv1alpha1.PaperMCServer{}
+			_ = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      serverName,
+				Namespace: namespace,
+			}, server)
+			_ = k8sClient.Delete(ctx, server)
+
+			// Clean up plugins
+			pluginList := &mcv1alpha1.PluginList{}
+			_ = k8sClient.List(ctx, pluginList, client.InNamespace(namespace))
+			for i := range pluginList.Items {
+				_ = k8sClient.Delete(ctx, &pluginList.Items[i])
+			}
+		})
+
+		It("should identify plugins marked for deletion", func() {
+			By("creating a server")
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: false,
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:1.21.1-100",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+			By("fetching the server and updating status with plugins")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      serverName,
+				Namespace: namespace,
+			}, server)).To(Succeed())
+
+			server.Status = mcv1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				Plugins: []mcv1alpha1.ServerPluginStatus{
+					{
+						PluginRef: mcv1alpha1.PluginRef{
+							Name:      "plugin-to-delete",
+							Namespace: namespace,
+						},
+						ResolvedVersion:  "1.0.0",
+						CurrentVersion:   "1.0.0",
+						Compatible:       true,
+						Source:           "hangar",
+						PendingDeletion:  true,
+						InstalledJARName: "TestPlugin-1.0.0.jar",
+					},
+					{
+						PluginRef: mcv1alpha1.PluginRef{
+							Name:      "plugin-to-keep",
+							Namespace: namespace,
+						},
+						ResolvedVersion:  "2.0.0",
+						CurrentVersion:   "2.0.0",
+						Compatible:       true,
+						Source:           "hangar",
+						PendingDeletion:  false,
+						InstalledJARName: "KeepPlugin-2.0.0.jar",
+					},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, server)).To(Succeed())
+
+			By("re-fetching the server to get updated status")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      serverName,
+				Namespace: namespace,
+			}, server)).To(Succeed())
+
+			By("calling getPluginsToDelete")
+			pluginsToDelete := reconciler.getPluginsToDelete(server)
+
+			By("verifying only marked plugins are returned")
+			Expect(pluginsToDelete).To(HaveLen(1))
+			Expect(pluginsToDelete[0].PluginRef.Name).To(Equal("plugin-to-delete"))
+			Expect(pluginsToDelete[0].InstalledJARName).To(Equal("TestPlugin-1.0.0.jar"))
+		})
+
+		It("should skip plugins without InstalledJARName", func() {
+			By("creating a server")
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: false,
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:1.21.1-100",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+			By("fetching server and updating status with plugin without JAR name")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      serverName,
+				Namespace: namespace,
+			}, server)).To(Succeed())
+
+			server.Status = mcv1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				Plugins: []mcv1alpha1.ServerPluginStatus{
+					{
+						PluginRef: mcv1alpha1.PluginRef{
+							Name:      "plugin-no-jar",
+							Namespace: namespace,
+						},
+						ResolvedVersion:  "1.0.0",
+						Compatible:       true,
+						Source:           "hangar",
+						PendingDeletion:  true,
+						InstalledJARName: "", // No JAR name
+					},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, server)).To(Succeed())
+
+			By("re-fetching the server to get updated status")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      serverName,
+				Namespace: namespace,
+			}, server)).To(Succeed())
+
+			By("calling getPluginsToDelete")
+			pluginsToDelete := reconciler.getPluginsToDelete(server)
+
+			By("verifying no plugins are returned")
+			Expect(pluginsToDelete).To(BeEmpty())
+		})
+
+		It("should update Plugin.DeletionProgress after JAR deletion", func() {
+			By("creating a Plugin with DeletionProgress")
+			plugin := &mcv1alpha1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "plugin-with-progress",
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PluginSpec{
+					Source: mcv1alpha1.PluginSource{
+						Type:    "hangar",
+						Project: "TestPlugin",
+					},
+					UpdateStrategy: "latest",
+					InstanceSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"test": "true",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
+
+			By("setting DeletionProgress in status")
+			plugin.Status.DeletionProgress = []mcv1alpha1.DeletionProgressEntry{
+				{
+					ServerName: serverName,
+					Namespace:  namespace,
+					JARDeleted: false,
+					DeletedAt:  nil,
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, plugin)).To(Succeed())
+
+			By("marking JAR as deleted")
+			err := reconciler.markJARAsDeleted(ctx, plugin.Name, plugin.Namespace, serverName, namespace)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying DeletionProgress is updated")
+			updatedPlugin := &mcv1alpha1.Plugin{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      plugin.Name,
+				Namespace: plugin.Namespace,
+			}, updatedPlugin)).To(Succeed())
+
+			Expect(updatedPlugin.Status.DeletionProgress).To(HaveLen(1))
+			Expect(updatedPlugin.Status.DeletionProgress[0].JARDeleted).To(BeTrue())
+			Expect(updatedPlugin.Status.DeletionProgress[0].DeletedAt).NotTo(BeNil())
+		})
+
+		It("should handle multiple plugins marked for deletion", func() {
+			By("creating a server")
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: false,
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:1.21.1-100",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+			By("fetching server and updating status with multiple plugins")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      serverName,
+				Namespace: namespace,
+			}, server)).To(Succeed())
+
+			server.Status = mcv1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				Plugins: []mcv1alpha1.ServerPluginStatus{
+					{
+						PluginRef: mcv1alpha1.PluginRef{
+							Name:      "plugin-1",
+							Namespace: namespace,
+						},
+						PendingDeletion:  true,
+						InstalledJARName: "Plugin1-1.0.0.jar",
+					},
+					{
+						PluginRef: mcv1alpha1.PluginRef{
+							Name:      "plugin-2",
+							Namespace: namespace,
+						},
+						PendingDeletion:  true,
+						InstalledJARName: "Plugin2-2.0.0.jar",
+					},
+					{
+						PluginRef: mcv1alpha1.PluginRef{
+							Name:      "plugin-3",
+							Namespace: namespace,
+						},
+						PendingDeletion:  false,
+						InstalledJARName: "Plugin3-3.0.0.jar",
+					},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, server)).To(Succeed())
+
+			By("re-fetching the server to get updated status")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      serverName,
+				Namespace: namespace,
+			}, server)).To(Succeed())
+
+			By("calling getPluginsToDelete")
+			pluginsToDelete := reconciler.getPluginsToDelete(server)
+
+			By("verifying all marked plugins are returned")
+			Expect(pluginsToDelete).To(HaveLen(2))
+
+			names := []string{pluginsToDelete[0].PluginRef.Name, pluginsToDelete[1].PluginRef.Name}
+			Expect(names).To(ContainElement("plugin-1"))
+			Expect(names).To(ContainElement("plugin-2"))
 		})
 	})
 

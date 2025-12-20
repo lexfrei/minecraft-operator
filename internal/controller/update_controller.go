@@ -603,23 +603,31 @@ func (r *UpdateReconciler) performPluginOnlyUpdate(
 ) error {
 	slog.InfoContext(ctx, "Starting plugin-only update", "server", server.Name)
 
-	// Step 1: Download plugins to /data/plugins/update/
+	// Step 1: Delete plugins marked for deletion (PendingDeletion=true)
+	if err := r.deleteMarkedPlugins(ctx, server); err != nil {
+		slog.ErrorContext(ctx, "Failed to delete marked plugins, continuing with update",
+			"error", err,
+			"server", server.Name)
+		// Continue with update even if some deletions fail
+	}
+
+	// Step 2: Download plugins to /data/plugins/update/
 	if err := r.applyPluginUpdates(ctx, server); err != nil {
 		return errors.Wrap(err, "failed to download plugins")
 	}
 
-	// Step 2: Create RCON client
+	// Step 3: Create RCON client
 	rconClient, err := r.createRCONClient(ctx, server)
 	if err != nil {
 		return errors.Wrap(err, "failed to create RCON client")
 	}
 
-	// Step 3: Execute graceful shutdown via RCON
+	// Step 4: Execute graceful shutdown via RCON
 	if err := r.executeGracefulShutdownWithClient(ctx, server, rconClient); err != nil {
 		return errors.Wrap(err, "failed to execute graceful shutdown")
 	}
 
-	// Step 3: Wait for pod to restart (StatefulSet will recreate it automatically)
+	// Step 5: Wait for pod to restart (StatefulSet will recreate it automatically)
 	if err := r.waitForPodReady(ctx, server); err != nil {
 		return errors.Wrap(err, "failed to wait for pod ready")
 	}
@@ -680,7 +688,15 @@ func (r *UpdateReconciler) performCombinedUpdate(
 ) error {
 	slog.InfoContext(ctx, "Starting combined Paper and plugins update", "server", server.Name)
 
-	// Step 1: Update StatefulSet image to new Paper version
+	// Step 1: Delete plugins marked for deletion (PendingDeletion=true)
+	if err := r.deleteMarkedPlugins(ctx, server); err != nil {
+		slog.ErrorContext(ctx, "Failed to delete marked plugins, continuing with update",
+			"error", err,
+			"server", server.Name)
+		// Continue with update even if some deletions fail
+	}
+
+	// Step 2: Update StatefulSet image to new Paper version
 	newImage := fmt.Sprintf("lexfrei/papermc:%s-%d",
 		server.Status.DesiredVersion,
 		server.Status.DesiredBuild)
@@ -689,13 +705,13 @@ func (r *UpdateReconciler) performCombinedUpdate(
 		return errors.Wrap(err, "failed to update StatefulSet image")
 	}
 
-	// Step 2: Download plugins to /data/plugins/update/
+	// Step 3: Download plugins to /data/plugins/update/
 	// This must happen BEFORE pod restarts to ensure plugins are ready
 	if err := r.applyPluginUpdates(ctx, server); err != nil {
 		return errors.Wrap(err, "failed to download plugins")
 	}
 
-	// Step 3: StatefulSet will do rolling update automatically with graceful shutdown
+	// Step 4: StatefulSet will do rolling update automatically with graceful shutdown
 	// We just need to wait for pod to be ready with new image
 	if err := r.waitForPodReady(ctx, server); err != nil {
 		return errors.Wrap(err, "failed to wait for pod ready")
@@ -792,6 +808,150 @@ func (r *UpdateReconciler) setUpdatingCondition(server *mcv1alpha1.PaperMCServer
 	}
 
 	meta.SetStatusCondition(&server.Status.Conditions, condition)
+}
+
+// getPluginsToDelete returns plugins marked for deletion that have an InstalledJARName.
+func (r *UpdateReconciler) getPluginsToDelete(
+	server *mcv1alpha1.PaperMCServer,
+) []mcv1alpha1.ServerPluginStatus {
+	var result []mcv1alpha1.ServerPluginStatus
+
+	for _, plugin := range server.Status.Plugins {
+		if plugin.PendingDeletion && plugin.InstalledJARName != "" {
+			result = append(result, plugin)
+		}
+	}
+
+	return result
+}
+
+// markJARAsDeleted updates the Plugin's DeletionProgress to mark a JAR as deleted.
+func (r *UpdateReconciler) markJARAsDeleted(
+	ctx context.Context,
+	pluginName, pluginNamespace string,
+	serverName, serverNamespace string,
+) error {
+	// Fetch the Plugin resource
+	var plugin mcv1alpha1.Plugin
+	if err := r.Get(ctx, client.ObjectKey{
+		Name:      pluginName,
+		Namespace: pluginNamespace,
+	}, &plugin); err != nil {
+		return errors.Wrap(err, "failed to get plugin")
+	}
+
+	// Find and update the DeletionProgress entry
+	now := metav1.Now()
+	updated := false
+
+	for i := range plugin.Status.DeletionProgress {
+		entry := &plugin.Status.DeletionProgress[i]
+		if entry.ServerName == serverName && entry.Namespace == serverNamespace {
+			entry.JARDeleted = true
+			entry.DeletedAt = &now
+			updated = true
+
+			break
+		}
+	}
+
+	if !updated {
+		slog.WarnContext(ctx, "DeletionProgress entry not found",
+			"plugin", pluginName,
+			"server", serverName)
+
+		return nil
+	}
+
+	// Update the Plugin status
+	if err := r.Status().Update(ctx, &plugin); err != nil {
+		return errors.Wrap(err, "failed to update plugin status")
+	}
+
+	slog.InfoContext(ctx, "Marked JAR as deleted in Plugin status",
+		"plugin", pluginName,
+		"server", serverName)
+
+	return nil
+}
+
+// deleteMarkedPlugins deletes plugin JARs that are marked for deletion from the server.
+func (r *UpdateReconciler) deleteMarkedPlugins(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+) error {
+	pluginsToDelete := r.getPluginsToDelete(server)
+
+	if len(pluginsToDelete) == 0 {
+		slog.DebugContext(ctx, "No plugins marked for deletion", "server", server.Name)
+
+		return nil
+	}
+
+	slog.InfoContext(ctx, "Deleting marked plugins",
+		"server", server.Name,
+		"count", len(pluginsToDelete))
+
+	var errs []error
+
+	for _, plugin := range pluginsToDelete {
+		if err := r.deletePluginJAR(ctx, server, plugin); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.CombineErrors(errs[0], errors.Newf("and %d more errors", len(errs)-1))
+	}
+
+	return nil
+}
+
+// deletePluginJAR deletes a single plugin JAR from the server.
+func (r *UpdateReconciler) deletePluginJAR(
+	ctx context.Context,
+	server *mcv1alpha1.PaperMCServer,
+	plugin mcv1alpha1.ServerPluginStatus,
+) error {
+	podName := server.Name + "-0"
+	namespace := server.Namespace
+	rmCmd := fmt.Sprintf("rm -f /data/plugins/%s", plugin.InstalledJARName)
+
+	slog.InfoContext(ctx, "Deleting plugin JAR",
+		"server", server.Name,
+		"plugin", plugin.PluginRef.Name,
+		"jar", plugin.InstalledJARName)
+
+	cmd := exec.CommandContext(ctx,
+		"kubectl", "exec", "-n", namespace, podName,
+		"--", "sh", "-c", rmCmd)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to delete plugin JAR",
+			"error", err,
+			"output", string(output),
+			"plugin", plugin.PluginRef.Name)
+
+		return errors.Wrapf(err, "failed to delete JAR for plugin %s", plugin.PluginRef.Name)
+	}
+
+	// Mark JAR as deleted in Plugin status
+	if err := r.markJARAsDeleted(ctx,
+		plugin.PluginRef.Name, plugin.PluginRef.Namespace,
+		server.Name, server.Namespace); err != nil {
+		slog.ErrorContext(ctx, "Failed to mark JAR as deleted",
+			"error", err,
+			"plugin", plugin.PluginRef.Name)
+
+		return errors.Wrapf(err, "failed to mark JAR as deleted for plugin %s", plugin.PluginRef.Name)
+	}
+
+	slog.InfoContext(ctx, "Plugin JAR deleted successfully",
+		"server", server.Name,
+		"plugin", plugin.PluginRef.Name)
+
+	return nil
 }
 
 // SetCron sets the cron scheduler for the reconciler.
