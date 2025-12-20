@@ -1,0 +1,1643 @@
+openapi: 3.1.0
+info:
+  title: Minecraft Operator API
+  description: |
+    REST API for managing PaperMC servers and plugins in Kubernetes.
+
+    This API provides CRUD operations for PaperMCServer and Plugin custom resources,
+    as well as action endpoints for triggering reconciliation and immediate updates.
+
+    ## Authentication
+
+    The API uses the same authentication as the Kubernetes cluster (service account tokens).
+
+    ## Error Handling
+
+    All errors return a JSON object with `error` field containing human-readable message,
+    optional `code` for programmatic handling, and optional `details` for additional context.
+  version: v1
+  contact:
+    name: Aleksei Sviridkin
+    email: f@lex.la
+  license:
+    name: BSD-3-Clause
+    url: https://opensource.org/licenses/BSD-3-Clause
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+tags:
+  - name: system
+    description: System health and version endpoints
+  - name: servers
+    description: PaperMC server management operations
+  - name: plugins
+    description: Plugin management operations
+  - name: namespaces
+    description: Namespace utility operations
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: |
+        Returns the health status of the API server.
+        This is a lightweight endpoint for load balancers and monitoring systems.
+      operationId: getHealth
+      tags:
+        - system
+      responses:
+        "200":
+          description: API server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: healthy
+                timestamp: "2025-01-15T10:30:00Z"
+        "503":
+          description: API server is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: unhealthy
+                timestamp: "2025-01-15T10:30:00Z"
+                error: "Kubernetes API unavailable"
+
+  /version:
+    get:
+      summary: Get API version information
+      description: |
+        Returns version information about the operator and API.
+        Useful for debugging and compatibility checks.
+      operationId: getVersion
+      tags:
+        - system
+      responses:
+        "200":
+          description: Version information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionResponse"
+              example:
+                version: "1.0.0"
+                gitCommit: "abc123def456"
+                buildDate: "2025-01-15T10:00:00Z"
+                goVersion: "go1.23.4"
+                apiVersion: "v1"
+
+  /servers:
+    get:
+      summary: List all PaperMC servers
+      description: |
+        Returns a list of all PaperMCServer resources in the cluster.
+        Can be filtered by namespace using query parameter.
+      operationId: listServers
+      tags:
+        - servers
+      parameters:
+        - name: namespace
+          in: query
+          description: Filter servers by Kubernetes namespace
+          required: false
+          schema:
+            type: string
+            example: minecraft
+      responses:
+        "200":
+          description: Successfully retrieved list of servers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerListResponse"
+              example:
+                servers:
+                  - name: survival-server
+                    namespace: minecraft
+                    currentVersion: "1.21.1-100"
+                    desiredVersion: "1.21.1-105"
+                    updateStrategy: auto
+                    status: running
+                    pluginCount: 5
+                    availableUpdate:
+                      version: "1.21.1"
+                      build: 105
+                      releasedAt: "2025-01-15T10:30:00Z"
+                    nextMaintenance: "Every Sunday at 4:00"
+                    labels:
+                      environment: production
+                      game-mode: survival
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    post:
+      summary: Create a new PaperMC server
+      description: |
+        Creates a new PaperMCServer custom resource in Kubernetes.
+        The server will be automatically reconciled by the operator.
+      operationId: createServer
+      tags:
+        - servers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServerCreateRequest"
+            example:
+              name: creative-server
+              namespace: minecraft
+              updateStrategy: auto
+              updateDelay: "168h"
+              checkCron: "0 3 * * *"
+              maintenanceWindow:
+                enabled: true
+                cron: "0 4 * * 0"
+              gracefulShutdownTimeout: "5m"
+              rcon:
+                enabled: true
+                passwordSecretName: creative-rcon-secret
+                passwordSecretKey: password
+                port: 25575
+      responses:
+        "201":
+          description: Server created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /servers/{namespace}/{name}:
+    parameters:
+      - $ref: "#/components/parameters/Namespace"
+      - $ref: "#/components/parameters/ServerName"
+
+    get:
+      summary: Get a specific server
+      description: Returns detailed information about a specific PaperMCServer resource.
+      operationId: getServer
+      tags:
+        - servers
+      responses:
+        "200":
+          description: Server details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    put:
+      summary: Update a server
+      description: |
+        Updates an existing PaperMCServer resource.
+        Only specified fields will be updated; unspecified fields remain unchanged.
+      operationId: updateServer
+      tags:
+        - servers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServerUpdateRequest"
+      responses:
+        "200":
+          description: Server updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    delete:
+      summary: Delete a server
+      description: |
+        Deletes a PaperMCServer resource. This will also delete the associated
+        StatefulSet, Service, and PVC (depending on reclaim policy).
+      operationId: deleteServer
+      tags:
+        - servers
+      responses:
+        "204":
+          description: Server deleted successfully
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /servers/{namespace}/{name}/actions/resolve:
+    parameters:
+      - $ref: "#/components/parameters/Namespace"
+      - $ref: "#/components/parameters/ServerName"
+
+    post:
+      summary: Trigger server reconciliation
+      description: |
+        Triggers immediate reconciliation of the server by setting the
+        `mc.k8s.lex.la/reconcile` annotation. This causes the operator to
+        re-evaluate the desired state and update the server if needed.
+      operationId: resolveServer
+      tags:
+        - servers
+      responses:
+        "202":
+          description: Reconciliation triggered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResponse"
+              example:
+                message: Reconciliation triggered for server survival-server
+                timestamp: "2025-01-15T10:30:00Z"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /servers/{namespace}/{name}/actions/apply-now:
+    parameters:
+      - $ref: "#/components/parameters/Namespace"
+      - $ref: "#/components/parameters/ServerName"
+
+    post:
+      summary: Apply pending updates immediately
+      description: |
+        Bypasses the maintenance window and applies pending updates immediately.
+        Sets the `mc.k8s.lex.la/apply-now` annotation which causes the Update
+        Controller to apply any pending updates without waiting for the next
+        maintenance window.
+
+        **Warning**: This will restart the server, causing brief downtime.
+      operationId: applyNowServer
+      tags:
+        - servers
+      responses:
+        "202":
+          description: Apply-now triggered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResponse"
+              example:
+                message: Apply-now triggered for server survival-server
+                timestamp: "2025-01-15T10:30:00Z"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /plugins:
+    get:
+      summary: List all plugins
+      description: |
+        Returns a list of all Plugin resources in the cluster.
+        Can be filtered by namespace using query parameter.
+      operationId: listPlugins
+      tags:
+        - plugins
+      parameters:
+        - name: namespace
+          in: query
+          description: Filter plugins by Kubernetes namespace
+          required: false
+          schema:
+            type: string
+            example: minecraft
+      responses:
+        "200":
+          description: Successfully retrieved list of plugins
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginListResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    post:
+      summary: Create a new plugin
+      description: |
+        Creates a new Plugin custom resource in Kubernetes.
+        The plugin will be automatically reconciled and matched to servers
+        based on the instance selector.
+      operationId: createPlugin
+      tags:
+        - plugins
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginCreateRequest"
+            example:
+              name: bluemap
+              namespace: minecraft
+              source:
+                type: hangar
+                project: BlueMap
+              updateStrategy: latest
+              updateDelay: "168h"
+              instanceSelector:
+                matchLabels:
+                  game-mode: survival
+      responses:
+        "201":
+          description: Plugin created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /plugins/{namespace}/{name}:
+    parameters:
+      - $ref: "#/components/parameters/Namespace"
+      - $ref: "#/components/parameters/PluginName"
+
+    get:
+      summary: Get a specific plugin
+      description: Returns detailed information about a specific Plugin resource.
+      operationId: getPlugin
+      tags:
+        - plugins
+      responses:
+        "200":
+          description: Plugin details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    put:
+      summary: Update a plugin
+      description: |
+        Updates an existing Plugin resource.
+        Only specified fields will be updated; unspecified fields remain unchanged.
+      operationId: updatePlugin
+      tags:
+        - plugins
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginUpdateRequest"
+      responses:
+        "200":
+          description: Plugin updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    delete:
+      summary: Delete a plugin
+      description: |
+        Deletes a Plugin resource. The operator will mark the plugin for
+        deletion on matched servers and remove the JAR files during the
+        next update cycle.
+      operationId: deletePlugin
+      tags:
+        - plugins
+      responses:
+        "204":
+          description: Plugin deleted successfully
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /plugins/{namespace}/{name}/actions/resolve:
+    parameters:
+      - $ref: "#/components/parameters/Namespace"
+      - $ref: "#/components/parameters/PluginName"
+
+    post:
+      summary: Trigger plugin reconciliation
+      description: |
+        Triggers immediate reconciliation of the plugin by setting the
+        `mc.k8s.lex.la/reconcile` annotation. This causes the operator to
+        re-fetch metadata from the repository and update matched servers.
+      operationId: resolvePlugin
+      tags:
+        - plugins
+      responses:
+        "202":
+          description: Reconciliation triggered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /namespaces:
+    get:
+      summary: List available namespaces
+      description: |
+        Returns a list of namespaces that contain PaperMCServer or Plugin resources.
+        Always includes the "default" namespace.
+      operationId: listNamespaces
+      tags:
+        - namespaces
+      responses:
+        "200":
+          description: Successfully retrieved list of namespaces
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NamespaceListResponse"
+              example:
+                namespaces:
+                  - default
+                  - minecraft
+                  - minecraft-staging
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+components:
+  parameters:
+    Namespace:
+      name: namespace
+      in: path
+      required: true
+      description: Kubernetes namespace
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 63
+        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        example: minecraft
+
+    ServerName:
+      name: name
+      in: path
+      required: true
+      description: PaperMCServer resource name
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 253
+        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+        example: survival-server
+
+    PluginName:
+      name: name
+      in: path
+      required: true
+      description: Plugin resource name
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 253
+        pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+        example: bluemap
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters or body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Invalid request: missing required field 'name'"
+            code: INVALID_REQUEST
+            details:
+              field: name
+              reason: required
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "PaperMCServer 'my-server' not found in namespace 'minecraft'"
+            code: NOT_FOUND
+
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "PaperMCServer 'my-server' already exists in namespace 'minecraft'"
+            code: ALREADY_EXISTS
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Failed to communicate with Kubernetes API"
+            code: INTERNAL_ERROR
+
+  schemas:
+    # ============================================================
+    # SYSTEM
+    # ============================================================
+
+    HealthResponse:
+      type: object
+      description: Health check response
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          description: Health status of the API server
+          enum:
+            - healthy
+            - unhealthy
+          example: healthy
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp when health check was performed
+          example: "2025-01-15T10:30:00Z"
+        error:
+          type: string
+          description: Error message if unhealthy
+          example: "Kubernetes API unavailable"
+
+    VersionResponse:
+      type: object
+      description: Version information about the operator
+      required:
+        - version
+        - apiVersion
+      properties:
+        version:
+          type: string
+          description: Semantic version of the operator
+          example: "1.0.0"
+        gitCommit:
+          type: string
+          description: Git commit hash of the build
+          example: "abc123def456"
+        buildDate:
+          type: string
+          format: date-time
+          description: Date and time when the operator was built
+          example: "2025-01-15T10:00:00Z"
+        goVersion:
+          type: string
+          description: Go version used to build the operator
+          example: "go1.23.4"
+        apiVersion:
+          type: string
+          description: API version
+          example: "v1"
+
+    # ============================================================
+    # ENUMS
+    # ============================================================
+
+    UpdateStrategy:
+      type: string
+      description: |
+        Defines how versions are managed for servers and plugins.
+
+        - **latest**: Always use the latest available version from the repository
+        - **auto**: Use constraint solver to find best version compatible with all dependencies
+        - **pin**: Pin to specific version, auto-update to latest build within that version
+        - **build-pin**: Pin to specific version AND build number, no automatic updates
+      enum:
+        - latest
+        - auto
+        - pin
+        - build-pin
+      example: auto
+
+    ServerStatus:
+      type: string
+      description: |
+        Current operational status of the server.
+
+        - **running**: Server is running normally with all replicas ready
+        - **updating**: Server is being updated (StatefulSet rolling update in progress)
+        - **unknown**: Status cannot be determined (no condition or StatefulSet data)
+      enum:
+        - running
+        - updating
+        - unknown
+      example: running
+
+    PluginSourceType:
+      type: string
+      description: |
+        Type of plugin repository.
+
+        - **hangar**: PaperMC Hangar repository (hangar.papermc.io)
+        - **modrinth**: Modrinth repository (modrinth.com)
+        - **spigot**: SpigotMC repository (spigotmc.org)
+        - **url**: Direct URL download (no version management)
+      enum:
+        - hangar
+        - modrinth
+        - spigot
+        - url
+      example: hangar
+
+    RepositoryStatus:
+      type: string
+      description: |
+        Status of the plugin repository connection.
+
+        - **available**: Repository is accessible and returning metadata
+        - **unavailable**: Repository is temporarily unavailable (using cached data)
+        - **orphaned**: Plugin source no longer exists in repository
+      enum:
+        - available
+        - unavailable
+        - orphaned
+      example: available
+
+    ServiceType:
+      type: string
+      description: |
+        Kubernetes Service type for the server.
+
+        - **LoadBalancer**: External load balancer (requires cloud provider or MetalLB)
+        - **NodePort**: Expose on a static port on each node
+        - **ClusterIP**: Internal cluster IP only
+      enum:
+        - LoadBalancer
+        - NodePort
+        - ClusterIP
+      default: LoadBalancer
+      example: LoadBalancer
+
+    ConditionStatus:
+      type: string
+      description: Status of a condition (True, False, or Unknown)
+      enum:
+        - "True"
+        - "False"
+        - Unknown
+      example: "True"
+
+    # ============================================================
+    # SERVER SCHEMAS
+    # ============================================================
+
+    ServerListResponse:
+      type: object
+      required:
+        - servers
+      properties:
+        servers:
+          type: array
+          description: List of server summaries
+          items:
+            $ref: "#/components/schemas/ServerSummary"
+
+    ServerSummary:
+      type: object
+      description: Summary information about a PaperMCServer
+      required:
+        - name
+        - namespace
+        - updateStrategy
+        - status
+      properties:
+        name:
+          type: string
+          description: Kubernetes resource name
+          minLength: 1
+          maxLength: 253
+          example: survival-server
+        namespace:
+          type: string
+          description: Kubernetes namespace
+          example: minecraft
+        currentVersion:
+          type: string
+          description: Currently running Paper version with build number (e.g., "1.21.1-100")
+          example: "1.21.1-100"
+        desiredVersion:
+          type: string
+          description: Target Paper version the operator wants to run
+          example: "1.21.1-105"
+        updateStrategy:
+          $ref: "#/components/schemas/UpdateStrategy"
+        status:
+          $ref: "#/components/schemas/ServerStatus"
+        pluginCount:
+          type: integer
+          description: Number of plugins matched to this server
+          minimum: 0
+          example: 5
+        availableUpdate:
+          $ref: "#/components/schemas/AvailableUpdate"
+        nextMaintenance:
+          type: string
+          description: Human-readable description of next maintenance window
+          example: "Every Sunday at 4:00"
+        labels:
+          type: object
+          description: Kubernetes labels from the server resource
+          additionalProperties:
+            type: string
+          example:
+            environment: production
+            game-mode: survival
+
+    ServerDetail:
+      type: object
+      description: Detailed information about a PaperMCServer including plugins and schedules
+      allOf:
+        - $ref: "#/components/schemas/ServerSummary"
+        - type: object
+          properties:
+            currentBuild:
+              type: integer
+              description: Currently running Paper build number
+              minimum: 1
+              example: 100
+            desiredBuild:
+              type: integer
+              description: Target Paper build number
+              minimum: 1
+              example: 105
+            plugins:
+              type: array
+              description: List of plugins matched to this server
+              items:
+                $ref: "#/components/schemas/ServerPlugin"
+            maintenanceSchedule:
+              $ref: "#/components/schemas/MaintenanceSchedule"
+            lastUpdate:
+              $ref: "#/components/schemas/UpdateHistory"
+            updateBlocked:
+              $ref: "#/components/schemas/UpdateBlockedStatus"
+            conditions:
+              type: array
+              description: Kubernetes conditions for the server
+              items:
+                $ref: "#/components/schemas/Condition"
+            rcon:
+              $ref: "#/components/schemas/RCONStatus"
+            service:
+              $ref: "#/components/schemas/ServiceStatus"
+
+    ServerPlugin:
+      type: object
+      description: Status of a plugin on a specific server
+      required:
+        - name
+        - compatible
+      properties:
+        name:
+          type: string
+          description: Plugin resource name
+          example: bluemap
+        namespace:
+          type: string
+          description: Plugin resource namespace
+          example: minecraft
+        project:
+          type: string
+          description: Project identifier in the repository
+          example: BlueMap
+        source:
+          type: string
+          description: Plugin source type
+          example: hangar
+        resolvedVersion:
+          type: string
+          description: Version resolved by the constraint solver
+          example: "5.4"
+        currentVersion:
+          type: string
+          description: Currently installed version on the server
+          example: "5.3"
+        desiredVersion:
+          type: string
+          description: Target version to install
+          example: "5.4"
+        compatible:
+          type: boolean
+          description: Whether the plugin is compatible with the server version
+          example: true
+        pendingDeletion:
+          type: boolean
+          description: Whether the plugin is marked for removal
+          default: false
+          example: false
+        installedJarName:
+          type: string
+          description: Filename of the installed JAR in /data/plugins/
+          example: "BlueMap-5.4-paper.jar"
+
+    ServerCreateRequest:
+      type: object
+      description: Request body for creating a new PaperMCServer
+      required:
+        - name
+        - namespace
+        - updateStrategy
+      properties:
+        name:
+          type: string
+          description: Kubernetes resource name (must be valid DNS subdomain)
+          minLength: 1
+          maxLength: 253
+          pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+          example: creative-server
+        namespace:
+          type: string
+          description: Kubernetes namespace to create the server in
+          example: minecraft
+        updateStrategy:
+          $ref: "#/components/schemas/UpdateStrategy"
+        version:
+          type: string
+          description: |
+            Target Paper version (required for pin and build-pin strategies).
+            Example: "1.21.1" for Minecraft 1.21.1
+          pattern: "^\\d+\\.\\d+(\\.\\d+)?$"
+          example: "1.21.1"
+        build:
+          type: integer
+          description: |
+            Target Paper build number (required for build-pin strategy).
+            For pin strategy, serves as minimum build.
+          minimum: 1
+          example: 100
+        updateDelay:
+          type: string
+          description: |
+            Grace period before applying updates (Go duration format).
+            Examples: "168h" (7 days), "24h", "30m"
+          pattern: "^(\\d+h)?(\\d+m)?(\\d+s)?$"
+          example: "168h"
+        checkCron:
+          type: string
+          description: |
+            Cron expression for update checks.
+            Format: minute hour day month weekday
+          example: "0 3 * * *"
+        maintenanceWindow:
+          $ref: "#/components/schemas/MaintenanceWindowConfig"
+        gracefulShutdownTimeout:
+          type: string
+          description: |
+            Graceful shutdown timeout (Go duration format).
+            Must match StatefulSet terminationGracePeriodSeconds.
+          default: "5m"
+          example: "5m"
+        rcon:
+          $ref: "#/components/schemas/RCONConfig"
+        service:
+          $ref: "#/components/schemas/ServiceConfig"
+        labels:
+          type: object
+          description: Labels to apply to the server resource
+          additionalProperties:
+            type: string
+          example:
+            environment: production
+            game-mode: creative
+
+    ServerUpdateRequest:
+      type: object
+      description: Request body for updating an existing PaperMCServer
+      properties:
+        updateStrategy:
+          $ref: "#/components/schemas/UpdateStrategy"
+        version:
+          type: string
+          description: Target Paper version
+          example: "1.21.1"
+        build:
+          type: integer
+          description: Target Paper build number
+          minimum: 1
+        updateDelay:
+          type: string
+          description: Grace period before applying updates
+          example: "168h"
+        checkCron:
+          type: string
+          description: Cron expression for update checks
+          example: "0 3 * * *"
+        maintenanceWindow:
+          $ref: "#/components/schemas/MaintenanceWindowConfig"
+        labels:
+          type: object
+          description: Labels to set on the server resource
+          additionalProperties:
+            type: string
+
+    # ============================================================
+    # PLUGIN SCHEMAS
+    # ============================================================
+
+    PluginListResponse:
+      type: object
+      required:
+        - plugins
+      properties:
+        plugins:
+          type: array
+          description: List of plugin summaries
+          items:
+            $ref: "#/components/schemas/PluginSummary"
+
+    PluginSummary:
+      type: object
+      description: Summary information about a Plugin
+      required:
+        - name
+        - namespace
+        - sourceType
+        - updateStrategy
+      properties:
+        name:
+          type: string
+          description: Kubernetes resource name
+          example: bluemap
+        namespace:
+          type: string
+          description: Kubernetes namespace
+          example: minecraft
+        sourceType:
+          $ref: "#/components/schemas/PluginSourceType"
+        project:
+          type: string
+          description: Project identifier in the repository
+          example: BlueMap
+        url:
+          type: string
+          description: Direct download URL (for type=url)
+          format: uri
+          example: "https://example.com/plugin.jar"
+        updateStrategy:
+          $ref: "#/components/schemas/UpdateStrategy"
+        version:
+          type: string
+          description: Pinned version (for pin/build-pin strategies)
+          example: "5.4"
+        build:
+          type: integer
+          description: Pinned build number (for build-pin strategy)
+          minimum: 1
+        resolvedVersion:
+          type: string
+          description: Version resolved by the constraint solver
+          example: "5.4"
+        matchedServers:
+          type: integer
+          description: Number of servers this plugin is matched to
+          minimum: 0
+          example: 3
+        repositoryStatus:
+          $ref: "#/components/schemas/RepositoryStatus"
+
+    PluginDetail:
+      type: object
+      description: Detailed information about a Plugin
+      allOf:
+        - $ref: "#/components/schemas/PluginSummary"
+        - type: object
+          properties:
+            updateDelay:
+              type: string
+              description: Grace period before applying updates
+              example: "168h"
+            port:
+              type: integer
+              description: Network port exposed by the plugin (added to Service)
+              minimum: 1
+              maximum: 65535
+              example: 8123
+            lastFetched:
+              type: string
+              format: date-time
+              description: When metadata was last fetched from repository
+              example: "2025-01-15T10:30:00Z"
+            availableVersions:
+              type: array
+              description: Cached version metadata from repository
+              items:
+                $ref: "#/components/schemas/PluginVersion"
+            matchedInstances:
+              type: array
+              description: List of servers this plugin is matched to
+              items:
+                $ref: "#/components/schemas/MatchedInstance"
+            instanceSelector:
+              $ref: "#/components/schemas/LabelSelector"
+            compatibilityOverride:
+              $ref: "#/components/schemas/CompatibilityOverride"
+            deletionProgress:
+              type: array
+              description: JAR cleanup progress during plugin deletion
+              items:
+                $ref: "#/components/schemas/DeletionProgressEntry"
+            conditions:
+              type: array
+              description: Kubernetes conditions for the plugin
+              items:
+                $ref: "#/components/schemas/Condition"
+
+    PluginVersion:
+      type: object
+      description: Metadata about a specific plugin version
+      required:
+        - version
+        - minecraftVersions
+        - downloadUrl
+      properties:
+        version:
+          type: string
+          description: Plugin version string
+          example: "5.4"
+        minecraftVersions:
+          type: array
+          description: Compatible Minecraft versions
+          items:
+            type: string
+          example:
+            - "1.20.4"
+            - "1.21"
+            - "1.21.1"
+        downloadUrl:
+          type: string
+          format: uri
+          description: URL to download this version
+          example: "https://hangar.papermc.io/api/v1/projects/BlueMap/versions/5.4/download"
+        hash:
+          type: string
+          description: SHA256 hash of the JAR file
+          example: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        releasedAt:
+          type: string
+          format: date-time
+          description: When this version was released
+          example: "2025-01-10T15:00:00Z"
+        cachedAt:
+          type: string
+          format: date-time
+          description: When this metadata was cached
+          example: "2025-01-15T10:30:00Z"
+
+    MatchedInstance:
+      type: object
+      description: A server instance matched by the plugin's instance selector
+      required:
+        - name
+        - namespace
+        - compatible
+      properties:
+        name:
+          type: string
+          description: Server resource name
+          example: survival-server
+        namespace:
+          type: string
+          description: Server namespace
+          example: minecraft
+        version:
+          type: string
+          description: Server's current Paper version
+          example: "1.21.1"
+        compatible:
+          type: boolean
+          description: Whether the plugin is compatible with this server
+          example: true
+
+    PluginCreateRequest:
+      type: object
+      description: Request body for creating a new Plugin
+      required:
+        - name
+        - namespace
+        - source
+        - instanceSelector
+      properties:
+        name:
+          type: string
+          description: Kubernetes resource name
+          minLength: 1
+          maxLength: 253
+          pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+          example: bluemap
+        namespace:
+          type: string
+          description: Kubernetes namespace
+          example: minecraft
+        source:
+          $ref: "#/components/schemas/PluginSource"
+        updateStrategy:
+          $ref: "#/components/schemas/UpdateStrategy"
+        version:
+          type: string
+          description: Pinned version (required for pin/build-pin strategies)
+          example: "5.4"
+        build:
+          type: integer
+          description: Pinned build number (for build-pin strategy)
+          minimum: 1
+        updateDelay:
+          type: string
+          description: Grace period before applying updates
+          example: "168h"
+        port:
+          type: integer
+          description: Network port to expose via Service
+          minimum: 1
+          maximum: 65535
+          example: 8123
+        instanceSelector:
+          $ref: "#/components/schemas/LabelSelector"
+        compatibilityOverride:
+          $ref: "#/components/schemas/CompatibilityOverride"
+
+    PluginUpdateRequest:
+      type: object
+      description: Request body for updating an existing Plugin
+      properties:
+        source:
+          $ref: "#/components/schemas/PluginSource"
+        updateStrategy:
+          $ref: "#/components/schemas/UpdateStrategy"
+        version:
+          type: string
+          description: Pinned version
+        build:
+          type: integer
+          description: Pinned build number
+          minimum: 1
+        updateDelay:
+          type: string
+          description: Grace period before applying updates
+        port:
+          type: integer
+          description: Network port to expose
+          minimum: 1
+          maximum: 65535
+        instanceSelector:
+          $ref: "#/components/schemas/LabelSelector"
+        compatibilityOverride:
+          $ref: "#/components/schemas/CompatibilityOverride"
+
+    PluginSource:
+      type: object
+      description: Plugin source configuration
+      required:
+        - type
+      properties:
+        type:
+          $ref: "#/components/schemas/PluginSourceType"
+        project:
+          type: string
+          description: |
+            Project identifier in the repository.
+            Required for hangar, modrinth, and spigot types.
+          example: BlueMap
+        url:
+          type: string
+          format: uri
+          description: |
+            Direct download URL.
+            Required for url type.
+          example: "https://example.com/plugin.jar"
+
+    # ============================================================
+    # COMMON SCHEMAS
+    # ============================================================
+
+    AvailableUpdate:
+      type: object
+      description: Information about an available update
+      properties:
+        version:
+          type: string
+          description: Available Paper version
+          example: "1.21.1"
+        build:
+          type: integer
+          description: Available Paper build number
+          minimum: 1
+          example: 105
+        releasedAt:
+          type: string
+          format: date-time
+          description: When this version was released
+          example: "2025-01-15T10:30:00Z"
+        foundAt:
+          type: string
+          format: date-time
+          description: When this update was discovered
+          example: "2025-01-15T11:00:00Z"
+        plugins:
+          type: array
+          description: Plugin versions for this update
+          items:
+            $ref: "#/components/schemas/PluginVersionPair"
+
+    PluginVersionPair:
+      type: object
+      description: A plugin paired with its version for an update
+      properties:
+        name:
+          type: string
+          description: Plugin name
+          example: bluemap
+        namespace:
+          type: string
+          description: Plugin namespace
+          example: minecraft
+        version:
+          type: string
+          description: Plugin version
+          example: "5.4"
+
+    MaintenanceSchedule:
+      type: object
+      description: Maintenance schedule configuration
+      properties:
+        checkCron:
+          type: string
+          description: Cron expression for update checks
+          example: "0 3 * * *"
+        windowCron:
+          type: string
+          description: Cron expression for maintenance window
+          example: "0 4 * * 0"
+        nextWindow:
+          type: string
+          description: Human-readable next maintenance window
+          example: "Every Sunday at 4:00"
+        enabled:
+          type: boolean
+          description: Whether maintenance window is enabled
+          example: true
+
+    MaintenanceWindowConfig:
+      type: object
+      description: Maintenance window configuration for create/update requests
+      properties:
+        enabled:
+          type: boolean
+          description: Whether to enable maintenance window
+          default: false
+          example: true
+        cron:
+          type: string
+          description: Cron expression for maintenance window
+          example: "0 4 * * 0"
+
+    UpdateHistory:
+      type: object
+      description: Record of the last update attempt
+      properties:
+        appliedAt:
+          type: string
+          format: date-time
+          description: When the update was applied
+          example: "2025-01-14T04:00:00Z"
+        previousVersion:
+          type: string
+          description: Version before the update
+          example: "1.21.1-95"
+        successful:
+          type: boolean
+          description: Whether the update succeeded
+          example: true
+
+    UpdateBlockedStatus:
+      type: object
+      description: Information about blocked updates
+      properties:
+        blocked:
+          type: boolean
+          description: Whether updates are currently blocked
+          example: true
+        reason:
+          type: string
+          description: Human-readable reason for the block
+          example: "Plugin 'bluemap' is incompatible with target version"
+        blockedBy:
+          $ref: "#/components/schemas/BlockedByInfo"
+
+    BlockedByInfo:
+      type: object
+      description: Details about what is blocking an update
+      properties:
+        plugin:
+          type: string
+          description: Name of the blocking plugin
+          example: bluemap
+        version:
+          type: string
+          description: Version of the blocking plugin
+          example: "5.3"
+        supportedVersions:
+          type: array
+          description: Minecraft versions this plugin supports
+          items:
+            type: string
+          example:
+            - "1.20.4"
+            - "1.21"
+
+    RCONConfig:
+      type: object
+      description: RCON configuration for create/update requests
+      properties:
+        enabled:
+          type: boolean
+          description: Whether RCON is enabled
+          default: false
+          example: true
+        passwordSecretName:
+          type: string
+          description: Name of the Secret containing the RCON password
+          example: my-rcon-secret
+        passwordSecretKey:
+          type: string
+          description: Key within the Secret containing the password
+          default: password
+          example: password
+        port:
+          type: integer
+          description: RCON port
+          minimum: 1
+          maximum: 65535
+          default: 25575
+          example: 25575
+
+    RCONStatus:
+      type: object
+      description: RCON status information
+      properties:
+        enabled:
+          type: boolean
+          description: Whether RCON is enabled
+          example: true
+        port:
+          type: integer
+          description: RCON port
+          example: 25575
+
+    ServiceConfig:
+      type: object
+      description: Kubernetes Service configuration
+      properties:
+        type:
+          $ref: "#/components/schemas/ServiceType"
+        annotations:
+          type: object
+          description: Custom annotations for the Service
+          additionalProperties:
+            type: string
+          example:
+            metallb.universe.tf/loadBalancerIPs: "192.168.1.100"
+        loadBalancerIP:
+          type: string
+          description: Static IP for LoadBalancer type
+          format: ipv4
+          example: "192.168.1.100"
+
+    ServiceStatus:
+      type: object
+      description: Service status information
+      properties:
+        type:
+          $ref: "#/components/schemas/ServiceType"
+        clusterIP:
+          type: string
+          description: Cluster IP address
+          example: "10.96.100.50"
+        externalIP:
+          type: string
+          description: External IP address (for LoadBalancer)
+          example: "192.168.1.100"
+
+    LabelSelector:
+      type: object
+      description: Kubernetes label selector
+      properties:
+        matchLabels:
+          type: object
+          description: Labels that must match exactly
+          additionalProperties:
+            type: string
+          example:
+            game-mode: survival
+            environment: production
+        matchExpressions:
+          type: array
+          description: Label selector expressions
+          items:
+            $ref: "#/components/schemas/LabelSelectorRequirement"
+
+    LabelSelectorRequirement:
+      type: object
+      description: A label selector requirement
+      required:
+        - key
+        - operator
+      properties:
+        key:
+          type: string
+          description: Label key
+          example: environment
+        operator:
+          type: string
+          description: Operator (In, NotIn, Exists, DoesNotExist)
+          enum:
+            - In
+            - NotIn
+            - Exists
+            - DoesNotExist
+          example: In
+        values:
+          type: array
+          description: Values for In/NotIn operators
+          items:
+            type: string
+          example:
+            - production
+            - staging
+
+    CompatibilityOverride:
+      type: object
+      description: Manual compatibility specification
+      properties:
+        enabled:
+          type: boolean
+          description: Whether to use override instead of API metadata
+          example: true
+        minecraftVersions:
+          type: array
+          description: Supported Minecraft versions
+          items:
+            type: string
+          example:
+            - "1.20.4"
+            - "1.21"
+            - "1.21.1"
+
+    DeletionProgressEntry:
+      type: object
+      description: JAR cleanup progress for a server
+      required:
+        - serverName
+        - namespace
+        - jarDeleted
+      properties:
+        serverName:
+          type: string
+          description: Server name
+          example: survival-server
+        namespace:
+          type: string
+          description: Server namespace
+          example: minecraft
+        jarDeleted:
+          type: boolean
+          description: Whether the JAR has been deleted
+          example: false
+        deletedAt:
+          type: string
+          format: date-time
+          description: When the JAR was deleted
+          example: "2025-01-15T10:30:00Z"
+
+    Condition:
+      type: object
+      description: Kubernetes condition
+      required:
+        - type
+        - status
+      properties:
+        type:
+          type: string
+          description: Condition type
+          example: Ready
+        status:
+          $ref: "#/components/schemas/ConditionStatus"
+        reason:
+          type: string
+          description: Machine-readable reason for the condition
+          example: ReconciliationSucceeded
+        message:
+          type: string
+          description: Human-readable message
+          example: "Server is running and ready"
+        lastTransitionTime:
+          type: string
+          format: date-time
+          description: When the condition last changed
+          example: "2025-01-15T10:30:00Z"
+        observedGeneration:
+          type: integer
+          description: Generation of the resource when condition was set
+          format: int64
+          example: 5
+
+    ActionResponse:
+      type: object
+      description: Response for action endpoints
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Human-readable result message
+          example: "Reconciliation triggered for server survival-server"
+        timestamp:
+          type: string
+          format: date-time
+          description: When the action was triggered
+          example: "2025-01-15T10:30:00Z"
+
+    NamespaceListResponse:
+      type: object
+      required:
+        - namespaces
+      properties:
+        namespaces:
+          type: array
+          description: List of namespace names
+          items:
+            type: string
+          example:
+            - default
+            - minecraft
+            - minecraft-staging
+
+    ErrorResponse:
+      type: object
+      description: Error response body
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+          example: "Failed to get server: not found"
+        code:
+          type: string
+          description: Machine-readable error code
+          enum:
+            - INVALID_REQUEST
+            - NOT_FOUND
+            - ALREADY_EXISTS
+            - INTERNAL_ERROR
+            - FORBIDDEN
+            - UNAUTHORIZED
+          example: NOT_FOUND
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+          example:
+            field: name
+            reason: invalid format

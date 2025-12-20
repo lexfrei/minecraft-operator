@@ -1,0 +1,13 @@
+# oapi-codegen configuration
+# See: https://github.com/oapi-codegen/oapi-codegen
+
+package: generated
+output: api/openapi/generated/api.gen.go
+
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+
+output-options:
+  skip-prune: false

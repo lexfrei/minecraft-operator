@@ -1,0 +1,244 @@
+package templates
+
+// ServerFormData contains data for the server create/edit form.
+type ServerFormData struct {
+	IsEdit             bool
+	Name               string
+	Namespace          string
+	Strategy           string
+	Version            string
+	Build              string
+	UpdateDelay        string
+	CheckCron          string
+	MaintenanceEnabled bool
+	MaintenanceCron    string
+	Namespaces         []string
+	Error              string
+}
+
+templ ServerForm(data ServerFormData) {
+	@Layout(serverFormTitle(data.IsEdit)) {
+		<div class="card">
+			<div style="margin-bottom: 20px;">
+				<a href="/ui" style="font-size: 14px;">← Back to Dashboard</a>
+			</div>
+			<h2 style="margin-bottom: 20px;">
+				if data.IsEdit {
+					Edit Server
+				} else {
+					Create New Server
+				}
+			</h2>
+			if data.Error != "" {
+				<div style="background-color: rgba(244, 67, 54, 0.15); border: 1px solid var(--error); color: var(--error); padding: 12px; border-radius: 4px; margin-bottom: 20px;">
+					{ data.Error }
+				</div>
+			}
+			<form method="POST" style="display: flex; flex-direction: column; gap: 20px;">
+				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+					<div>
+						<label for="name" style="display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">Server Name *</label>
+						<input
+							type="text"
+							id="name"
+							name="name"
+							value={ data.Name }
+							required
+							if data.IsEdit {
+								readonly
+							}
+							style="width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;"
+							placeholder="my-server"
+						/>
+						<p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Lowercase letters, numbers, and hyphens only</p>
+					</div>
+					<div>
+						<label for="namespace" style="display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">Namespace *</label>
+						<select
+							id="namespace"
+							name="namespace"
+							required
+							if data.IsEdit {
+								disabled
+							}
+							style="width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;"
+						>
+							for _, ns := range data.Namespaces {
+								if ns == data.Namespace {
+									<option value={ ns } selected>{ ns }</option>
+								} else {
+									<option value={ ns }>{ ns }</option>
+								}
+							}
+						</select>
+						if data.IsEdit {
+							<input type="hidden" name="namespace" value={ data.Namespace }/>
+						}
+					</div>
+				</div>
+				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+					<div>
+						<label for="updateStrategy" style="display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">Update Strategy *</label>
+						<select
+							id="updateStrategy"
+							name="updateStrategy"
+							required
+							style="width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;"
+							onchange="updateVersionFields(this.value);"
+						>
+							<option value="latest" selected?={ data.Strategy == "latest" || data.Strategy == "" }>Latest (always newest Paper version)</option>
+							<option value="auto" selected?={ data.Strategy == "auto" }>Auto (newest compatible with plugins)</option>
+							<option value="pin" selected?={ data.Strategy == "pin" }>Pin (specific version, latest build)</option>
+							<option value="build-pin" selected?={ data.Strategy == "build-pin" }>Build Pin (specific version and build)</option>
+						</select>
+						<p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Defines how Paper MC version is managed</p>
+					</div>
+					<div id="version-field" style={ serverVersionFieldStyle(data.Strategy) }>
+						<label for="version" style="display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">Paper Version</label>
+						<input
+							type="text"
+							id="version"
+							name="version"
+							value={ data.Version }
+							style="width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;"
+							placeholder="1.21.1"
+						/>
+						<p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Required for pin and build-pin strategies</p>
+					</div>
+				</div>
+				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+					<div id="build-field" style={ serverBuildFieldStyle(data.Strategy) }>
+						<label for="build" style="display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">Paper Build</label>
+						<input
+							type="number"
+							id="build"
+							name="build"
+							value={ data.Build }
+							min="1"
+							style="width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;"
+							placeholder="91"
+						/>
+						<p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Required for build-pin strategy</p>
+					</div>
+					<div>
+						<label for="updateDelay" style="display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">Update Delay</label>
+						<input
+							type="text"
+							id="updateDelay"
+							name="updateDelay"
+							value={ data.UpdateDelay }
+							style="width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;"
+							placeholder="168h"
+						/>
+						<p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Grace period before applying updates (e.g., 168h for 7 days)</p>
+					</div>
+				</div>
+				<h3 style="margin-top: 10px; margin-bottom: 0; color: var(--text-secondary);">Schedule Settings</h3>
+				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+					<div>
+						<label for="checkCron" style="display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">Check Schedule (Cron)</label>
+						<input
+							type="text"
+							id="checkCron"
+							name="checkCron"
+							value={ data.CheckCron }
+							style="width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;"
+							placeholder="0 4 * * *"
+						/>
+						<p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">When to check for updates (cron format)</p>
+					</div>
+					<div>
+						<label style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px; cursor: pointer;">
+							<input
+								type="checkbox"
+								id="maintenanceEnabled"
+								name="maintenanceEnabled"
+								checked?={ data.MaintenanceEnabled }
+								onchange="document.getElementById('maintenance-cron-field').style.display = this.checked ? 'block' : 'none';"
+								style="width: 18px; height: 18px; cursor: pointer;"
+							/>
+							Enable Maintenance Window
+						</label>
+						<p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Updates only applied during maintenance window</p>
+					</div>
+				</div>
+				<div id="maintenance-cron-field" style={ maintenanceCronFieldStyle(data.MaintenanceEnabled) }>
+					<label for="maintenanceCron" style="display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">Maintenance Window (Cron)</label>
+					<input
+						type="text"
+						id="maintenanceCron"
+						name="maintenanceCron"
+						value={ data.MaintenanceCron }
+						style="width: 100%; max-width: 250px; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;"
+						placeholder="0 4 * * 0"
+					/>
+					<p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">When updates can be applied (e.g., Sunday at 4am)</p>
+				</div>
+				<div style="display: flex; gap: 15px; margin-top: 10px;">
+					<button
+						type="submit"
+						style="background-color: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 4px; font-size: 14px; cursor: pointer; font-weight: 600;"
+					>
+						if data.IsEdit {
+							Update Server
+						} else {
+							Create Server
+						}
+					</button>
+					<a
+						href="/ui"
+						style="background-color: var(--bg-tertiary); color: var(--text-primary); padding: 12px 24px; border-radius: 4px; font-size: 14px; text-decoration: none; font-weight: 600;"
+					>
+						Cancel
+					</a>
+				</div>
+			</form>
+		</div>
+		<script>
+			function updateVersionFields(strategy) {
+				var versionField = document.getElementById('version-field');
+				var buildField = document.getElementById('build-field');
+
+				if (strategy === 'pin' || strategy === 'build-pin') {
+					versionField.style.display = 'block';
+				} else {
+					versionField.style.display = 'none';
+				}
+
+				if (strategy === 'build-pin') {
+					buildField.style.display = 'block';
+				} else {
+					buildField.style.display = 'none';
+				}
+			}
+		</script>
+	}
+}
+
+func serverFormTitle(isEdit bool) string {
+	if isEdit {
+		return "Edit Server"
+	}
+	return "New Server"
+}
+
+func serverVersionFieldStyle(strategy string) string {
+	if strategy == "pin" || strategy == "build-pin" {
+		return "display: block;"
+	}
+	return "display: none;"
+}
+
+func serverBuildFieldStyle(strategy string) string {
+	if strategy == "build-pin" {
+		return "display: block;"
+	}
+	return "display: none;"
+}
+
+func maintenanceCronFieldStyle(enabled bool) string {
+	if enabled {
+		return "display: block;"
+	}
+	return "display: none;"
+}

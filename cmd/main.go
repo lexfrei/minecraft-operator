@@ -24,6 +24,7 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	goruntime "runtime"
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -42,6 +43,7 @@ import (
 
 	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
 	"github.com/lexfrei/minecraft-operator/internal/controller"
+	"github.com/lexfrei/minecraft-operator/pkg/api"
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/registry"
@@ -52,6 +54,11 @@ import (
 )
 
 var (
+	// Version information set via ldflags.
+	version   = "dev"
+	gitCommit = "unknown"
+	buildDate = ""
+
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -290,7 +297,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize and start Web UI server
+	// Initialize and start Web UI server with REST API
 	if webuiEnabled {
 		// Use operator namespace if webui-namespace not specified
 		uiNamespace := webuiNamespace
@@ -301,12 +308,21 @@ func main() {
 			}
 		}
 
-		webuiServer := webui.NewServer(mgr.GetClient(), uiNamespace, webuiAddr)
+		// Create API server with version info
+		apiServer := api.NewServer(mgr.GetClient(), api.VersionInfo{
+			Version:   version,
+			GitCommit: gitCommit,
+			BuildDate: buildDate,
+			GoVersion: goruntime.Version(),
+		})
+
+		// Create webui server with API handler
+		webuiServer := webui.NewServer(mgr.GetClient(), uiNamespace, webuiAddr, apiServer.Handler())
 		if err := mgr.Add(webuiServer); err != nil {
 			setupLog.Error(err, "unable to add webui server to manager")
 			os.Exit(1)
 		}
-		setupLog.Info("web ui server enabled", "address", webuiAddr, "namespace", uiNamespace)
+		setupLog.Info("web ui and api server enabled", "address", webuiAddr, "namespace", uiNamespace)
 	}
 
 	setupLog.Info("starting manager")

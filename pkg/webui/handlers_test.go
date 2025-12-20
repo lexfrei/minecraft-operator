@@ -12,6 +12,7 @@ import (
 
 	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
 	"github.com/lexfrei/minecraft-operator/internal/controller"
+	"github.com/lexfrei/minecraft-operator/pkg/service"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -77,68 +78,6 @@ func TestFormatCronSchedule(t *testing.T) {
 				t.Errorf("formatCronSchedule(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
-	}
-}
-
-func TestDetermineServerStatusRunningWithCondition(t *testing.T) {
-	t.Parallel()
-	server := &mck8slexlav1alpha1.PaperMCServer{
-		Status: mck8slexlav1alpha1.PaperMCServerStatus{
-			Conditions: []metav1.Condition{
-				{Type: "StatefulSetReady", Status: metav1.ConditionTrue},
-			},
-		},
-	}
-	if got := determineServerStatus(server); got != statusRunning {
-		t.Errorf("expected %s, got %q", statusRunning, got)
-	}
-}
-
-func TestDetermineServerStatusUpdating(t *testing.T) {
-	t.Parallel()
-	server := &mck8slexlav1alpha1.PaperMCServer{
-		Status: mck8slexlav1alpha1.PaperMCServerStatus{
-			Conditions: []metav1.Condition{
-				{Type: "StatefulSetReady", Status: metav1.ConditionFalse, Reason: "Updating"},
-			},
-		},
-	}
-	if got := determineServerStatus(server); got != statusUpdating {
-		t.Errorf("expected %s, got %q", statusUpdating, got)
-	}
-}
-
-func TestDetermineServerStatusUnknownWithFalseCondition(t *testing.T) {
-	t.Parallel()
-	server := &mck8slexlav1alpha1.PaperMCServer{
-		Status: mck8slexlav1alpha1.PaperMCServerStatus{
-			Conditions: []metav1.Condition{
-				{Type: "StatefulSetReady", Status: metav1.ConditionFalse, Reason: "NotReady"},
-			},
-		},
-	}
-	if got := determineServerStatus(server); got != statusUnknown {
-		t.Errorf("expected %s, got %q", statusUnknown, got)
-	}
-}
-
-func TestDetermineServerStatusRunningWithVersionFallback(t *testing.T) {
-	t.Parallel()
-	server := &mck8slexlav1alpha1.PaperMCServer{
-		Status: mck8slexlav1alpha1.PaperMCServerStatus{CurrentVersion: "1.21.10"},
-	}
-	if got := determineServerStatus(server); got != statusRunning {
-		t.Errorf("expected %s, got %q", statusRunning, got)
-	}
-}
-
-func TestDetermineServerStatusUnknownWithNoData(t *testing.T) {
-	t.Parallel()
-	server := &mck8slexlav1alpha1.PaperMCServer{
-		Status: mck8slexlav1alpha1.PaperMCServerStatus{},
-	}
-	if got := determineServerStatus(server); got != statusUnknown {
-		t.Errorf("expected %s, got %q", statusUnknown, got)
 	}
 }
 
@@ -235,9 +174,11 @@ func newTestServer(objs ...client.Object) *Server {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
 	return &Server{
-		client:    fakeClient,
-		namespace: "default",
-		sse:       NewSSEBroker(),
+		client:        fakeClient,
+		namespace:     "default",
+		sse:           NewSSEBroker(),
+		serverService: service.NewServerService(fakeClient),
+		pluginService: service.NewPluginService(fakeClient),
 	}
 }
 

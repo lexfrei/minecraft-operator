@@ -8,31 +8,38 @@ import (
 
 	"github.com/cockroachdb/errors"
 	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	"github.com/lexfrei/minecraft-operator/pkg/service"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // Server represents the Web UI HTTP server.
 type Server struct {
-	client    client.Client
-	namespace string
-	server    *http.Server
-	sse       *SSEBroker
+	client        client.Client
+	namespace     string
+	server        *http.Server
+	sse           *SSEBroker
+	serverService *service.ServerService
+	pluginService *service.PluginService
 }
 
 // NewServer creates a new Web UI server instance.
-func NewServer(k8sClient client.Client, namespace string, bindAddress string) *Server {
+// apiHandler is optional - if provided, it will be mounted at /api/v1/.
+func NewServer(k8sClient client.Client, namespace string, bindAddress string, apiHandler http.Handler) *Server {
 	sse := NewSSEBroker()
 	srv := &Server{
-		client:    k8sClient,
-		namespace: namespace,
-		sse:       sse,
+		client:        k8sClient,
+		namespace:     namespace,
+		sse:           sse,
+		serverService: service.NewServerService(k8sClient),
+		pluginService: service.NewPluginService(k8sClient),
 	}
 
 	mux := http.NewServeMux()
 
-	// Register routes
+	// Register UI routes
 	mux.HandleFunc("/ui", srv.handleDashboard)
+	mux.HandleFunc("/ui/server/new", srv.handleServerCreate)
 	mux.HandleFunc("/ui/server/", srv.handleServerRoutes)
 	mux.HandleFunc("/ui/events", srv.handleSSE)
 	mux.HandleFunc("/ui/server/resolve", srv.handleServerResolve)
@@ -43,6 +50,11 @@ func NewServer(k8sClient client.Client, namespace string, bindAddress string) *S
 	mux.HandleFunc("/ui/plugins", srv.handlePluginList)
 	mux.HandleFunc("/ui/plugin/new", srv.handlePluginCreate)
 	mux.HandleFunc("/ui/plugin/", srv.handlePluginRoutes)
+
+	// Register API routes if handler provided
+	if apiHandler != nil {
+		mux.Handle("/api/v1/", http.StripPrefix("/api/v1", apiHandler))
+	}
 
 	srv.server = &http.Server{
 		Addr:              bindAddress,
@@ -313,50 +325,10 @@ func (s *Server) handlePluginResolve(w http.ResponseWriter, r *http.Request) {
 
 // triggerPluginReconciliation triggers plugin reconciliation by adding an annotation.
 func (s *Server) triggerPluginReconciliation(ctx context.Context, name, namespace string) error {
-	var plugin mck8slexlav1alpha1.Plugin
-
-	// Get plugin from cluster
-	if err := s.client.Get(ctx, client.ObjectKey{
-		Name:      name,
-		Namespace: namespace,
-	}, &plugin); err != nil {
-		return errors.Wrap(err, "failed to get plugin")
-	}
-
-	// Add reconciliation trigger annotation
-	if plugin.Annotations == nil {
-		plugin.Annotations = make(map[string]string)
-	}
-	plugin.Annotations["mc.k8s.lex.la/reconcile"] = fmt.Sprintf("%d", time.Now().Unix())
-
-	if err := s.client.Update(ctx, &plugin); err != nil {
-		return errors.Wrap(err, "failed to update plugin")
-	}
-
-	return nil
+	return s.pluginService.TriggerReconciliation(ctx, namespace, name)
 }
 
 // triggerServerReconciliation triggers server reconciliation by adding an annotation.
 func (s *Server) triggerServerReconciliation(ctx context.Context, name, namespace string) error {
-	var server mck8slexlav1alpha1.PaperMCServer
-
-	// Get server from cluster
-	if err := s.client.Get(ctx, client.ObjectKey{
-		Name:      name,
-		Namespace: namespace,
-	}, &server); err != nil {
-		return errors.Wrap(err, "failed to get server")
-	}
-
-	// Add reconciliation trigger annotation
-	if server.Annotations == nil {
-		server.Annotations = make(map[string]string)
-	}
-	server.Annotations["mc.k8s.lex.la/reconcile"] = fmt.Sprintf("%d", time.Now().Unix())
-
-	if err := s.client.Update(ctx, &server); err != nil {
-		return errors.Wrap(err, "failed to update server")
-	}
-
-	return nil
+	return s.serverService.TriggerReconciliation(ctx, namespace, name)
 }
