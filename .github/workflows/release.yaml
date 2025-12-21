@@ -286,9 +286,10 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Update chart versions
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          CHANGELOG="${{ steps.changelog.outputs.changelog }}"
 
           # Update CRD chart
           yq eval ".version = \"${VERSION}\"" --inplace charts/minecraft-operator-crds/Chart.yaml
