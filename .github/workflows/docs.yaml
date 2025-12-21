@@ -10,17 +10,11 @@ on:
       - "requirements-docs.txt"
       - "README.md"
       - "DESIGN.md"
+      - "CHANGELOG.md"
+      - ".github/workflows/docs.yaml"
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to deploy (e.g., 1.0.0 or dev)"
-        required: true
-        default: "dev"
-      alias:
-        description: "Alias for this version (e.g., latest)"
-        required: false
 
 permissions:
   contents: read
@@ -29,7 +23,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -41,11 +35,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Checkout gh-pages branch
-        run: |
-          git fetch origin gh-pages:gh-pages || true
-          git worktree add gh-pages-branch gh-pages || git worktree add gh-pages-branch --detach
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -56,51 +45,13 @@ jobs:
       - name: Install dependencies
         run: pip install --requirement requirements-docs.txt
 
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Determine version and alias
-        id: version
-        run: |
-          if [[ "$GITHUB_REF_NAME" == v* ]]; then
-            # Tag release: version=X.Y.Z, also update latest
-            VERSION="${GITHUB_REF_NAME#v}"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "alias=latest" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Manual dispatch: use provided values
-            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-            echo "alias=${{ github.event.inputs.alias }}" >> "$GITHUB_OUTPUT"
-          else
-            # Push to master: dev version, set as latest
-            echo "version=dev" >> "$GITHUB_OUTPUT"
-            echo "alias=latest" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Deploy with mike (local)
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          ALIAS="${{ steps.version.outputs.alias }}"
-
-          if [[ -n "$ALIAS" ]]; then
-            mike deploy --update-aliases "${VERSION}" "${ALIAS}"
-            mike set-default latest
-          else
-            mike deploy "${VERSION}"
-          fi
-
-      - name: Prepare artifact
-        run: |
-          mkdir -p artifact
-          git -C gh-pages-branch checkout -- . 2>/dev/null || true
-          cp -r gh-pages-branch/* artifact/ 2>/dev/null || cp -r site/* artifact/
+      - name: Build documentation
+        run: mkdocs build --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: artifact/
+          path: site/
 
   deploy:
     name: Deploy to GitHub Pages
