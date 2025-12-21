@@ -65,15 +65,18 @@ jobs:
         id: version
         run: |
           if [[ "$GITHUB_REF_NAME" == v* ]]; then
+            # Tag release: version=X.Y.Z, also update latest
             VERSION="${GITHUB_REF_NAME#v}"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
             echo "alias=latest" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.version }}" != "dev" ]]; then
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Manual dispatch: use provided values
             echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
             echo "alias=${{ github.event.inputs.alias }}" >> "$GITHUB_OUTPUT"
           else
+            # Push to master: dev version, set as latest
             echo "version=dev" >> "$GITHUB_OUTPUT"
-            echo "alias=" >> "$GITHUB_OUTPUT"
+            echo "alias=latest" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy with mike (local)
