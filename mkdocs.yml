@@ -1,0 +1,177 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
+# Site metadata
+site_name: Minecraft Operator
+site_url: https://minecraft-operator.k8s.lex.la
+site_author: Aleksei Sviridkin
+site_description: >-
+  Kubernetes operator for managing PaperMC servers with automatic version management
+  for plugins and the server, ensuring compatibility through constraint solving.
+
+# Repository
+repo_name: lexfrei/minecraft-operator
+repo_url: https://github.com/lexfrei/minecraft-operator
+edit_uri: edit/master/docs/
+
+# Copyright
+copyright: Copyright &copy; 2024-2025 Aleksei Sviridkin
+
+# Theme configuration
+theme:
+  name: material
+  language: en
+
+  # Color palette with auto/light/dark modes
+  palette:
+    # Auto mode (follows system preference)
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: green
+      accent: light green
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: green
+      accent: light green
+      toggle:
+        icon: material/brightness-4
+        name: Switch to auto mode
+
+  # Features
+  features:
+    - announce.dismiss
+    - content.action.edit
+    - content.action.view
+    - content.code.annotate
+    - content.code.copy
+    - content.tabs.link
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+
+  # Icons
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+
+# Plugins
+plugins:
+  - search:
+      lang: en
+  - same-dir
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: timeago
+      fallback_to_build_date: true
+  - minify:
+      minify_html: true
+
+# Markdown extensions
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+  # PyMdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: lexfrei
+      repo: minecraft-operator
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      combine_header_slug: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Extra configuration
+extra:
+  version:
+    provider: mike
+    default: latest
+    alias: true
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/lexfrei/minecraft-operator
+      name: GitHub
+  generator: false
+
+# Extra CSS
+extra_css:
+  - stylesheets/extra.css
+
+# Navigation
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Prerequisites: getting-started/prerequisites.md
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+  - Configuration:
+      - configuration/index.md
+      - PaperMCServer: configuration/papermcserver.md
+      - Plugin: configuration/plugin.md
+      - Update Strategies: configuration/update-strategies.md
+  - Architecture:
+      - architecture/index.md
+      - Design: architecture/design.md
+      - Constraint Solver: architecture/solver.md
+  - Operations:
+      - operations/index.md
+      - Troubleshooting: operations/troubleshooting.md
+  - Development:
+      - development/index.md
+      - Setup: development/setup.md
+      - Contributing: development/contributing.md
+  - Reference:
+      - reference/index.md
+      - Helm Chart: reference/helm-chart.md
