@@ -8,6 +8,10 @@ on:
       - "requirements-docs.txt"
       - ".markdownlint*.yaml"
 
+concurrency:
+  group: docs-validate-${{ github.head_ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
