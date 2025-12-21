@@ -57,8 +57,6 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@v19
         with:
           globs: "**/*.md"
-          config: .markdownlint.yaml
-        continue-on-error: true
 
   test:
     name: Test
@@ -76,11 +74,11 @@ jobs:
       - name: Setup envtest
         run: |
           go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-          setup-envtest use --bin-dir ./bin
+          echo "KUBEBUILDER_ASSETS=$(setup-envtest use --print path --bin-dir "${GITHUB_WORKSPACE}/bin")" >> "$GITHUB_ENV"
 
       - name: Run tests with coverage
         run: |
-          KUBEBUILDER_ASSETS="$(./bin/k8s/*/bin)" go test -race -coverprofile=coverage.out ./...
+          go test -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -200,7 +198,7 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           # renovate: datasource=github-releases depName=helm/helm
-          version: "v3.17.3"
+          version: "v3.19.2"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -208,12 +206,13 @@ jobs:
           python-version: "3.12"
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2.7.0
+        uses: helm/chart-testing-action@v2.8.0
 
       - name: Install tools
         run: |
           # helm-unittest
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git
+          # renovate: datasource=github-releases depName=helm-unittest/helm-unittest
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v0.8.2
 
           # JSON schema validator
           pip install check-jsonschema
@@ -306,7 +305,7 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           # renovate: datasource=github-releases depName=helm/helm
-          version: "v3.17.3"
+          version: "v3.19.2"
 
       - name: Install yq
         run: |
@@ -327,6 +326,7 @@ jobs:
           # Update operator chart
           yq eval ".version = \"${PR_VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
           yq eval ".appVersion = \"${PR_VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
+          yq eval ".dependencies[0].version = \"${PR_VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
 
           # Update image reference
           yq eval ".image.repository = \"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\"" --inplace charts/minecraft-operator/values.yaml

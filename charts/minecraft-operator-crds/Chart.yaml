@@ -10,6 +10,7 @@ keywords:
   - kubernetes
   - crds
 maintainers:
-  - name: Aleksei Sviridkin
+  - name: lexfrei
     email: f@lex.la
+    url: https://github.com/lexfrei
 kubeVersion: ">=1.27.0-0"

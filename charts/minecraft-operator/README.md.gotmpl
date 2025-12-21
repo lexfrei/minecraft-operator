@@ -1,0 +1,155 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.deprecationWarning" . }}
+
+[![Release](https://img.shields.io/github/v/release/lexfrei/minecraft-operator)](https://github.com/lexfrei/minecraft-operator/releases)
+[![CI](https://github.com/lexfrei/minecraft-operator/actions/workflows/pr.yaml/badge.svg)](https://github.com/lexfrei/minecraft-operator/actions/workflows/pr.yaml)
+[![Release](https://github.com/lexfrei/minecraft-operator/actions/workflows/release.yaml/badge.svg)](https://github.com/lexfrei/minecraft-operator/actions/workflows/release.yaml)
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+## Features
+
+- Automatic version management for Paper and plugins
+- Constraint solver ensures plugin compatibility
+- Scheduled updates with graceful RCON shutdown
+- Declarative plugin management via label selectors
+- Built-in Web UI for monitoring
+- Multi-arch container images (amd64, arm64)
+- Signed container images with cosign
+
+> **Note:** This operator is designed for single-instance Minecraft servers. 5-10 minutes of downtime during updates is acceptable by design.
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+## Prerequisites
+
+- Kubernetes 1.27+
+- Helm 3.14+
+
+## Installation
+
+### Install CRDs
+
+CRDs are installed separately for independent lifecycle management:
+
+```bash
+helm install minecraft-operator-crds \
+  oci://ghcr.io/lexfrei/minecraft-operator-crds \
+  --namespace minecraft-operator-system \
+  --create-namespace
+```
+
+### Install Operator
+
+```bash
+helm install minecraft-operator \
+  oci://ghcr.io/lexfrei/minecraft-operator \
+  --version {{ template "chart.version" . }} \
+  --namespace minecraft-operator-system
+```
+
+### Verify Chart Signature
+
+Charts are signed with cosign. Verify before installing:
+
+```bash
+cosign verify ghcr.io/lexfrei/minecraft-operator:{{ template "chart.version" . }} \
+  --certificate-identity-regexp="https://github.com/lexfrei/minecraft-operator" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+```
+
+## Quick Start
+
+After installation, create a Minecraft server:
+
+```yaml
+apiVersion: mc.k8s.lex.la/v1alpha1
+kind: PaperMCServer
+metadata:
+  name: my-server
+  namespace: minecraft
+  labels:
+    environment: production
+spec:
+  updateStrategy: "auto"
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+  gracefulShutdown:
+    timeout: 300s
+  rcon:
+    enabled: true
+    passwordSecret:
+      name: my-server-rcon
+      key: password
+  podTemplate:
+    spec:
+      containers:
+        - name: minecraft
+          resources:
+            requests:
+              memory: "2Gi"
+            limits:
+              memory: "4Gi"
+```
+
+Add a plugin:
+
+```yaml
+apiVersion: mc.k8s.lex.la/v1alpha1
+kind: Plugin
+metadata:
+  name: essentialsx
+  namespace: minecraft
+spec:
+  source:
+    type: hangar
+    project: "EssentialsX/Essentials"
+  updateStrategy: "latest"
+  instanceSelector:
+    matchLabels:
+      environment: production
+```
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Getting Started](https://minecraft-operator.k8s.lex.la/getting-started/) | Installation and first steps |
+| [Configuration](https://minecraft-operator.k8s.lex.la/configuration/) | CRD reference |
+| [Update Strategies](https://minecraft-operator.k8s.lex.la/configuration/update-strategies/) | Version management guide |
+| [Architecture](https://minecraft-operator.k8s.lex.la/architecture/) | System design |
+| [Troubleshooting](https://minecraft-operator.k8s.lex.la/operations/troubleshooting/) | Common issues |
+
+## Update Strategies
+
+| Strategy | Description |
+|----------|-------------|
+| `latest` | Always use newest Paper version |
+| `auto` | Solver finds compatible version |
+| `pin` | Fixed version, auto-update builds |
+| `build-pin` | Fully pinned version and build |
+
+## Web UI
+
+Access the built-in dashboard:
+
+```bash
+kubectl port-forward svc/minecraft-operator-webui 8082:8082 \
+  --namespace minecraft-operator-system
+```
+
+Open http://localhost:8082/ui
+
+{{ template "chart.valuesSection" . }}
+
+{{ template "helm-docs.versionFooter" . }}
