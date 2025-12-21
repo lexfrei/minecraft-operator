@@ -891,7 +891,7 @@ Rollbacks require manual intervention for safety.
 
 ## Further Reading
 
-- [DESIGN.md](../DESIGN.md) - Detailed architectural design
-- [.architecture.yaml](../.architecture.yaml) - Technical decisions and ADRs
-- [examples/](../examples/) - Complete working examples
-- [CRD Reference](../charts/minecraft-operator-crds/crds/) - Full CRD specifications
+- [Architecture](../architecture/design.md) - Detailed architectural design
+- [Constraint Solver](../architecture/solver.md) - How version compatibility is resolved
+- [PaperMCServer Reference](papermcserver.md) - Full PaperMCServer CRD specification
+- [Plugin Reference](plugin.md) - Full Plugin CRD specification
