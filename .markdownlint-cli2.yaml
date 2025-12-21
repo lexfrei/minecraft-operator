@@ -1,33 +1,8 @@
-# Markdownlint-cli2 configuration for minecraft-operator
-# Technical documentation requires flexibility for:
-# - Long YAML manifests
-# - Command examples
-# - Technical descriptions
-# - MkDocs Material grid cards and admonitions
-
 config:
-  # Disable line length limit - too restrictive for technical docs
   MD013: false
-
-  # Allow duplicate headings in different sections
-  MD024:
-    siblings_only: true
-
-  # Allow inline HTML for MkDocs Material features (grid cards, admonitions)
-  MD033: false
-
-  # Allow flexible list marker spacing (MkDocs Material grid cards use 3 spaces)
+  MD024: false
   MD030: false
-
-  # Fenced code blocks preferred but allow both (admonitions use indented)
-  MD046: false
-
-  # Allow bare URLs in documentation
+  MD033: false
   MD034: false
-
-  # Disable table column style - too strict for markdown tables
+  MD046: false
   MD060: false
-
-  # Keep other important rules enabled
-  MD040: true  # Require language for code blocks
-  MD031: true  # Blank lines around fenced code blocks
