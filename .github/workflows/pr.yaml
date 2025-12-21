@@ -57,7 +57,7 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@v19
         with:
           globs: "**/*.md"
-          config: .markdownlint.yaml
+          config: .markdownlint-cli2.yaml
         continue-on-error: true
 
   test:
@@ -76,11 +76,11 @@ jobs:
       - name: Setup envtest
         run: |
           go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-          setup-envtest use --bin-dir ./bin
+          echo "KUBEBUILDER_ASSETS=$(setup-envtest use --print path --bin-dir ./bin)" >> "$GITHUB_ENV"
 
       - name: Run tests with coverage
         run: |
-          KUBEBUILDER_ASSETS="$(./bin/k8s/*/bin)" go test -race -coverprofile=coverage.out ./...
+          go test -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
