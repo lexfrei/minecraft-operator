@@ -213,7 +213,7 @@ jobs:
         run: |
           # helm-unittest
           # renovate: datasource=github-releases depName=helm-unittest/helm-unittest
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v0.6.4
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v0.8.2
 
           # JSON schema validator
           pip install check-jsonschema
