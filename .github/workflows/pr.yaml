@@ -327,6 +327,7 @@ jobs:
           # Update operator chart
           yq eval ".version = \"${PR_VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
           yq eval ".appVersion = \"${PR_VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
+          yq eval ".dependencies[0].version = \"${PR_VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
 
           # Update image reference
           yq eval ".image.repository = \"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\"" --inplace charts/minecraft-operator/values.yaml
