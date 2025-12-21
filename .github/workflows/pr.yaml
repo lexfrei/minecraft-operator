@@ -75,7 +75,7 @@ jobs:
       - name: Setup envtest
         run: |
           go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-          echo "KUBEBUILDER_ASSETS=$(setup-envtest use --print path --bin-dir ./bin)" >> "$GITHUB_ENV"
+          echo "KUBEBUILDER_ASSETS=$(setup-envtest use --print path --bin-dir "${GITHUB_WORKSPACE}/bin")" >> "$GITHUB_ENV"
 
       - name: Run tests with coverage
         run: |
