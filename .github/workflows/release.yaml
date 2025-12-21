@@ -295,6 +295,7 @@ jobs:
           # Update operator chart
           yq eval ".version = \"${VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
           yq eval ".appVersion = \"${VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
+          yq eval ".dependencies[0].version = \"${VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
 
           # Add changelog annotation
           if [ -n "$CHANGELOG" ]; then

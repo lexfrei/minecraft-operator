@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-12-22
+
 ### Added
 
 - PaperMCServer CRD for managing PaperMC Minecraft servers
@@ -28,9 +30,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plugin deadlock when server deleted during plugin cleanup
 - Solver progress indicator with proper condition tracking
 
-## [0.1.0] - TBD
-
-Initial release.
-
-[Unreleased]: https://github.com/lexfrei/minecraft-operator/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/lexfrei/minecraft-operator/releases/tag/v0.1.0
+[Unreleased]: https://github.com/lexfrei/minecraft-operator/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/lexfrei/minecraft-operator/releases/tag/v0.5.0

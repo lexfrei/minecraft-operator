@@ -2,8 +2,8 @@ apiVersion: v2
 name: minecraft-operator
 description: Kubernetes operator for managing PaperMC Minecraft servers
 type: application
-version: 0.4.3
-appVersion: "0.4.3"
+version: 0.0.0-dev
+appVersion: "0.0.0-dev"
 keywords:
   - minecraft
   - papermc
@@ -16,6 +16,6 @@ maintainers:
 kubeVersion: ">=1.27.0-0"
 dependencies:
   - name: minecraft-operator-crds
-    version: "0.4.0"
+    version: "0.0.0-dev"
     repository: "file://../minecraft-operator-crds"
     condition: crds.enabled
