@@ -1,0 +1,9 @@
+# Markdownlint configuration for helm-docs generated content
+
+config:
+  MD013: false
+  MD004: false
+  MD033: false
+  MD034: false
+  MD060: false
+  MD024: false
