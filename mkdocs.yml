@@ -165,6 +165,7 @@ nav:
       - architecture/index.md
       - Design: architecture/design.md
       - Constraint Solver: architecture/solver.md
+      - Dependencies: architecture/dependencies.md
   - Operations:
       - operations/index.md
       - Troubleshooting: operations/troubleshooting.md

@@ -28,40 +28,28 @@ spec:
 
 | Field | Description |
 |-------|-------------|
-| `type` | Repository type: `hangar`, `modrinth`, `spigot`, `url` |
-| `project` | Plugin identifier (for hangar/modrinth/spigot) |
-| `url` | Direct download URL (for type: url) |
+| `type` | Repository type (see supported sources below) |
+| `project` | Plugin identifier (for hangar) |
+| `url` | Direct download URL (planned) |
 
-=== "Hangar"
+```yaml
+spec:
+  source:
+    type: hangar
+    project: "EssentialsX/Essentials"
+```
 
-    ```yaml
-    spec:
-      source:
-        type: hangar
-        project: "EssentialsX/Essentials"
-    ```
+!!! warning "Supported Sources"
 
-=== "Modrinth"
+    **Currently implemented:**
 
-    ```yaml
-    spec:
-      source:
-        type: modrinth
-        project: "bluemap"
-    ```
+    - `hangar` — PaperMC Hangar ([hangar.papermc.io](https://hangar.papermc.io))
 
-=== "Direct URL"
+    **Planned (not yet implemented):**
 
-    ```yaml
-    spec:
-      source:
-        type: url
-        url: "https://example.com/plugin.jar"
-    ```
-
-!!! note "Supported Sources"
-
-    Currently only `hangar` is fully implemented. Modrinth and Spigot support is planned.
+    - `modrinth` — [#2](https://github.com/lexfrei/minecraft-operator/issues/2)
+    - `spigot` — [#3](https://github.com/lexfrei/minecraft-operator/issues/3)
+    - `url` — [#4](https://github.com/lexfrei/minecraft-operator/issues/4)
 
 ### updateStrategy
 

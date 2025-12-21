@@ -73,6 +73,14 @@ graph TB
 
     [:octicons-arrow-right-24: Solver](solver.md)
 
+-   :material-package-variant:{ .lg .middle } **Dependencies**
+
+    ---
+
+    External libraries, container images, and APIs
+
+    [:octicons-arrow-right-24: Dependencies](dependencies.md)
+
 </div>
 
 ## Key Design Principles
