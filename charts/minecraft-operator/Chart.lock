@@ -1,6 +1,6 @@
 dependencies:
 - name: minecraft-operator-crds
   repository: file://../minecraft-operator-crds
-  version: 0.4.0
-digest: sha256:ba5607bf32b98208b7469466b6e641bd2273fd992b434978c55ec3e8933710c2
-generated: "2025-11-02T05:12:41.206144+03:00"
+  version: 0.0.0-dev
+digest: sha256:35c7f2068189fddeaf480ebb3c8c49dfc1aca4d90a55dffee8d9693c8e84784f
+generated: "2025-12-22T01:55:30.043422+03:00"
