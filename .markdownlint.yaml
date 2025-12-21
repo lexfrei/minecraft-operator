@@ -3,13 +3,27 @@
 # - Long YAML manifests
 # - Command examples
 # - Technical descriptions
+# - MkDocs Material grid cards
 
 # Disable line length limit - too restrictive for technical docs
 MD013: false
 
-# Allow duplicate headings in different sections (e.g., same strategy names for different resources)
+# Allow duplicate headings in different sections
 MD024:
   siblings_only: true
+
+# Allow inline HTML for MkDocs Material features (grid cards, admonitions)
+MD033: false
+
+# Allow flexible list marker spacing (MkDocs Material grid cards use 3 spaces)
+MD030: false
+
+# Require fenced code blocks (consistent style)
+MD046:
+  style: fenced
+
+# Allow bare URLs in documentation
+MD034: false
 
 # Keep other important rules enabled
 MD040: true  # Require language for code blocks

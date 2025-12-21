@@ -80,7 +80,7 @@ kubectl get papermcserver --namespace minecraft
 
 Expected output:
 
-```
+```text
 NAME        VERSION   BUILD   STATUS   AGE
 my-server   1.21.4    125     Ready    2m
 ```
@@ -138,7 +138,7 @@ kubectl get plugin --namespace minecraft
 
 Expected output:
 
-```
+```text
 NAME          SOURCE   VERSION   MATCHED   STATUS
 essentialsx   hangar   2.21.0    1         Ready
 ```

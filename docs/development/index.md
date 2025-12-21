@@ -55,7 +55,7 @@ make run
 
 ## Project Structure
 
-```
+```text
 minecraft-operator/
 ├── api/v1alpha1/           # CRD type definitions
 ├── internal/controller/    # Controller implementations

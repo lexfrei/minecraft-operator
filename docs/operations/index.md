@@ -34,7 +34,7 @@ However, some situations require manual intervention.
 kubectl get papermcserver --namespace minecraft
 ```
 
-```
+```text
 NAME        VERSION   BUILD   STATUS   AGE
 survival    1.21.4    125     Ready    7d
 creative    1.20.6    89      Ready    14d
@@ -46,7 +46,7 @@ creative    1.20.6    89      Ready    14d
 kubectl get plugin --namespace minecraft
 ```
 
-```
+```text
 NAME          SOURCE   VERSION   MATCHED   STATUS
 essentialsx   hangar   2.21.0    2         Ready
 bluemap       hangar   5.4.0     1         Ready

@@ -43,7 +43,7 @@ kubectl get pods --namespace minecraft-operator-system
 
 Expected output:
 
-```
+```text
 NAME                                  READY   STATUS    RESTARTS   AGE
 minecraft-operator-xxxxxxxxxx-xxxxx   1/1     Running   0          30s
 ```

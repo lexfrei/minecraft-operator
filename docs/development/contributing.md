@@ -17,7 +17,7 @@ Guidelines for contributing to Minecraft Operator.
 
 Use descriptive branch names:
 
-```
+```text
 feat/modrinth-support
 fix/rcon-timeout
 docs/update-strategies
@@ -28,7 +28,7 @@ refactor/solver-algorithm
 
 Use semantic commit format:
 
-```
+```text
 type(scope): brief description
 
 Optional longer explanation.
@@ -50,7 +50,7 @@ Co-Authored-By: Your Name <email@example.com>
 
 **Example:**
 
-```
+```text
 feat(plugins): add Modrinth source support
 
 Implement Modrinth API client for fetching plugin metadata.

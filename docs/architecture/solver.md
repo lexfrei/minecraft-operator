@@ -21,7 +21,7 @@ Find:
 
 For a Plugin with `updateStrategy: latest`:
 
-```
+```text
 1. Collect all matched PaperMCServer instances
 2. Filter plugin versions by updateDelay:
    - Skip versions newer than (now - updateDelay)
@@ -37,7 +37,7 @@ For a Plugin with `updateStrategy: latest`:
 
 For a PaperMCServer with `updateStrategy: auto`:
 
-```
+```text
 1. Collect all matched Plugin resources
 2. Get available Paper versions from Docker Hub
 3. Filter by updateDelay
@@ -55,7 +55,7 @@ For a PaperMCServer with `updateStrategy: auto`:
 
 A plugin version is compatible with a server if:
 
-```
+```text
 serverVersion ∈ plugin.minecraftVersions
 ```
 
@@ -128,7 +128,7 @@ Plugin:
 
 The `updateDelay` field adds a grace period before using new versions:
 
-```
+```text
 eligibleVersions = versions.filter(v =>
   v.releasedAt < (now - updateDelay)
 )

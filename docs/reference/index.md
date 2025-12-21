@@ -20,7 +20,7 @@ Reference documentation for Minecraft Operator.
 
 ### API Group
 
-```
+```text
 mc.k8s.lex.la/v1alpha1
 ```
 
@@ -41,7 +41,7 @@ mc.k8s.lex.la/v1alpha1
 
 ### Operator
 
-```
+```text
 ghcr.io/lexfrei/minecraft-operator:latest
 ```
 
@@ -54,7 +54,7 @@ Available tags:
 
 ### Paper Server
 
-```
+```text
 lexfrei/papermc:1.21.4-125
 ```
 
@@ -64,13 +64,13 @@ Format: `lexfrei/papermc:{version}-{build}`
 
 ### Operator Chart
 
-```
+```text
 oci://ghcr.io/lexfrei/minecraft-operator
 ```
 
 ### CRD Chart
 
-```
+```text
 oci://ghcr.io/lexfrei/minecraft-operator-crds
 ```
 
