@@ -35,7 +35,6 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@v19
         with:
           globs: "docs/**/*.md"
-          config: ".markdownlint-cli2.yaml"
 
       - name: Build documentation (strict mode)
         run: mkdocs build --strict
