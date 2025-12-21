@@ -302,7 +302,7 @@ jobs:
 
           # Add changelog annotation
           if [ -n "$CHANGELOG" ]; then
-            yq eval ".annotations.\"artifacthub.io/changes\" = \"${CHANGELOG}\"" --inplace charts/minecraft-operator/Chart.yaml
+            yq eval '.annotations."artifacthub.io/changes" = strenv(CHANGELOG)' --inplace charts/minecraft-operator/Chart.yaml
           fi
 
           # Update image tag
