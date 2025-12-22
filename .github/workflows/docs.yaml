@@ -12,8 +12,6 @@ on:
       - "DESIGN.md"
       - "CHANGELOG.md"
       - ".github/workflows/docs.yaml"
-    tags:
-      - "v*"
   workflow_dispatch:
 
 permissions:
