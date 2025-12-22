@@ -1,0 +1,48 @@
+/* Minecraft Operator custom styles */
+
+/* Primary brand color - Minecraft green */
+:root {
+  --md-primary-fg-color: #4CAF50;
+  --md-primary-fg-color--light: #81C784;
+  --md-primary-fg-color--dark: #388E3C;
+  --md-accent-fg-color: #8BC34A;
+}
+
+/* Dark mode adjustments */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #66BB6A;
+  --md-accent-fg-color: #9CCC65;
+}
+
+/* Custom admonition for Minecraft-specific warnings */
+.md-typeset .admonition.minecraft,
+.md-typeset details.minecraft {
+  border-color: #4CAF50;
+}
+
+.md-typeset .minecraft > .admonition-title,
+.md-typeset .minecraft > summary {
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+.md-typeset .minecraft > .admonition-title::before,
+.md-typeset .minecraft > summary::before {
+  background-color: #4CAF50;
+  -webkit-mask-image: var(--md-admonition-icon--tip);
+  mask-image: var(--md-admonition-icon--tip);
+}
+
+/* Code block styling */
+.md-typeset code {
+  border-radius: 4px;
+}
+
+/* Navigation improvements */
+.md-nav__link--active {
+  font-weight: 600;
+}
+
+/* Footer styling */
+.md-footer {
+  background-color: var(--md-primary-fg-color--dark);
+}
