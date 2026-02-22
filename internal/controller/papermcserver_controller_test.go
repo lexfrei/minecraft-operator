@@ -1071,7 +1071,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 		)
 
 		BeforeEach(func() {
-			namespace = "default"
+			namespace = testNamespace
 			mockPaper = &testutil.MockPaperAPI{
 				Versions:     []string{"1.21.1", "1.21.2", "1.21.3", "1.21.4"},
 				BuildInfo:    &paper.BuildInfo{Version: "1.21.4", Build: 100, DownloadURL: "https://example.com/paper.jar"},

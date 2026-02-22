@@ -122,7 +122,8 @@ type MatchedInstance struct {
 	// Version is the server's current Paper version.
 	Version string `json:"version"`
 
-	// Compatible indicates if the plugin is compatible with this server.
+	// Compatible indicates whether the plugin has a resolved version compatible with this server.
+	// This value is read from PaperMCServer.status.plugins during Plugin reconciliation.
 	Compatible bool `json:"compatible"`
 }
 

@@ -862,6 +862,120 @@ var _ = Describe("Plugin Controller", func() {
 		})
 	})
 
+	Context("buildMatchedInstances reflects server-side compatibility", func() {
+		const (
+			testPluginName      = "test-plugin"
+			testPluginNamespace = "default"
+		)
+
+		It("should set Compatible=true when server has resolved this plugin as compatible", func() {
+			pluginName := testPluginName
+			pluginNamespace := testPluginNamespace
+			servers := []mck8slexlav1alpha1.PaperMCServer{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "server1", Namespace: "default"},
+					Status: mck8slexlav1alpha1.PaperMCServerStatus{
+						CurrentVersion: "1.21.1",
+						Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+							{
+								PluginRef:       mck8slexlav1alpha1.PluginRef{Name: pluginName, Namespace: pluginNamespace},
+								ResolvedVersion: "5.4",
+								Compatible:      true,
+							},
+						},
+					},
+				},
+			}
+
+			instances := buildMatchedInstances(servers, pluginName, pluginNamespace)
+			Expect(instances).To(HaveLen(1))
+			Expect(instances[0].Compatible).To(BeTrue(),
+				"Compatible should be true when server has resolved a compatible version")
+		})
+
+		It("should set Compatible=false when server has no resolved version for this plugin", func() {
+			pluginName := testPluginName
+			pluginNamespace := testPluginNamespace
+			servers := []mck8slexlav1alpha1.PaperMCServer{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "server1", Namespace: "default"},
+					Status: mck8slexlav1alpha1.PaperMCServerStatus{
+						CurrentVersion: "1.21.1",
+						Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+							{
+								PluginRef:  mck8slexlav1alpha1.PluginRef{Name: pluginName, Namespace: pluginNamespace},
+								Compatible: false,
+							},
+						},
+					},
+				},
+			}
+
+			instances := buildMatchedInstances(servers, pluginName, pluginNamespace)
+			Expect(instances).To(HaveLen(1))
+			Expect(instances[0].Compatible).To(BeFalse(),
+				"Compatible should be false when server reports plugin as incompatible")
+		})
+
+		It("should set Compatible=false when server has no plugin status for this plugin", func() {
+			pluginName := testPluginName
+			pluginNamespace := testPluginNamespace
+			servers := []mck8slexlav1alpha1.PaperMCServer{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "server1", Namespace: "default"},
+					Status: mck8slexlav1alpha1.PaperMCServerStatus{
+						CurrentVersion: "1.21.1",
+						// No Plugins status yet — server hasn't been reconciled
+					},
+				},
+			}
+
+			instances := buildMatchedInstances(servers, pluginName, pluginNamespace)
+			Expect(instances).To(HaveLen(1))
+			Expect(instances[0].Compatible).To(BeFalse(),
+				"Compatible should be false when server hasn't resolved this plugin yet")
+		})
+
+		It("should handle multiple servers with mixed compatibility", func() {
+			pluginName := testPluginName
+			pluginNamespace := testPluginNamespace
+			servers := []mck8slexlav1alpha1.PaperMCServer{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "server-compat", Namespace: "default"},
+					Status: mck8slexlav1alpha1.PaperMCServerStatus{
+						CurrentVersion: "1.21.1",
+						Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+							{
+								PluginRef:       mck8slexlav1alpha1.PluginRef{Name: pluginName, Namespace: pluginNamespace},
+								ResolvedVersion: "5.4",
+								Compatible:      true,
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "server-incompat", Namespace: "default"},
+					Status: mck8slexlav1alpha1.PaperMCServerStatus{
+						CurrentVersion: "1.20.4",
+						Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+							{
+								PluginRef:  mck8slexlav1alpha1.PluginRef{Name: pluginName, Namespace: pluginNamespace},
+								Compatible: false,
+							},
+						},
+					},
+				},
+			}
+
+			instances := buildMatchedInstances(servers, pluginName, pluginNamespace)
+			Expect(instances).To(HaveLen(2))
+			Expect(instances[0].Name).To(Equal("server-compat"))
+			Expect(instances[0].Compatible).To(BeTrue())
+			Expect(instances[1].Name).To(Equal("server-incompat"))
+			Expect(instances[1].Compatible).To(BeFalse())
+		})
+	})
+
 	Context("doReconcile early return on unavailable repository", func() {
 		It("should return early and use syncPluginMetadata result when no versions available", func() {
 			// Regression: When syncPluginMetadata returns nil versions (repo unavailable, no cache),
@@ -1173,7 +1287,9 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(plugin.Status.MatchedInstances).To(HaveLen(1))
 			Expect(plugin.Status.MatchedInstances[0].Name).To(Equal("match-target-server"))
 			Expect(plugin.Status.MatchedInstances[0].Namespace).To(Equal(namespace))
-			Expect(plugin.Status.MatchedInstances[0].Compatible).To(BeTrue())
+			// Compatible is false because the server hasn't been reconciled yet
+			// and has no plugin status for this plugin
+			Expect(plugin.Status.MatchedInstances[0].Compatible).To(BeFalse())
 		})
 
 		It("should set RepositoryAvailable=False when source type is unsupported", func() {

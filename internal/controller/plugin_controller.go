@@ -146,7 +146,7 @@ func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1alpha1.P
 	slog.InfoContext(ctx, "Found matching servers", "count", len(matchedServers))
 
 	// Step 3: Update status (version resolution moved to PaperMCServer controller)
-	plugin.Status.MatchedInstances = buildMatchedInstances(matchedServers)
+	plugin.Status.MatchedInstances = buildMatchedInstances(matchedServers, plugin.Name, plugin.Namespace)
 
 	// Update condition - metadata fetched successfully
 	r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,
@@ -240,16 +240,30 @@ func (r *PluginReconciler) fetchPluginMetadata(
 }
 
 // buildMatchedInstances constructs the list of matched instances.
-// Compatibility check is now done in PaperMCServer controller during version resolution.
-func buildMatchedInstances(servers []mcv1alpha1.PaperMCServer) []mcv1alpha1.MatchedInstance {
+// Reads each server's Status.Plugins to reflect the real compatibility
+// result from PaperMCServer controller's version resolution.
+func buildMatchedInstances(
+	servers []mcv1alpha1.PaperMCServer,
+	pluginName, pluginNamespace string,
+) []mcv1alpha1.MatchedInstance {
 	instances := make([]mcv1alpha1.MatchedInstance, 0, len(servers))
 
 	for _, server := range servers {
+		compatible := false
+
+		for _, ps := range server.Status.Plugins {
+			if ps.PluginRef.Name == pluginName && ps.PluginRef.Namespace == pluginNamespace {
+				compatible = ps.Compatible
+
+				break
+			}
+		}
+
 		instances = append(instances, mcv1alpha1.MatchedInstance{
 			Name:       server.Name,
 			Namespace:  server.Namespace,
 			Version:    server.Status.CurrentVersion,
-			Compatible: true, // Compatibility check moved to PaperMCServer controller
+			Compatible: compatible,
 		})
 	}
 
