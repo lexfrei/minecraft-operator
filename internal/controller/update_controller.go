@@ -808,7 +808,7 @@ func (r *UpdateReconciler) performCombinedUpdate(
 	}
 
 	// Step 4: Update StatefulSet image to new Paper version
-	newImage := fmt.Sprintf("lexfrei/papermc:%s-%d",
+	newImage := fmt.Sprintf("docker.io/lexfrei/papermc:%s-%d",
 		server.Status.DesiredVersion,
 		server.Status.DesiredBuild)
 
