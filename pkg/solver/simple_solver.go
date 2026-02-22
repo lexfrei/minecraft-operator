@@ -167,10 +167,7 @@ func (s *SimpleSolver) FindBestPaperVersion(
 		return "", errors.Newf("invalid updateStrategy: %s (expected 'latest', 'auto', 'pin', or 'build-pin')", strategy)
 	}
 
-	sortedVersions, err := s.filterAndSortPaperVersions(server, paperVersions)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to filter versions")
-	}
+	sortedVersions := s.filterAndSortPaperVersions(paperVersions)
 
 	// Linear search: find max Paper version where ALL plugins have compatible version
 	for _, paperVer := range sortedVersions {
@@ -182,37 +179,11 @@ func (s *SimpleSolver) FindBestPaperVersion(
 	return "", errors.New("no Paper version compatible with all matched plugins")
 }
 
-// filterAndSortPaperVersions filters Paper versions by updateDelay and sorts them descending.
-func (s *SimpleSolver) filterAndSortPaperVersions(
-	server *mcv1alpha1.PaperMCServer,
-	paperVersions []string,
-) ([]string, error) {
-	var delay time.Duration
-	if server.Spec.UpdateDelay != nil {
-		delay = server.Spec.UpdateDelay.Duration
-	}
-
-	// Convert to version.VersionInfo for filtering
-	paperVersionInfos := make([]version.VersionInfo, len(paperVersions))
-	for i, v := range paperVersions {
-		paperVersionInfos[i] = version.VersionInfo{
-			Version:     v,
-			ReleaseDate: time.Now(), // Paper API doesn't provide release dates, assume current
-		}
-	}
-
-	filteredVersions := version.FilterByUpdateDelay(paperVersionInfos, delay)
-	if len(filteredVersions) == 0 {
-		return nil, errors.New("no Paper versions available after updateDelay filtering")
-	}
-
-	// Extract version strings and sort descending
-	versionStrings := make([]string, len(filteredVersions))
-	for i, v := range filteredVersions {
-		versionStrings[i] = v.Version
-	}
-
-	return sortPaperVersionsDesc(versionStrings), nil
+// filterAndSortPaperVersions sorts Paper versions descending.
+// Note: updateDelay is NOT applied to Paper versions because the Paper API does not
+// provide release dates. updateDelay still works correctly for plugin versions.
+func (s *SimpleSolver) filterAndSortPaperVersions(paperVersions []string) []string {
+	return sortPaperVersionsDesc(paperVersions)
 }
 
 // isPaperVersionCompatibleWithAllPlugins checks if a Paper version is compatible with all plugins.

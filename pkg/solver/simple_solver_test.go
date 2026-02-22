@@ -389,6 +389,46 @@ func TestFindBestPluginVersion_UpdateDelay_AllFiltered_ReturnsError(t *testing.T
 	assert.Contains(t, err.Error(), "updateDelay filtering")
 }
 
+func TestFindBestPaperVersion_UpdateDelay_ShouldNotFilterAllVersions(t *testing.T) {
+	t.Parallel()
+
+	solver := NewSimpleSolver()
+
+	// Server with updateStrategy=auto and 1-hour updateDelay
+	server := makeServer("test-server", "1.21.0", "")
+	server.Spec.UpdateStrategy = "auto"
+	server.Spec.UpdateDelay = &metav1.Duration{Duration: 1 * time.Hour}
+
+	// Plugin compatible with both Paper versions
+	plugin := mcv1alpha1.Plugin{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-plugin", Namespace: "default"},
+		Spec:       mcv1alpha1.PluginSpec{UpdateStrategy: "latest"},
+		Status: mcv1alpha1.PluginStatus{
+			AvailableVersions: []mcv1alpha1.PluginVersionInfo{
+				{Version: "1.0.0", MinecraftVersions: []string{"1.21.0", "1.21.1"}},
+			},
+		},
+	}
+
+	// Paper versions — these have existed for weeks in reality,
+	// but the solver sets ReleaseDate=time.Now() internally
+	paperVersions := []string{"1.21.0", "1.21.1"}
+
+	// BUG: Currently fails because Paper versions get ReleaseDate=time.Now(),
+	// which means they're always "just released" and updateDelay filters ALL of them out.
+	// Expected: solver should skip updateDelay for Paper versions (no release dates available)
+	// or track first-seen dates.
+	result, err := solver.FindBestPaperVersion(
+		context.Background(),
+		&server,
+		[]mcv1alpha1.Plugin{plugin},
+		paperVersions,
+	)
+
+	require.NoError(t, err, "FindBestPaperVersion should not error when Paper versions exist")
+	assert.NotEmpty(t, result, "Should find a compatible Paper version even with updateDelay")
+}
+
 func TestFindBestPluginVersion_MultipleServers_MustSatisfyAll(t *testing.T) {
 	t.Parallel()
 
