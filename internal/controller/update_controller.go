@@ -47,10 +47,13 @@ import (
 )
 
 const (
-	conditionTypeUpdating  = "Updating"
-	reasonUpdateInProgress = "UpdateInProgress"
-	reasonUpdateComplete   = "UpdateComplete"
-	containerNamePaperMC   = "papermc"
+	conditionTypeUpdating          = "Updating"
+	conditionTypeCronScheduleValid = "CronScheduleValid"
+	reasonUpdateInProgress         = "UpdateInProgress"
+	reasonUpdateComplete           = "UpdateComplete"
+	reasonCronInvalid              = "InvalidCronExpression"
+	reasonCronValid                = "CronScheduleConfigured"
+	containerNamePaperMC           = "papermc"
 )
 
 // UpdateReconciler reconciles PaperMCServer resources for scheduled updates.
@@ -112,9 +115,17 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Manage cron schedule for this server
-	if err := r.manageCronSchedule(ctx, &server); err != nil {
-		slog.ErrorContext(ctx, "Failed to manage cron schedule", "error", err)
-		return ctrl.Result{}, err
+	r.manageCronSchedule(ctx, &server)
+
+	// If cron schedule is invalid, persist the condition and stop reconciliation.
+	// User fixing the spec will trigger a new reconciliation via the watch.
+	cronCond := meta.FindStatusCondition(server.Status.Conditions, conditionTypeCronScheduleValid)
+	if cronCond != nil && cronCond.Status == metav1.ConditionFalse {
+		if updateErr := r.Status().Update(ctx, &server); updateErr != nil {
+			slog.ErrorContext(ctx, "Failed to update server status with cron condition", "error", updateErr)
+			return ctrl.Result{}, errors.Wrap(updateErr, "failed to update status")
+		}
+		return ctrl.Result{}, nil
 	}
 
 	// Check for immediate apply annotation (bypasses maintenance window and updateDelay)
@@ -296,7 +307,7 @@ func findLastCronTrigger(schedule cron.Schedule, now time.Time) time.Time {
 }
 
 // manageCronSchedule adds, updates, or removes cron jobs based on server spec.
-func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1alpha1.PaperMCServer) error {
+func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1alpha1.PaperMCServer) {
 	serverKey := types.NamespacedName{
 		Name:      server.Name,
 		Namespace: server.Namespace,
@@ -307,7 +318,7 @@ func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1a
 		// Remove cron job if exists
 		r.removeCronJob(serverKey)
 		slog.InfoContext(ctx, "Maintenance window disabled, removed cron job")
-		return nil
+		return
 	}
 
 	cronSpec := server.Spec.UpdateSchedule.MaintenanceWindow.Cron
@@ -320,7 +331,7 @@ func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1a
 	if exists {
 		if existing.Spec == cronSpec {
 			// Spec unchanged - nothing to do
-			return nil
+			return
 		}
 		// Spec changed - remove old and add new
 		r.removeCronJob(serverKey)
@@ -334,8 +345,18 @@ func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1a
 	})
 
 	if err != nil {
-		return errors.Wrap(err, "failed to add cron job")
+		// Invalid cron is a permanent user error — retrying will never fix it.
+		// Set condition and log warning instead of returning error (which causes infinite retry loop).
+		slog.WarnContext(ctx, "Invalid cron expression in maintenance window",
+			"error", err, "cronSpec", cronSpec)
+		r.setUpdatingConditionWithType(server, conditionTypeCronScheduleValid,
+			metav1.ConditionFalse, reasonCronInvalid, err.Error())
+		return
 	}
+
+	// Valid cron — set condition to True
+	r.setUpdatingConditionWithType(server, conditionTypeCronScheduleValid,
+		metav1.ConditionTrue, reasonCronValid, "Cron schedule configured: "+cronSpec)
 
 	// Store entry ID and spec together
 	r.cronEntriesMu.Lock()
@@ -343,7 +364,6 @@ func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1a
 	r.cronEntriesMu.Unlock()
 
 	slog.InfoContext(ctx, "Added cron job", "server", serverKey, "spec", cronSpec, "entryID", entryID)
-	return nil
 }
 
 // removeCronJob removes the cron job for a server.
@@ -902,6 +922,26 @@ func (r *UpdateReconciler) setUpdatingCondition(server *mcv1alpha1.PaperMCServer
 
 	condition := metav1.Condition{
 		Type:               conditionTypeUpdating,
+		Status:             status,
+		ObservedGeneration: server.Generation,
+		LastTransitionTime: metav1.Now(),
+		Reason:             reason,
+		Message:            message,
+	}
+
+	meta.SetStatusCondition(&server.Status.Conditions, condition)
+}
+
+// setUpdatingConditionWithType sets a condition with a specific type on the server.
+func (r *UpdateReconciler) setUpdatingConditionWithType(
+	server *mcv1alpha1.PaperMCServer,
+	conditionType string,
+	status metav1.ConditionStatus,
+	reason string,
+	message string,
+) {
+	condition := metav1.Condition{
+		Type:               conditionType,
 		Status:             status,
 		ObservedGeneration: server.Generation,
 		LastTransitionTime: metav1.Now(),
