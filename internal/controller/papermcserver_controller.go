@@ -1467,24 +1467,35 @@ func (r *PaperMCServerReconciler) isPluginCompatibleWithPaper(
 	plugin *mcv1alpha1.Plugin,
 	candidateVersion string,
 ) bool {
-	// Check if plugin has CompatibilityOverride
-	if plugin.Spec.CompatibilityOverride != nil {
-		// TODO: Use override when implemented in Plugin CRD
-		// For now, log and continue to other checks
-		slog.InfoContext(ctx, "Plugin has compatibilityOverride, but checking is not yet implemented",
+	// Check if plugin has CompatibilityOverride — takes precedence over API metadata
+	if plugin.Spec.CompatibilityOverride != nil && plugin.Spec.CompatibilityOverride.Enabled {
+		if len(plugin.Spec.CompatibilityOverride.MinecraftVersions) > 0 {
+			result := version.ContainsVersion(
+				plugin.Spec.CompatibilityOverride.MinecraftVersions, candidateVersion)
+			slog.DebugContext(ctx, "Checked plugin compatibilityOverride",
+				"plugin", plugin.Name,
+				"paperVersion", candidateVersion,
+				"overrideVersions", plugin.Spec.CompatibilityOverride.MinecraftVersions,
+				"compatible", result)
+
+			return result
+		}
+		// Override enabled but no versions specified — assume compatible
+		slog.DebugContext(ctx, "Plugin has compatibilityOverride enabled with no versions, assuming compatible",
 			"plugin", plugin.Name)
+
+		return true
 	}
 
 	// Check each available plugin version for compatibility with candidate Paper version
 	for _, ver := range plugin.Status.AvailableVersions {
-		for _, mcVersion := range ver.MinecraftVersions {
-			if mcVersion == candidateVersion {
-				slog.DebugContext(ctx, "Found compatible plugin version",
-					"plugin", plugin.Name,
-					"pluginVersion", ver.Version,
-					"paperVersion", candidateVersion)
-				return true
-			}
+		if version.ContainsVersion(ver.MinecraftVersions, candidateVersion) {
+			slog.DebugContext(ctx, "Found compatible plugin version",
+				"plugin", plugin.Name,
+				"pluginVersion", ver.Version,
+				"paperVersion", candidateVersion)
+
+			return true
 		}
 	}
 
@@ -1493,6 +1504,7 @@ func (r *PaperMCServerReconciler) isPluginCompatibleWithPaper(
 		"plugin", plugin.Name,
 		"paperVersion", candidateVersion,
 		"availableVersions", len(plugin.Status.AvailableVersions))
+
 	return false
 }
 

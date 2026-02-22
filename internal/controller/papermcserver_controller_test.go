@@ -241,6 +241,98 @@ var _ = Describe("PaperMCServer Controller", func() {
 		})
 	})
 
+	Context("Plugin compatibility with compatibilityOverride", func() {
+		It("should return true when compatibilityOverride has matching wildcard version", func() {
+			reconciler := &PaperMCServerReconciler{}
+			ctx := context.Background()
+
+			plugin := mck8slexlav1alpha1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "override-plugin",
+					Namespace: "default",
+				},
+				Spec: mck8slexlav1alpha1.PluginSpec{
+					CompatibilityOverride: &mck8slexlav1alpha1.CompatibilityOverride{
+						Enabled:           true,
+						MinecraftVersions: []string{"1.21.x"},
+					},
+				},
+				// No available versions in status - only override matters
+				Status: mck8slexlav1alpha1.PluginStatus{},
+			}
+
+			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, "1.21.4")
+			Expect(compatible).To(BeTrue(),
+				"Plugin with compatibilityOverride matching via wildcard should be compatible")
+		})
+
+		It("should return true when compatibilityOverride has exact version match", func() {
+			reconciler := &PaperMCServerReconciler{}
+			ctx := context.Background()
+
+			plugin := mck8slexlav1alpha1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "override-exact-plugin",
+					Namespace: "default",
+				},
+				Spec: mck8slexlav1alpha1.PluginSpec{
+					CompatibilityOverride: &mck8slexlav1alpha1.CompatibilityOverride{
+						Enabled:           true,
+						MinecraftVersions: []string{"1.21.1"},
+					},
+				},
+			}
+
+			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, "1.21.1")
+			Expect(compatible).To(BeTrue(),
+				"Plugin with exact version in compatibilityOverride should be compatible")
+		})
+
+		It("should return true when compatibilityOverride is enabled but has no versions", func() {
+			reconciler := &PaperMCServerReconciler{}
+			ctx := context.Background()
+
+			plugin := mck8slexlav1alpha1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "override-empty-plugin",
+					Namespace: "default",
+				},
+				Spec: mck8slexlav1alpha1.PluginSpec{
+					CompatibilityOverride: &mck8slexlav1alpha1.CompatibilityOverride{
+						Enabled: true,
+						// No versions specified - assume compatible
+					},
+				},
+			}
+
+			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, "1.21.1")
+			Expect(compatible).To(BeTrue(),
+				"Plugin with enabled override and no versions should assume compatible")
+		})
+
+		It("should return false when compatibilityOverride versions don't match", func() {
+			reconciler := &PaperMCServerReconciler{}
+			ctx := context.Background()
+
+			plugin := mck8slexlav1alpha1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "override-mismatch-plugin",
+					Namespace: "default",
+				},
+				Spec: mck8slexlav1alpha1.PluginSpec{
+					CompatibilityOverride: &mck8slexlav1alpha1.CompatibilityOverride{
+						Enabled:           true,
+						MinecraftVersions: []string{"1.20.x"},
+					},
+				},
+			}
+
+			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, "1.21.1")
+			Expect(compatible).To(BeFalse(),
+				"Plugin with override versions not matching should be incompatible")
+		})
+	})
+
 	Context("buildPodSpec error handling", func() {
 		It("should return error when DesiredVersion is not set instead of using hardcoded fallback", func() {
 

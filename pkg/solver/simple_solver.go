@@ -232,7 +232,7 @@ func (s *SimpleSolver) isPaperVersionCompatibleWithAllPlugins(
 		hasCompatibleVersion := false
 		for _, pvInfo := range plugin.Status.AvailableVersions {
 			// Check if this plugin version supports the Paper version
-			if containsVersion(pvInfo.MinecraftVersions, paperVer) {
+			if version.ContainsVersion(pvInfo.MinecraftVersions, paperVer) {
 				hasCompatibleVersion = true
 				break
 			}
@@ -320,7 +320,7 @@ func isPluginCompatibleWithServer(
 	if plugin.Spec.CompatibilityOverride != nil && plugin.Spec.CompatibilityOverride.Enabled {
 		// Use override versions instead of API metadata
 		if len(plugin.Spec.CompatibilityOverride.MinecraftVersions) > 0 {
-			return containsVersion(plugin.Spec.CompatibilityOverride.MinecraftVersions, paperVersion)
+			return version.ContainsVersion(plugin.Spec.CompatibilityOverride.MinecraftVersions, paperVersion)
 		}
 		// If override is enabled but no versions specified, assume compatible
 		return true
@@ -335,30 +335,7 @@ func isPluginCompatibleWithServer(
 	// Check if the plugin's compatible versions include this Paper version
 	// For MVP, we check MinecraftVersions which should include the Minecraft version
 	// corresponding to the Paper version
-	return containsVersion(pv.MinecraftVersions, paperVersion) ||
-		containsVersion(pv.PaperVersions, paperVersion)
+	return version.ContainsVersion(pv.MinecraftVersions, paperVersion) ||
+		version.ContainsVersion(pv.PaperVersions, paperVersion)
 }
 
-// containsVersion checks if a version string is in the list.
-func containsVersion(versions []string, target string) bool {
-	for _, v := range versions {
-		if v == target {
-			return true
-		}
-		// Also support version ranges like "1.21.x"
-		if matchesVersionPattern(v, target) {
-			return true
-		}
-	}
-	return false
-}
-
-// matchesVersionPattern checks if a target version matches a pattern (e.g., "1.21.x" matches "1.21.1").
-func matchesVersionPattern(pattern, target string) bool {
-	// Simple implementation: if pattern ends with .x, match major.minor
-	if len(pattern) > 2 && pattern[len(pattern)-2:] == ".x" {
-		prefix := pattern[:len(pattern)-2]
-		return len(target) >= len(prefix) && target[:len(prefix)] == prefix
-	}
-	return false
-}

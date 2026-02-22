@@ -11,6 +11,7 @@ import (
 
 	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
+	"github.com/lexfrei/minecraft-operator/pkg/version"
 )
 
 // Test fixtures.
@@ -57,9 +58,9 @@ func TestContainsVersion_ExactMatch(t *testing.T) {
 
 	versions := []string{"1.20.1", "1.20.4", "1.21.1"}
 
-	assert.True(t, containsVersion(versions, "1.20.1"))
-	assert.True(t, containsVersion(versions, "1.21.1"))
-	assert.False(t, containsVersion(versions, "1.19.4"))
+	assert.True(t, version.ContainsVersion(versions, "1.20.1"))
+	assert.True(t, version.ContainsVersion(versions, "1.21.1"))
+	assert.False(t, version.ContainsVersion(versions, "1.19.4"))
 }
 
 func TestContainsVersion_PatternMatch(t *testing.T) {
@@ -67,35 +68,35 @@ func TestContainsVersion_PatternMatch(t *testing.T) {
 
 	versions := []string{"1.21.x", "1.20.4"}
 
-	assert.True(t, containsVersion(versions, "1.21.1"))
-	assert.True(t, containsVersion(versions, "1.21.4"))
-	assert.True(t, containsVersion(versions, "1.20.4"))
-	assert.False(t, containsVersion(versions, "1.19.4"))
-	assert.False(t, containsVersion(versions, "1.20.1"))
+	assert.True(t, version.ContainsVersion(versions, "1.21.1"))
+	assert.True(t, version.ContainsVersion(versions, "1.21.4"))
+	assert.True(t, version.ContainsVersion(versions, "1.20.4"))
+	assert.False(t, version.ContainsVersion(versions, "1.19.4"))
+	assert.False(t, version.ContainsVersion(versions, "1.20.1"))
 }
 
 func TestContainsVersion_EmptyList(t *testing.T) {
 	t.Parallel()
 
-	assert.False(t, containsVersion([]string{}, "1.21.1"))
-	assert.False(t, containsVersion(nil, "1.21.1"))
+	assert.False(t, version.ContainsVersion([]string{}, "1.21.1"))
+	assert.False(t, version.ContainsVersion(nil, "1.21.1"))
 }
 
 func TestMatchesVersionPattern_WithXSuffix(t *testing.T) {
 	t.Parallel()
 
-	assert.True(t, matchesVersionPattern("1.21.x", "1.21.1"))
-	assert.True(t, matchesVersionPattern("1.21.x", "1.21.4"))
-	assert.True(t, matchesVersionPattern("1.20.x", "1.20.6"))
-	assert.False(t, matchesVersionPattern("1.21.x", "1.20.1"))
-	assert.False(t, matchesVersionPattern("1.21.x", "1.22.1"))
+	assert.True(t, version.MatchesVersionPattern("1.21.x", "1.21.1"))
+	assert.True(t, version.MatchesVersionPattern("1.21.x", "1.21.4"))
+	assert.True(t, version.MatchesVersionPattern("1.20.x", "1.20.6"))
+	assert.False(t, version.MatchesVersionPattern("1.21.x", "1.20.1"))
+	assert.False(t, version.MatchesVersionPattern("1.21.x", "1.22.1"))
 }
 
 func TestMatchesVersionPattern_WithoutXSuffix(t *testing.T) {
 	t.Parallel()
 
-	assert.False(t, matchesVersionPattern("1.21.1", "1.21.1"))
-	assert.False(t, matchesVersionPattern("1.21", "1.21.1"))
+	assert.False(t, version.MatchesVersionPattern("1.21.1", "1.21.1"))
+	assert.False(t, version.MatchesVersionPattern("1.21", "1.21.1"))
 }
 
 func TestSortVersionsDesc(t *testing.T) {
