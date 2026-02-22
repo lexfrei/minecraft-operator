@@ -3452,4 +3452,21 @@ var _ = Describe("UpdateController", func() {
 				"Empty downloadURL should be logged as info, not treated as error")
 		})
 	})
+
+	Context("Image tag construction", func() {
+		It("should use fully qualified docker.io registry prefix", func() {
+			// BUG: performCombinedUpdate constructs image as "lexfrei/papermc:..."
+			// without "docker.io/" prefix, while papermcserver_controller uses
+			// "docker.io/lexfrei/papermc:...". This inconsistency can cause
+			// issues with registry mirror configurations and is explicitly
+			// prohibited by DESIGN.md and CLAUDE.md.
+			src, readErr := os.ReadFile(updateControllerPath)
+			Expect(readErr).NotTo(HaveOccurred())
+			srcStr := string(src)
+
+			// The image format string should include docker.io/ prefix
+			Expect(srcStr).To(ContainSubstring(`docker.io/lexfrei/papermc:`),
+				"Image tag should use fully qualified docker.io/lexfrei/papermc: prefix")
+		})
+	})
 })
