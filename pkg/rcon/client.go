@@ -54,9 +54,12 @@ func NewRCONClient(host string, port int, password string) (*RCONClient, error) 
 
 // Connect establishes connection to the RCON server.
 func (c *RCONClient) Connect(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	address := fmt.Sprintf("%s:%d", c.host, c.port)
 
-	// Create a connection with timeout
 	conn, err := rcon.Dial(address, c.password)
 	if err != nil {
 		return errors.Wrapf(err, "failed to connect to RCON at %s", address)
@@ -68,6 +71,10 @@ func (c *RCONClient) Connect(ctx context.Context) error {
 
 // SendCommand sends a command to the server and returns the response.
 func (c *RCONClient) SendCommand(ctx context.Context, command string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	if c.conn == nil {
 		return "", errors.New("not connected to RCON server")
 	}

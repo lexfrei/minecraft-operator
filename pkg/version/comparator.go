@@ -51,7 +51,10 @@ func CompareVersions(v1, v2 string) (int, error) {
 // If delay is zero, all versions are returned.
 func FilterByUpdateDelay(versions []VersionInfo, delay time.Duration) []VersionInfo {
 	if delay == 0 {
-		return versions
+		result := make([]VersionInfo, len(versions))
+		copy(result, versions)
+
+		return result
 	}
 
 	cutoff := time.Now().Add(-delay)

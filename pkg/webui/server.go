@@ -236,10 +236,14 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse attempt number for timeout
+	// Parse attempt number for timeout, clamp to valid range
 	attempt := 1
 	if attemptStr != "" {
 		_, _ = fmt.Sscanf(attemptStr, "%d", &attempt)
+	}
+
+	if attempt < 1 {
+		attempt = 1
 	}
 
 	// Timeout after 30 attempts (60 seconds with 2s delay)

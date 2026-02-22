@@ -47,7 +47,7 @@ func (c *Client) GetPaperVersions(ctx context.Context) ([]string, error) {
 		return nil, errors.Wrap(err, "failed to get Paper project")
 	}
 
-	return project.Versions, nil
+	return project.FlattenVersions(), nil
 }
 
 // GetPaperBuild retrieves build information for a specific Paper version.
@@ -69,14 +69,14 @@ func (c *Client) GetBuilds(ctx context.Context, version string) ([]int, error) {
 		return nil, errors.Wrap(err, "failed to get builds")
 	}
 
-	if len(builds.Builds) == 0 {
+	if len(builds) == 0 {
 		return nil, errors.Newf("no builds available for version %s", version)
 	}
 
 	// Extract build numbers from the response
-	buildNumbers := make([]int, 0, len(builds.Builds))
-	for _, build := range builds.Builds {
-		buildNumbers = append(buildNumbers, int(build.Build))
+	buildNumbers := make([]int, 0, len(builds))
+	for _, build := range builds {
+		buildNumbers = append(buildNumbers, int(build.ID))
 	}
 
 	return buildNumbers, nil
@@ -84,28 +84,22 @@ func (c *Client) GetBuilds(ctx context.Context, version string) ([]int, error) {
 
 // extractBuildInfo extracts build info from builds response.
 func (c *Client) extractBuildInfo(
-	ctx context.Context,
+	_ context.Context,
 	version string,
-	builds *api.BuildsResponse,
+	builds []api.BuildV3Response,
 ) (*BuildInfo, error) {
-	if len(builds.Builds) == 0 {
+	if len(builds) == 0 {
 		return nil, errors.Newf("no builds available for version %s", version)
 	}
 
 	// Get latest build (last in the list)
-	latestBuild := builds.Builds[len(builds.Builds)-1]
-
-	// Get download URL for this build
-	downloadURL, err := c.paperClient.GetBuildURL(ctx, "paper", version, latestBuild.Build)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get build URL")
-	}
+	latestBuild := builds[len(builds)-1]
 
 	return &BuildInfo{
 		Version:     version,
-		Build:       int(latestBuild.Build),
-		DownloadURL: downloadURL,
-		SHA256:      "", // goPaperMC verifies automatically during download
+		Build:       int(latestBuild.ID),
+		DownloadURL: latestBuild.GetDownloadURL(),
+		SHA256:      latestBuild.GetDownloadSHA256(),
 	}, nil
 }
 

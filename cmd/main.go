@@ -22,6 +22,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	goruntime "runtime"
@@ -125,6 +126,7 @@ func main() {
 		slogLevel = slog.LevelError
 	default:
 		slogLevel = slog.LevelInfo
+		fmt.Fprintf(os.Stderr, "WARNING: unknown log level %q, defaulting to \"info\"\n", logLevel)
 	}
 
 	handlerOpts := &slog.HandlerOptions{
@@ -132,9 +134,15 @@ func main() {
 	}
 
 	var slogHandler slog.Handler
-	if logFormat == "text" {
+
+	switch logFormat {
+	case "text":
 		slogHandler = slog.NewTextHandler(os.Stderr, handlerOpts)
-	} else {
+	case "json":
+		slogHandler = slog.NewJSONHandler(os.Stderr, handlerOpts)
+	default:
+		fmt.Fprintf(os.Stderr, "WARNING: unknown log format %q, defaulting to \"json\"\n", logFormat)
+
 		slogHandler = slog.NewJSONHandler(os.Stderr, handlerOpts)
 	}
 

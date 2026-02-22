@@ -281,7 +281,7 @@ func (r *UpdateReconciler) isInMaintenanceWindow(ctx context.Context, server *mc
 
 	windowEnd := lastTrigger.Add(maintenanceWindowDuration)
 
-	return now.After(lastTrigger) && now.Before(windowEnd)
+	return !now.Before(lastTrigger) && now.Before(windowEnd)
 }
 
 // findLastCronTrigger finds the most recent time the cron schedule triggered before now.

@@ -119,29 +119,37 @@ func TestLogFormat_ShouldValidateExplicitly(t *testing.T) {
 	// Search for explicit "json" string comparison in logFormat handling.
 	// If the code checks `logFormat == "text"` and uses else for JSON,
 	// then any typo like "yaml" silently becomes JSON.
-	// Correct code should have explicit `logFormat == "json"` check.
+	// Correct code should have explicit `logFormat == "json"` check —
+	// either as `logFormat == "json"` or `case "json":` in a switch on logFormat.
 	var hasExplicitJSONCheck bool
 
 	ast.Inspect(f, func(n ast.Node) bool {
-		// Look for binary expressions comparing logFormat to "json"
-		binExpr, ok := n.(*ast.BinaryExpr)
-		if !ok {
-			return true
+		// Pattern 1: binary expression `logFormat == "json"`
+		if binExpr, ok := n.(*ast.BinaryExpr); ok {
+			if ident, ok := binExpr.X.(*ast.Ident); ok && ident.Name == "logFormat" {
+				if lit, ok := binExpr.Y.(*ast.BasicLit); ok && lit.Value == `"json"` {
+					hasExplicitJSONCheck = true
+					return false
+				}
+			}
 		}
 
-		ident, ok := binExpr.X.(*ast.Ident)
-		if !ok || ident.Name != "logFormat" {
-			return true
-		}
-
-		lit, ok := binExpr.Y.(*ast.BasicLit)
-		if !ok {
-			return true
-		}
-
-		if lit.Value == `"json"` {
-			hasExplicitJSONCheck = true
-			return false
+		// Pattern 2: switch logFormat { case "json": ... }
+		if switchStmt, ok := n.(*ast.SwitchStmt); ok {
+			if ident, ok := switchStmt.Tag.(*ast.Ident); ok && ident.Name == "logFormat" {
+				for _, clause := range switchStmt.Body.List {
+					cc, ok := clause.(*ast.CaseClause)
+					if !ok {
+						continue
+					}
+					for _, expr := range cc.List {
+						if lit, ok := expr.(*ast.BasicLit); ok && lit.Value == `"json"` {
+							hasExplicitJSONCheck = true
+							return false
+						}
+					}
+				}
+			}
 		}
 
 		return true

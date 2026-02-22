@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -34,7 +34,7 @@ jobs:
           severity: CRITICAL,HIGH,MEDIUM
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
           category: trivy-filesystem
@@ -44,21 +44,21 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.4.0
 
       - name: Run markdownlint
-        uses: DavidAnson/markdownlint-cli2-action@v19
+        uses: DavidAnson/markdownlint-cli2-action@v22
         with:
           globs: "**/*.md"
 
@@ -67,10 +67,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -113,7 +113,7 @@ jobs:
       digest-arm64: ${{ steps.push.outputs.digest }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -152,7 +152,7 @@ jobs:
           echo "$digest" > "/tmp/digests/${{ matrix.arch }}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: digest-${{ matrix.arch }}
           path: /tmp/digests/${{ matrix.arch }}
@@ -165,7 +165,7 @@ jobs:
       - build-and-push
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: /tmp/digests
           pattern: digest-*
@@ -194,7 +194,7 @@ jobs:
           - minecraft-operator
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -202,10 +202,10 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           # renovate: datasource=github-releases depName=helm/helm
-          version: "v3.19.2"
+          version: "v3.20.0"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -216,14 +216,14 @@ jobs:
         run: |
           # helm-unittest
           # renovate: datasource=github-releases depName=helm-unittest/helm-unittest
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v0.8.2
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.0.3
 
           # JSON schema validator
           pip install check-jsonschema
 
           # Artifact Hub CLI
           # renovate: datasource=github-releases depName=artifacthub/hub
-          AH_VERSION="1.21.0"
+          AH_VERSION="1.22.0"
           wget --quiet https://github.com/artifacthub/hub/releases/download/v${AH_VERSION}/ah_${AH_VERSION}_linux_amd64.tar.gz
           tar --extract --gzip --file ah_${AH_VERSION}_linux_amd64.tar.gz
           chmod +x ah
@@ -303,18 +303,18 @@ jobs:
       - lint-chart
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
           # renovate: datasource=github-releases depName=helm/helm
-          version: "v3.19.2"
+          version: "v3.20.0"
 
       - name: Install yq
         run: |
           # renovate: datasource=github-releases depName=mikefarah/yq
-          YQ_VERSION="4.44.3"
+          YQ_VERSION="4.52.4"
           wget --quiet https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64 --output-document yq
           chmod +x yq
           sudo mv yq /usr/local/bin/yq
@@ -358,7 +358,7 @@ jobs:
     steps:
       - name: Check for existing label
         id: check-label
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const labels = context.payload.pull_request.labels.map(l => l.name);
@@ -367,7 +367,7 @@ jobs:
 
       - name: Add label and comment
         if: steps.check-label.outputs.result != 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const prNumber = context.payload.pull_request.number;

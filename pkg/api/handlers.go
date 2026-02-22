@@ -380,6 +380,15 @@ func (s *Server) CreatePlugin(
 		}, nil
 	}
 
+	if req.Body.Port != nil && (*req.Body.Port < 1 || *req.Body.Port > 65535) {
+		return generated.CreatePlugin400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: "Port must be between 1 and 65535",
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}, nil
+	}
+
 	data := pluginCreateRequestToData(*req.Body)
 
 	err := s.pluginService.CreatePlugin(ctx, data)
@@ -457,6 +466,15 @@ func (s *Server) UpdatePlugin(
 		return generated.UpdatePlugin400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{
 				Error: "Request body is required",
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}, nil
+	}
+
+	if req.Body.Port != nil && (*req.Body.Port < 1 || *req.Body.Port > 65535) {
+		return generated.UpdatePlugin400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: "Port must be between 1 and 65535",
 				Code:  ptr(generated.INVALIDREQUEST),
 			},
 		}, nil
