@@ -424,6 +424,10 @@ func (r *PluginReconciler) reconcileDelete(
 
 	// Persist force-completion changes
 	if err := r.Status().Update(ctx, plugin); err != nil {
+		if apierrors.IsNotFound(err) {
+			// Resource already deleted (finalizer removed in previous reconciliation)
+			return ctrl.Result{}, nil
+		}
 		slog.ErrorContext(ctx, "Failed to persist force-completion changes", "error", err)
 		return ctrl.Result{}, errors.Wrap(err, "failed to persist force-completion")
 	}
