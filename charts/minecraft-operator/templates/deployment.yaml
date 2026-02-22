@@ -38,7 +38,7 @@ spec:
         args:
         - --leader-elect
         - --health-probe-bind-address=:8081
-        - --metrics-bind-address=:8443
+        - --metrics-bind-address=:{{ .Values.metrics.port }}
         - --metrics-secure=true
         {{- if .Values.webui.enabled }}
         - --webui-enabled=true
@@ -57,7 +57,7 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         ports:
-        - containerPort: 8443
+        - containerPort: {{ .Values.metrics.port }}
           name: metrics
           protocol: TCP
         - containerPort: 8081
