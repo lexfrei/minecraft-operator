@@ -786,6 +786,152 @@ var _ = Describe("PaperMCServer Controller", func() {
 			Expect(serverStatusEqual(a, b)).To(BeTrue(),
 				"same plugins in different order should be considered equal to prevent reconciliation churn")
 		})
+
+		It("should detect UpdateBlocked.BlockedBy changes", func() {
+			// BUG: serverStatusEqual compares UpdateBlocked.Blocked and
+			// UpdateBlocked.Reason but ignores BlockedBy. If the blocking
+			// plugin changes, the status won't update.
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				UpdateBlocked: &mck8slexlav1alpha1.UpdateBlockedStatus{
+					Blocked: true,
+					Reason:  "Plugin incompatible",
+					BlockedBy: &mck8slexlav1alpha1.BlockedByInfo{
+						Plugin:  "plugin-a",
+						Version: "1.0.0",
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				UpdateBlocked: &mck8slexlav1alpha1.UpdateBlockedStatus{
+					Blocked: true,
+					Reason:  "Plugin incompatible",
+					BlockedBy: &mck8slexlav1alpha1.BlockedByInfo{
+						Plugin:  "plugin-b",
+						Version: "2.0.0",
+					},
+				},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeFalse(),
+				"serverStatusEqual should detect UpdateBlocked.BlockedBy changes")
+		})
+
+		It("should detect plugin CurrentVersion changes", func() {
+			// BUG: pluginStatusSliceEqual only compares ResolvedVersion
+			// and Compatible, ignoring CurrentVersion, Source, PendingDeletion,
+			// DesiredVersion, and InstalledJARName fields.
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+					{
+						PluginRef:       mck8slexlav1alpha1.PluginRef{Name: "plugin-a", Namespace: "default"},
+						ResolvedVersion: "1.0.0",
+						Compatible:      true,
+						CurrentVersion:  "0.9.0",
+						Source:          "hangar",
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+					{
+						PluginRef:       mck8slexlav1alpha1.PluginRef{Name: "plugin-a", Namespace: "default"},
+						ResolvedVersion: "1.0.0",
+						Compatible:      true,
+						CurrentVersion:  "1.0.0",
+						Source:          "hangar",
+					},
+				},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeFalse(),
+				"serverStatusEqual should detect plugin CurrentVersion changes")
+		})
+
+		It("should detect plugin PendingDeletion changes", func() {
+			// BUG: pluginStatusSliceEqual ignores PendingDeletion field
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+					{
+						PluginRef:       mck8slexlav1alpha1.PluginRef{Name: "plugin-a", Namespace: "default"},
+						ResolvedVersion: "1.0.0",
+						Compatible:      true,
+						PendingDeletion: false,
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+					{
+						PluginRef:       mck8slexlav1alpha1.PluginRef{Name: "plugin-a", Namespace: "default"},
+						ResolvedVersion: "1.0.0",
+						Compatible:      true,
+						PendingDeletion: true,
+					},
+				},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeFalse(),
+				"serverStatusEqual should detect plugin PendingDeletion changes")
+		})
+
+		It("should detect AvailableUpdate Plugins changes", func() {
+			// BUG: availableUpdateEqual only compares Version and Build,
+			// ignoring the Plugins list. When plugin versions change
+			// for the same Paper version, the status won't update.
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.0",
+				CurrentBuild:   90,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				AvailableUpdate: &mck8slexlav1alpha1.AvailableUpdate{
+					Version: "1.21.1",
+					Build:   100,
+					Plugins: []mck8slexlav1alpha1.PluginVersionPair{
+						{PluginRef: mck8slexlav1alpha1.PluginRef{Name: "plugin-a", Namespace: "default"}, Version: "1.0.0"},
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.0",
+				CurrentBuild:   90,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				AvailableUpdate: &mck8slexlav1alpha1.AvailableUpdate{
+					Version: "1.21.1",
+					Build:   100,
+					Plugins: []mck8slexlav1alpha1.PluginVersionPair{
+						{PluginRef: mck8slexlav1alpha1.PluginRef{Name: "plugin-a", Namespace: "default"}, Version: "2.0.0"},
+					},
+				},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeFalse(),
+				"serverStatusEqual should detect AvailableUpdate Plugins changes")
+		})
 	})
 
 	Context("Reconcile must not return both non-zero Result and error", func() {
