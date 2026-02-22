@@ -154,7 +154,7 @@ func (s *ServerService) GetServer(ctx context.Context, namespace, name string) (
 	data := s.serverToData(ctx, &server)
 
 	// Fetch full plugin details
-	data.Plugins = s.fetchPluginDetails(ctx, server.Status.Plugins, namespace)
+	data.Plugins = s.fetchPluginDetails(ctx, server.Status.Plugins)
 
 	return &data, nil
 }
@@ -170,7 +170,7 @@ func (s *ServerService) GetServerByName(ctx context.Context, name string) (*Serv
 	for i := range serverList.Items {
 		if serverList.Items[i].Name == name {
 			data := s.serverToData(ctx, &serverList.Items[i])
-			data.Plugins = s.fetchPluginDetails(ctx, serverList.Items[i].Status.Plugins, serverList.Items[i].Namespace)
+			data.Plugins = s.fetchPluginDetails(ctx, serverList.Items[i].Status.Plugins)
 			return &data, nil
 		}
 	}
@@ -437,7 +437,6 @@ func (s *ServerService) serverToData(ctx context.Context, server *mck8slexlav1al
 func (s *ServerService) fetchPluginDetails(
 	ctx context.Context,
 	pluginStatuses []mck8slexlav1alpha1.ServerPluginStatus,
-	namespace string,
 ) []ServerPluginData {
 	plugins := make([]ServerPluginData, 0, len(pluginStatuses))
 
@@ -445,7 +444,7 @@ func (s *ServerService) fetchPluginDetails(
 		var plugin mck8slexlav1alpha1.Plugin
 		if err := s.client.Get(ctx, client.ObjectKey{
 			Name:      pluginStatus.PluginRef.Name,
-			Namespace: namespace,
+			Namespace: pluginStatus.PluginRef.Namespace,
 		}, &plugin); err != nil {
 			// Still include plugin with partial data
 			plugins = append(plugins, ServerPluginData{

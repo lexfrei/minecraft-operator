@@ -366,7 +366,9 @@ func statusEqual(a, b *mcv1alpha1.PluginStatus) bool {
 	for i := range a.AvailableVersions {
 		if a.AvailableVersions[i].Version != b.AvailableVersions[i].Version ||
 			a.AvailableVersions[i].DownloadURL != b.AvailableVersions[i].DownloadURL ||
-			a.AvailableVersions[i].Hash != b.AvailableVersions[i].Hash {
+			a.AvailableVersions[i].Hash != b.AvailableVersions[i].Hash ||
+			!a.AvailableVersions[i].ReleasedAt.Equal(&b.AvailableVersions[i].ReleasedAt) ||
+			!minecraftVersionsEqual(a.AvailableVersions[i].MinecraftVersions, b.AvailableVersions[i].MinecraftVersions) {
 			return false
 		}
 	}
@@ -381,6 +383,21 @@ func statusEqual(a, b *mcv1alpha1.PluginStatus) bool {
 			a.Conditions[i].Status != b.Conditions[i].Status ||
 			a.Conditions[i].Reason != b.Conditions[i].Reason ||
 			a.Conditions[i].Message != b.Conditions[i].Message {
+			return false
+		}
+	}
+
+	return true
+}
+
+// minecraftVersionsEqual compares two slices of Minecraft version strings.
+func minecraftVersionsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
 			return false
 		}
 	}

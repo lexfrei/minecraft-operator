@@ -594,9 +594,6 @@ func (s *Server) handlePluginRoutes(w http.ResponseWriter, r *http.Request) {
 		case actionDelete:
 			s.handlePluginDelete(w, r)
 			return
-		case actionApplyNow:
-			s.handleApplyNow(w, r)
-			return
 		}
 	}
 

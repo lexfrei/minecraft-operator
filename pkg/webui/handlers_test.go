@@ -474,14 +474,17 @@ func TestHandleApplyNowFromPluginRouteReturnsError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/some-plugin/apply-now?namespace=default", nil)
 	w := httptest.NewRecorder()
 
-	// This should NOT return 400 — apply-now from plugin route should work or be explicitly unsupported
+	// apply-now doesn't make sense for plugins (no maintenance windows)
+	// Route should return 404, not 400 from broken server path parsing
 	srv.handlePluginRoutes(w, req)
 
-	// The bug: handleApplyNow uses parseResourcePathAction with "/ui/server/" prefix,
-	// so it fails to parse plugin path and returns 400
 	if w.Code == http.StatusBadRequest {
 		t.Error("handleApplyNow called from plugin route returned 400 due to wrong path prefix parsing — " +
-			"either fix the routing or remove apply-now from plugin routes")
+			"apply-now should be removed from plugin routes")
+	}
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for apply-now on plugin route, got %d", w.Code)
 	}
 }
 
