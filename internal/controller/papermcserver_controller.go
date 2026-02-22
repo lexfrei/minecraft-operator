@@ -197,7 +197,7 @@ func (r *PaperMCServerReconciler) updateDesiredVersion(
 ) error {
 	desiredVersion, desiredBuild, err := r.resolveDesiredPaperVersion(ctx, server, matchedPlugins)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to resolve desired Paper version", "error", err)
+		slog.WarnContext(ctx, "Failed to resolve desired Paper version", "error", err)
 		// Don't fail reconciliation completely - keep existing desired if set
 		if server.Status.DesiredVersion != "" {
 			desiredVersion = server.Status.DesiredVersion
@@ -1240,7 +1240,7 @@ func (r *PaperMCServerReconciler) buildPluginStatus(
 		// Resolve version specifically for THIS server
 		resolvedVersion, err := r.resolvePluginVersionForServer(ctx, server, plugin)
 		if err != nil {
-			slog.ErrorContext(ctx, "Failed to resolve plugin version",
+			slog.WarnContext(ctx, "Failed to resolve plugin version",
 				"error", err,
 				"plugin", plugin.Name,
 				"server", server.Name)

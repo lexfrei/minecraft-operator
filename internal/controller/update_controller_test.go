@@ -2791,7 +2791,7 @@ var _ = Describe("UpdateController", func() {
 					if !ok {
 						return true
 					}
-					if ident.Name == "slog" && selExpr.Sel.Name == "Error" {
+					if ident.Name == "slog" && selExpr.Sel.Name == "Error" { //nolint:goconst // package name, not a magic string
 						Fail(fmt.Sprintf("isInMaintenanceWindow uses slog.Error() without context at line %d; should use slog.ErrorContext(ctx, ...)",
 							fset.Position(callExpr.Pos()).Line))
 					}
@@ -2833,7 +2833,7 @@ var _ = Describe("UpdateController", func() {
 					if !ok {
 						return true
 					}
-					if ident.Name == "slog" && (selExpr.Sel.Name == "Error" || selExpr.Sel.Name == "Warn") {
+					if ident.Name == "slog" && (selExpr.Sel.Name == "Error" || selExpr.Sel.Name == "Warn") { //nolint:goconst // package name, not a magic string
 						Fail(fmt.Sprintf("detectCurrentPaperVersion uses slog.%s() without context at line %d; should use slog.%sContext(ctx, ...)",
 							selExpr.Sel.Name, fset.Position(callExpr.Pos()).Line, selExpr.Sel.Name))
 					}

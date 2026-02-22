@@ -22,6 +22,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -768,6 +769,58 @@ var _ = Describe("PaperMCServer Controller", func() {
 				})
 
 				return false
+			})
+		})
+	})
+
+	Context("Compatibility resolution logs should use WARN, not ERROR", func() {
+		It("should log plugin/version incompatibility at WARN level, not ERROR", func() {
+			fset := token.NewFileSet()
+			node, parseErr := parser.ParseFile(fset, "papermcserver_controller.go", nil, parser.AllErrors)
+			Expect(parseErr).NotTo(HaveOccurred())
+
+			// These log messages indicate normal operational conditions
+			// (solver blocking update, no compatible plugin version), not system errors.
+			incompatibilityMessages := map[string]bool{
+				"Failed to resolve desired Paper version": true,
+				"Failed to resolve plugin version":        true,
+			}
+
+			ast.Inspect(node, func(n ast.Node) bool {
+				callExpr, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+
+				selExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+
+				// Only check slog.ErrorContext calls
+				if selExpr.Sel.Name != "ErrorContext" {
+					return true
+				}
+
+				pkgIdent, ok := selExpr.X.(*ast.Ident)
+				if !ok || pkgIdent.Name != "slog" { //nolint:goconst // package name, not a magic string
+					return true
+				}
+
+				// Check if first string argument matches our target messages
+				if len(callExpr.Args) >= 2 {
+					if lit, ok := callExpr.Args[1].(*ast.BasicLit); ok {
+						msg := strings.Trim(lit.Value, "\"")
+						if incompatibilityMessages[msg] {
+							Fail(fmt.Sprintf(
+								"slog.ErrorContext at line %d with message %q should use WarnContext — "+
+									"plugin/version incompatibility is a normal operational condition, not a system error",
+								fset.Position(callExpr.Pos()).Line, msg))
+						}
+					}
+				}
+
+				return true
 			})
 		})
 	})
