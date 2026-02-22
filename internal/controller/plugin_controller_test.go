@@ -18,6 +18,9 @@ package controller
 
 import (
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -591,6 +594,96 @@ var _ = Describe("Plugin Controller", func() {
 
 			Expect(plugin.Status.DeletionProgress[0].JARDeleted).To(BeFalse(),
 				"Entry without DeletionRequestedAt should not be force-completed")
+		})
+	})
+
+	Context("forceCompleteStaleDeletions bugs", func() {
+		It("should accept context parameter for logging", func() {
+			// Bug: forceCompleteStaleDeletions uses slog.Warn() without context.
+			// Per project standards, must use slog.WarnContext(ctx, ...).
+			// Verify via AST that the function accepts ctx parameter.
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, "plugin_controller.go", nil, 0)
+			Expect(err).NotTo(HaveOccurred())
+
+			var found bool
+			ast.Inspect(f, func(n ast.Node) bool {
+				fn, ok := n.(*ast.FuncDecl)
+				if !ok || fn.Name.Name != "forceCompleteStaleDeletions" {
+					return true
+				}
+				found = true
+				// Check that function has ctx parameter (beyond receiver)
+				params := fn.Type.Params.List
+				// Receiver is separate, params should include context.Context
+				hasCtx := false
+				for _, p := range params {
+					if sel, ok := p.Type.(*ast.SelectorExpr); ok {
+						if sel.Sel.Name == "Context" {
+							hasCtx = true
+						}
+					}
+				}
+				Expect(hasCtx).To(BeTrue(),
+					"forceCompleteStaleDeletions should accept context.Context for slog.WarnContext")
+				return false
+			})
+			Expect(found).To(BeTrue(), "forceCompleteStaleDeletions function not found")
+		})
+
+		It("should persist changes to status after force-completing", func() {
+			// Bug: forceCompleteStaleDeletions modifies in-memory status
+			// but never calls r.Status().Update(). Changes are lost on next reconciliation.
+			// Verify via AST that the function calls r.Status().Update() or
+			// that the caller (reconcileDelete) persists after calling it.
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, "plugin_controller.go", nil, 0)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Check reconcileDelete: after forceCompleteStaleDeletions call,
+			// there must be a Status().Update() call BEFORE allJARsDeleted check
+			var foundReconcileDelete bool
+			ast.Inspect(f, func(n ast.Node) bool {
+				fn, ok := n.(*ast.FuncDecl)
+				if !ok || fn.Name.Name != "reconcileDelete" {
+					return true
+				}
+				foundReconcileDelete = true
+
+				// Find positions of forceCompleteStaleDeletions and allJARsDeleted
+				var forceCompletePos, allJARsPos token.Pos
+				var hasStatusUpdateBetween bool
+				ast.Inspect(fn.Body, func(n ast.Node) bool {
+					call, ok := n.(*ast.CallExpr)
+					if !ok {
+						return true
+					}
+					sel, ok := call.Fun.(*ast.SelectorExpr)
+					if !ok {
+						return true
+					}
+					if sel.Sel.Name == "forceCompleteStaleDeletions" {
+						forceCompletePos = call.Pos()
+					}
+					if sel.Sel.Name == "allJARsDeleted" {
+						allJARsPos = call.Pos()
+					}
+					// Look for Status().Update() pattern
+					if sel.Sel.Name == "Update" && forceCompletePos.IsValid() &&
+						(!allJARsPos.IsValid() || call.Pos() < allJARsPos) &&
+						call.Pos() > forceCompletePos {
+						hasStatusUpdateBetween = true
+					}
+					return true
+				})
+
+				Expect(forceCompletePos.IsValid()).To(BeTrue(),
+					"forceCompleteStaleDeletions call not found in reconcileDelete")
+				Expect(hasStatusUpdateBetween).To(BeTrue(),
+					"Status().Update() must be called between forceCompleteStaleDeletions and allJARsDeleted")
+				return false
+			})
+			Expect(foundReconcileDelete).To(BeTrue(), "reconcileDelete function not found")
 		})
 	})
 

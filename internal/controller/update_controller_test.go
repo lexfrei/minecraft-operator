@@ -22,6 +22,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -2716,6 +2717,70 @@ var _ = Describe("UpdateController", func() {
 			// Currently this returns 0 (the bug), should return 1 (the fix)
 			Expect(result).To(HaveLen(1),
 				"Should include plugins with empty InstalledJARName for immediate deletion completion")
+		})
+	})
+
+	Context("Maintenance window cron parse error", func() {
+		It("should block updates when cron expression is invalid", func() {
+			// Bug: isInMaintenanceWindow returns true (allows update) when cron
+			// parse fails. This silently bypasses maintenance windows on typos.
+			// Safe default: block updates on parse error.
+			reconciler := &UpdateReconciler{}
+
+			server := &mcv1alpha1.PaperMCServer{
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Enabled: true,
+							Cron:    "invalid cron expression!!!",
+						},
+					},
+				},
+			}
+
+			result := reconciler.isInMaintenanceWindow(server)
+			Expect(result).To(BeFalse(),
+				"Invalid cron should block updates (safe default), not silently allow them")
+		})
+	})
+
+	Context("applyPluginUpdates empty downloadURL", func() {
+		It("should skip plugins with empty downloadURL without error", func() {
+			// Bug: When downloadURL is empty (e.g., after Bug 12 ExternalURL filter),
+			// applyPluginUpdates adds an error to downloadErrors. This means plugins
+			// that simply don't have a download URL (legitimate state) cause the
+			// entire update to be reported as failed.
+			// Instead, plugins with empty downloadURL should be silently skipped
+			// (logged as info, not treated as error).
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, updateControllerPath, nil, 0)
+			Expect(err).NotTo(HaveOccurred())
+
+			var found bool
+			ast.Inspect(f, func(n ast.Node) bool {
+				fn, ok := n.(*ast.FuncDecl)
+				if !ok || fn.Name.Name != "applyPluginUpdates" {
+					return true
+				}
+				found = true
+
+				// Look for slog.InfoContext call related to empty downloadURL
+				// (should be info, not error)
+				src, readErr := os.ReadFile(updateControllerPath)
+				Expect(readErr).NotTo(HaveOccurred())
+
+				funcStart := fset.Position(fn.Pos()).Offset
+				funcEnd := fset.Position(fn.End()).Offset
+				funcBody := string(src[funcStart:funcEnd])
+
+				// The function should NOT add empty downloadURL to downloadErrors
+				// Instead it should log info and continue
+				Expect(funcBody).NotTo(ContainSubstring("downloadErrors = append(downloadErrors"),
+					"Empty downloadURL should not be added to downloadErrors")
+
+				return false
+			})
+			Expect(found).To(BeTrue(), "applyPluginUpdates function not found")
 		})
 	})
 })
