@@ -182,6 +182,52 @@ func newTestServer(objs ...client.Object) *Server {
 	}
 }
 
+func TestRenderSolverStatus_XSS_ServerName(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	// XSS payload in server name (should be HTML-escaped in output)
+	xssName := `"><script>alert('xss')</script>`
+	xssNamespace := `ns"><img src=x onerror=alert(1)>`
+
+	w := httptest.NewRecorder()
+	status := solverStatusInfo{solverRunning: true}
+
+	srv.renderSolverStatus(w, status, xssName, xssNamespace, 1)
+
+	body := w.Body.String()
+
+	// The raw XSS payload should NOT appear in the HTML output
+	if strings.Contains(body, "<script>") {
+		t.Errorf("XSS: raw <script> tag found in HTML output: %s", body)
+	}
+	if strings.Contains(body, `onerror=`) {
+		t.Errorf("XSS: raw onerror handler found in HTML output: %s", body)
+	}
+}
+
+func TestHandlePluginResolve_XSS_PluginName(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	// Even though triggerPluginReconciliation will fail (no plugin exists),
+	// the plugin name is interpolated into text/plain response.
+	// Verify no raw HTML in output.
+	xssName := `<script>alert('xss')</script>`
+	req := httptest.NewRequest(http.MethodPost,
+		"/ui/plugin/resolve?name="+url.QueryEscape(xssName)+"&namespace=default", nil)
+	w := httptest.NewRecorder()
+
+	srv.handlePluginResolve(w, req)
+
+	body := w.Body.String()
+	if strings.Contains(body, "<script>") {
+		t.Errorf("XSS: raw <script> tag found in response: %s", body)
+	}
+}
+
 func TestHandlePluginListShowsAllPlugins(t *testing.T) {
 	t.Parallel()
 
