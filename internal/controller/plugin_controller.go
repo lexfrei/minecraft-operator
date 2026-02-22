@@ -381,28 +381,7 @@ func statusEqual(a, b *mcv1alpha1.PluginStatus) bool {
 		}
 	}
 
-	// Compare Conditions (order-independent, keyed by Type)
-	if len(a.Conditions) != len(b.Conditions) {
-		return false
-	}
-
-	conditionMap := make(map[string]metav1.Condition, len(a.Conditions))
-	for _, c := range a.Conditions {
-		conditionMap[c.Type] = c
-	}
-
-	for _, c := range b.Conditions {
-		prev, ok := conditionMap[c.Type]
-		if !ok {
-			return false
-		}
-
-		if prev.Status != c.Status || prev.Reason != c.Reason || prev.Message != c.Message {
-			return false
-		}
-	}
-
-	return true
+	return conditionsEqual(a.Conditions, b.Conditions)
 }
 
 // minecraftVersionsEqual compares two slices of Minecraft version strings.

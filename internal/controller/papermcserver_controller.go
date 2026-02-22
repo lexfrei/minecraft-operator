@@ -1630,17 +1630,21 @@ func serverStatusEqual(a, b *mcv1alpha1.PaperMCServerStatus) bool {
 		return false
 	}
 
-	// Compare Conditions (order-independent, keyed by Type)
-	if len(a.Conditions) != len(b.Conditions) {
+	return conditionsEqual(a.Conditions, b.Conditions)
+}
+
+// conditionsEqual compares two condition slices order-independently, keyed by Type.
+func conditionsEqual(a, b []metav1.Condition) bool {
+	if len(a) != len(b) {
 		return false
 	}
 
-	conditionMap := make(map[string]metav1.Condition, len(a.Conditions))
-	for _, c := range a.Conditions {
+	conditionMap := make(map[string]metav1.Condition, len(a))
+	for _, c := range a {
 		conditionMap[c.Type] = c
 	}
 
-	for _, c := range b.Conditions {
+	for _, c := range b {
 		prev, ok := conditionMap[c.Type]
 		if !ok {
 			return false

@@ -31,6 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+const testProject = "TestProject"
+
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	_ = mcv1alpha1.AddToScheme(scheme)
@@ -469,7 +471,7 @@ func TestListPlugins_WithPlugins(t *testing.T) {
 		Spec: mcv1alpha1.PluginSpec{
 			Source: mcv1alpha1.PluginSource{
 				Type:    "hangar",
-				Project: "TestProject",
+				Project: testProject,
 			},
 			UpdateStrategy: "latest",
 			InstanceSelector: metav1.LabelSelector{
@@ -515,7 +517,7 @@ func TestCreatePlugin_Success(t *testing.T) {
 	srv := newTestServer()
 	ctx := context.Background()
 
-	project := "TestProject"
+	project := testProject
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
 			Name:      "my-plugin",
@@ -595,7 +597,7 @@ func TestGetPlugin_Found(t *testing.T) {
 		Spec: mcv1alpha1.PluginSpec{
 			Source: mcv1alpha1.PluginSource{
 				Type:    "hangar",
-				Project: "TestProject",
+				Project: testProject,
 			},
 			UpdateStrategy: "latest",
 			InstanceSelector: metav1.LabelSelector{
@@ -684,7 +686,7 @@ func TestDeletePlugin_Success(t *testing.T) {
 		Spec: mcv1alpha1.PluginSpec{
 			Source: mcv1alpha1.PluginSource{
 				Type:    "hangar",
-				Project: "TestProject",
+				Project: testProject,
 			},
 			UpdateStrategy: "latest",
 			InstanceSelector: metav1.LabelSelector{
@@ -889,7 +891,7 @@ func TestServerCreateRequestToData(t *testing.T) {
 }
 
 func TestPluginCreateRequestToData(t *testing.T) {
-	project := "TestProject"
+	project := testProject
 	req := generated.PluginCreateRequest{
 		Name:      "new-plugin",
 		Namespace: "default",
@@ -906,7 +908,7 @@ func TestPluginCreateRequestToData(t *testing.T) {
 	assert.Equal(t, "new-plugin", data.Name)
 	assert.Equal(t, "default", data.Namespace)
 	assert.Equal(t, "hangar", data.Source.Type)
-	assert.Equal(t, "TestProject", data.Source.Project)
+	assert.Equal(t, testProject, data.Source.Project)
 }
 
 func TestLabelSelectorToK8s(t *testing.T) {
@@ -932,7 +934,7 @@ func TestCreatePlugin_NegativePort_ShouldReturn400(t *testing.T) {
 	ctx := context.Background()
 
 	port := -1
-	project := "TestProject"
+	project := testProject
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
 			Name:      "bad-port-plugin",
@@ -960,7 +962,7 @@ func TestCreatePlugin_OverflowPort_ShouldReturn400(t *testing.T) {
 	ctx := context.Background()
 
 	port := 100000
-	project := "TestProject"
+	project := testProject
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
 			Name:      "overflow-port-plugin",
@@ -991,7 +993,7 @@ func TestUpdatePlugin_NegativePort_ShouldReturn400(t *testing.T) {
 		Spec: mcv1alpha1.PluginSpec{
 			Source: mcv1alpha1.PluginSource{
 				Type:    "hangar",
-				Project: "TestProject",
+				Project: testProject,
 			},
 			UpdateStrategy: "latest",
 			InstanceSelector: metav1.LabelSelector{
