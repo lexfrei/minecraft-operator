@@ -1551,4 +1551,53 @@ var _ = Describe("Plugin Controller", func() {
 				"Plugin should be fully deleted when InstalledJARName is empty (no JAR to delete)")
 		})
 	})
+
+	Context("Reconcile must not return both non-zero Result and error", func() {
+		It("should never return result and error simultaneously in plugin controller", func() {
+			fset := token.NewFileSet()
+			node, parseErr := parser.ParseFile(fset, "plugin_controller.go", nil, parser.AllErrors)
+			Expect(parseErr).NotTo(HaveOccurred())
+
+			ast.Inspect(node, func(n ast.Node) bool {
+				funcDecl, ok := n.(*ast.FuncDecl)
+				if !ok {
+					return true
+				}
+				if funcDecl.Name.Name != "Reconcile" || funcDecl.Recv == nil { //nolint:goconst // AST function name, not a magic string
+					return false
+				}
+
+				ast.Inspect(funcDecl.Body, func(inner ast.Node) bool {
+					retStmt, ok := inner.(*ast.ReturnStmt)
+					if !ok || len(retStmt.Results) != 2 {
+						return true
+					}
+
+					errExpr := retStmt.Results[1]
+					resultExpr := retStmt.Results[0]
+
+					errIdent, errIsIdent := errExpr.(*ast.Ident)
+					if !errIsIdent || errIdent.Name == "nil" {
+						return true
+					}
+
+					if _, isCompLit := resultExpr.(*ast.CompositeLit); isCompLit {
+						return true
+					}
+
+					if resultIdent, ok := resultExpr.(*ast.Ident); ok {
+						Expect(resultIdent.Name).NotTo(Equal("result"),
+							fmt.Sprintf("Reconcile at line %d returns both 'result' and '%s' — "+
+								"controller-runtime ignores Result when error is non-nil. "+
+								"Use ctrl.Result{} when returning an error.",
+								fset.Position(retStmt.Pos()).Line, errIdent.Name))
+					}
+
+					return true
+				})
+
+				return false
+			})
+		})
+	})
 })

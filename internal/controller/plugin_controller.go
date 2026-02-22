@@ -120,7 +120,11 @@ func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}
 
-	return result, err
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return result, nil
 }
 
 // doReconcile performs the actual reconciliation logic.

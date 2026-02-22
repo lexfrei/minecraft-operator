@@ -727,7 +727,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				if !ok {
 					return true
 				}
-				if funcDecl.Name.Name != "Reconcile" || funcDecl.Recv == nil {
+				if funcDecl.Name.Name != "Reconcile" || funcDecl.Recv == nil { //nolint:goconst // AST function name, not a magic string
 					return false
 				}
 
@@ -1013,7 +1013,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 						return true
 					}
 					// Only check the top-level Reconcile method
-					if funcDecl.Name.Name != "Reconcile" {
+					if funcDecl.Name.Name != "Reconcile" { //nolint:goconst // AST function name, not a magic string
 						return false
 					}
 					if funcDecl.Recv == nil {
