@@ -1610,6 +1610,20 @@ func serverStatusEqual(a, b *mcv1alpha1.PaperMCServerStatus) bool {
 		return false
 	}
 
+	// Compare Conditions
+	if len(a.Conditions) != len(b.Conditions) {
+		return false
+	}
+
+	for i := range a.Conditions {
+		if a.Conditions[i].Type != b.Conditions[i].Type ||
+			a.Conditions[i].Status != b.Conditions[i].Status ||
+			a.Conditions[i].Reason != b.Conditions[i].Reason ||
+			a.Conditions[i].Message != b.Conditions[i].Message {
+			return false
+		}
+	}
+
 	return true
 }
 
