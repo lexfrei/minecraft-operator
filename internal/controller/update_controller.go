@@ -709,24 +709,27 @@ func (r *UpdateReconciler) performPluginOnlyUpdate(
 		return errors.Wrap(err, "failed to download plugins")
 	}
 
-	// Step 3: Create RCON client
-	rconClient, err := r.createRCONClient(ctx, server)
-	if err != nil {
-		return errors.Wrap(err, "failed to create RCON client")
+	// Step 3: Graceful shutdown via RCON (only if RCON is enabled)
+	if server.Spec.RCON.Enabled {
+		rconClient, rconErr := r.createRCONClient(ctx, server)
+		if rconErr != nil {
+			return errors.Wrap(rconErr, "failed to create RCON client")
+		}
+
+		if shutdownErr := r.executeGracefulShutdownWithClient(ctx, server, rconClient); shutdownErr != nil {
+			return errors.Wrap(shutdownErr, "failed to execute graceful shutdown")
+		}
+	} else {
+		slog.InfoContext(ctx, "RCON disabled, skipping graceful shutdown", "server", server.Name)
 	}
 
-	// Step 4: Execute graceful shutdown via RCON
-	if err := r.executeGracefulShutdownWithClient(ctx, server, rconClient); err != nil {
-		return errors.Wrap(err, "failed to execute graceful shutdown")
-	}
-
-	// Step 5: Delete pod to trigger StatefulSet recreation
+	// Step 4: Delete pod to trigger StatefulSet recreation
 	podName := server.Name + "-0"
 	if err := r.deletePod(ctx, podName, server.Namespace); err != nil {
 		return errors.Wrap(err, "failed to delete pod for recreation")
 	}
 
-	// Step 6: Wait for pod to restart (StatefulSet will recreate it)
+	// Step 5: Wait for pod to restart (StatefulSet will recreate it)
 	if err := r.waitForPodReady(ctx, server); err != nil {
 		return errors.Wrap(err, "failed to wait for pod ready")
 	}
@@ -797,14 +800,18 @@ func (r *UpdateReconciler) performCombinedUpdate(
 		return errors.Wrap(err, "failed to download plugins")
 	}
 
-	// Step 3: RCON graceful shutdown (warn players, save world)
-	rconClient, err := r.createRCONClient(ctx, server)
-	if err != nil {
-		return errors.Wrap(err, "failed to create RCON client")
-	}
+	// Step 3: RCON graceful shutdown (warn players, save world) — only if RCON is enabled
+	if server.Spec.RCON.Enabled {
+		rconClient, rconErr := r.createRCONClient(ctx, server)
+		if rconErr != nil {
+			return errors.Wrap(rconErr, "failed to create RCON client")
+		}
 
-	if err := r.executeGracefulShutdownWithClient(ctx, server, rconClient); err != nil {
-		return errors.Wrap(err, "failed to execute graceful shutdown")
+		if shutdownErr := r.executeGracefulShutdownWithClient(ctx, server, rconClient); shutdownErr != nil {
+			return errors.Wrap(shutdownErr, "failed to execute graceful shutdown")
+		}
+	} else {
+		slog.InfoContext(ctx, "RCON disabled, skipping graceful shutdown", "server", server.Name)
 	}
 
 	// Step 4: Update StatefulSet image to new Paper version
