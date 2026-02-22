@@ -38,7 +38,8 @@ func newTestHangarClient(serverURL string, httpClient *http.Client) *HangarClien
 	})
 
 	return &HangarClient{
-		client: client,
+		client:  client,
+		baseURL: serverURL,
 	}
 }
 
@@ -432,8 +433,7 @@ func TestHangarClient_GetVersions_ExternalURL_GitHubReleasePage(t *testing.T) {
 	t.Parallel()
 
 	// Bug 12: ExternalURL pointing to GitHub release PAGE (not JAR)
-	// should either be resolved to an actual JAR download URL
-	// or marked as non-downloadable.
+	// should be resolved to a Hangar download API URL.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/projects/github-plugin":
@@ -468,12 +468,61 @@ func TestHangarClient_GetVersions_ExternalURL_GitHubReleasePage(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, versions, 1)
 
-	// The download URL should either:
-	// a) be empty (not downloadable via simple curl), or
-	// b) be resolved to an actual JAR asset URL
-	// Currently it returns the release page URL, which is wrong.
+	// Bug 24: download URL must NOT be empty — Hangar download API URL is the fallback
+	assert.NotEmpty(t, versions[0].DownloadURL,
+		"externally-hosted plugins must get a Hangar download API URL as fallback")
 	assert.NotEqual(t,
 		"https://github.com/EssentialsX/Essentials/releases/tags/2.21.2",
 		versions[0].DownloadURL,
 		"ExternalURL pointing to GitHub release page should NOT be used as DownloadURL")
+	assert.Contains(t, versions[0].DownloadURL, "/projects/TestOwner/github-plugin/versions/2.21.2/PAPER/download",
+		"fallback URL must use the Hangar download API endpoint")
+}
+
+func TestHangarClient_GetVersions_ExternallyHosted_EmptyDownloadURL(t *testing.T) {
+	t.Parallel()
+
+	// Bug 24: Hangar plugins with external hosting have empty downloadURL.
+	// When DownloadURL is empty and ExternalURL is null, fallback to Hangar download API.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/projects/external-hosted":
+			project := makeTestProject("external-hosted")
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(project)
+		case "/projects/TestOwner/external-hosted/versions":
+			version := hangar.Version{
+				ID:           1,
+				Name:         "1.5.0",
+				GameVersions: []string{"1.21.1"},
+				Downloads: map[string]hangar.DownloadInfo{
+					"PAPER": {
+						// Both DownloadURL and ExternalURL are empty
+						DownloadURL: "",
+						ExternalURL: "",
+						FileInfo:    &hangar.FileInfo{SHA256Hash: "abc123"},
+					},
+				},
+				CreatedAt: time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+			}
+			versions := makeVersionsList(version)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(versions)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestHangarClient(server.URL, server.Client())
+	versions, err := client.GetVersions(context.Background(), "external-hosted")
+
+	require.NoError(t, err)
+	require.Len(t, versions, 1)
+
+	// Fallback to Hangar download API endpoint
+	assert.NotEmpty(t, versions[0].DownloadURL,
+		"versions with empty DownloadURL must get Hangar download API fallback")
+	assert.Contains(t, versions[0].DownloadURL, "/projects/TestOwner/external-hosted/versions/1.5.0/PAPER/download")
+	assert.Equal(t, "abc123", versions[0].Hash, "hash must still be preserved")
 }

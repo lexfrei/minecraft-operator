@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -11,7 +12,8 @@ import (
 
 // HangarClient implements PluginClient using the go-hangar library.
 type HangarClient struct {
-	client *hangar.Client
+	client  *hangar.Client
+	baseURL string
 }
 
 // NewHangarClient creates a new Hangar API client.
@@ -22,7 +24,8 @@ func NewHangarClient() *HangarClient {
 	})
 
 	return &HangarClient{
-		client: client,
+		client:  client,
+		baseURL: hangar.DefaultBaseURL,
 	}
 }
 
@@ -43,21 +46,12 @@ func (c *HangarClient) GetVersions(ctx context.Context, project string) ([]Plugi
 		return nil, errors.Wrap(err, "failed to list versions")
 	}
 
+	owner := proj.Namespace.Owner
+	slug := proj.Namespace.Slug
+
 	versions := make([]PluginVersion, 0, len(versionsList.Result))
 	for _, v := range versionsList.Result {
-		// Extract download URL for PAPER platform
-		downloadURL := ""
-		hash := ""
-		if downloadInfo, ok := v.Downloads["PAPER"]; ok {
-			if downloadInfo.DownloadURL != "" {
-				downloadURL = downloadInfo.DownloadURL
-			} else if downloadInfo.ExternalURL != "" && isDirectDownloadURL(downloadInfo.ExternalURL) {
-				downloadURL = downloadInfo.ExternalURL
-			}
-			if downloadInfo.FileInfo != nil {
-				hash = downloadInfo.FileInfo.SHA256Hash
-			}
-		}
+		downloadURL, hash := c.extractPaperDownload(v, owner, slug)
 
 		// Extract Paper versions from platform dependencies
 		var paperVersions []string
@@ -67,8 +61,6 @@ func (c *HangarClient) GetVersions(ctx context.Context, project string) ([]Plugi
 			}
 		}
 
-		// Use GameVersions for Minecraft versions (may be nil/empty)
-		// If GameVersions is empty, fallback to platformDependencies.PAPER
 		minecraftVersions := v.GameVersions
 		if len(minecraftVersions) == 0 {
 			minecraftVersions = paperVersions
@@ -85,6 +77,35 @@ func (c *HangarClient) GetVersions(ctx context.Context, project string) ([]Plugi
 	}
 
 	return versions, nil
+}
+
+// extractPaperDownload resolves the PAPER download URL and hash for a version.
+// Falls back to Hangar download API endpoint for externally-hosted plugins.
+func (c *HangarClient) extractPaperDownload(v hangar.Version, owner, slug string) (string, string) {
+	downloadURL := ""
+	hash := ""
+
+	if downloadInfo, ok := v.Downloads["PAPER"]; ok {
+		if downloadInfo.DownloadURL != "" {
+			downloadURL = downloadInfo.DownloadURL
+		} else if downloadInfo.ExternalURL != "" && isDirectDownloadURL(downloadInfo.ExternalURL) {
+			downloadURL = downloadInfo.ExternalURL
+		}
+
+		if downloadInfo.FileInfo != nil {
+			hash = downloadInfo.FileInfo.SHA256Hash
+		}
+	}
+
+	// Fallback: use Hangar download API endpoint for externally-hosted plugins.
+	if downloadURL == "" && v.Downloads != nil {
+		if _, ok := v.Downloads["PAPER"]; ok {
+			downloadURL = fmt.Sprintf("%s/projects/%s/%s/versions/%s/PAPER/download",
+				c.baseURL, owner, slug, v.Name)
+		}
+	}
+
+	return downloadURL, hash
 }
 
 // GetCompatibility retrieves compatibility information for a specific version.
