@@ -254,10 +254,10 @@ func (r *UpdateReconciler) isInMaintenanceWindow(server *mcv1alpha1.PaperMCServe
 
 	schedule, err := parser.Parse(mw.Cron)
 	if err != nil {
-		slog.Error("Failed to parse maintenance window cron, allowing update",
+		slog.Error("Failed to parse maintenance window cron, blocking update",
 			"cron", mw.Cron, "error", err)
 
-		return true // Can't parse cron, don't block
+		return false // Can't parse cron, block updates as safe default
 	}
 
 	now := r.now()
@@ -541,9 +541,8 @@ func (r *UpdateReconciler) applyPluginUpdates(
 		}
 
 		if downloadURL == "" {
-			downloadErrors = append(downloadErrors,
-				errors.Newf("plugin %s: download URL not found for version %s",
-					pluginName, pluginStatus.ResolvedVersion))
+			slog.InfoContext(ctx, "Plugin has no download URL, skipping",
+				"plugin", pluginName, "version", pluginStatus.ResolvedVersion)
 			continue
 		}
 

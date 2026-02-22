@@ -382,7 +382,13 @@ func (r *PluginReconciler) reconcileDelete(
 	}
 
 	// Step 4: Force-complete stale deletion entries to prevent deadlocks
-	r.forceCompleteStaleDeletions(plugin)
+	r.forceCompleteStaleDeletions(ctx, plugin)
+
+	// Persist force-completion changes
+	if err := r.Status().Update(ctx, plugin); err != nil {
+		slog.ErrorContext(ctx, "Failed to persist force-completion changes", "error", err)
+		return ctrl.Result{}, errors.Wrap(err, "failed to persist force-completion")
+	}
 
 	// Step 5: Check if all JARs have been deleted
 	if !r.allJARsDeleted(plugin) {
@@ -439,14 +445,14 @@ const deletionTimeout = 10 * time.Minute
 
 // forceCompleteStaleDeletions force-marks stale deletion entries as completed
 // to prevent deadlocks when JAR deletion fails repeatedly.
-func (r *PluginReconciler) forceCompleteStaleDeletions(plugin *mcv1alpha1.Plugin) {
+func (r *PluginReconciler) forceCompleteStaleDeletions(ctx context.Context, plugin *mcv1alpha1.Plugin) {
 	now := metav1.Now()
 
 	for i := range plugin.Status.DeletionProgress {
 		entry := &plugin.Status.DeletionProgress[i]
 		if !entry.JARDeleted && entry.DeletionRequestedAt != nil &&
 			time.Since(entry.DeletionRequestedAt.Time) > deletionTimeout {
-			slog.Warn("Force-completing stale deletion entry",
+			slog.WarnContext(ctx, "Force-completing stale deletion entry",
 				"plugin", plugin.Name,
 				"server", entry.ServerName,
 				"requestedAt", entry.DeletionRequestedAt.Time)

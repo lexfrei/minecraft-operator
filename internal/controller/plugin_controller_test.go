@@ -560,7 +560,7 @@ var _ = Describe("Plugin Controller", func() {
 				},
 			}
 
-			reconciler.forceCompleteStaleDeletions(plugin)
+			reconciler.forceCompleteStaleDeletions(context.Background(), plugin)
 
 			Expect(plugin.Status.DeletionProgress[0].JARDeleted).To(BeTrue(),
 				"Stale entry (15 min ago) should be force-completed")
@@ -590,7 +590,7 @@ var _ = Describe("Plugin Controller", func() {
 				},
 			}
 
-			reconciler.forceCompleteStaleDeletions(plugin)
+			reconciler.forceCompleteStaleDeletions(context.Background(), plugin)
 
 			Expect(plugin.Status.DeletionProgress[0].JARDeleted).To(BeFalse(),
 				"Entry without DeletionRequestedAt should not be force-completed")
