@@ -21,6 +21,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -812,6 +813,29 @@ var _ = Describe("Plugin Controller", func() {
 
 			Expect(statusEqual(a, b)).To(BeFalse(),
 				"statusEqual should detect Conditions changes")
+		})
+	})
+
+	Context("doReconcile early return on unavailable repository (Bug 28)", func() {
+		It("should return early and use syncPluginMetadata result when no versions available", func() {
+			// Bug: When syncPluginMetadata returns nil versions (repo unavailable, no cache),
+			// it returns result={RequeueAfter: 5m}, err=nil. But doReconcile only checks
+			// err != nil, ignoring the result. It continues to set VersionResolved=True
+			// and Ready=True even though no metadata was fetched.
+			//
+			// Fix: doReconcile should check if allVersions is nil and return
+			// the result from syncPluginMetadata.
+			src, readErr := os.ReadFile("plugin_controller.go")
+			Expect(readErr).NotTo(HaveOccurred())
+			srcStr := string(src)
+
+			// The doReconcile function should use the allVersions return value
+			// (not discard it with _) to decide whether to continue.
+			// Currently line 129 discards it: "_, result, err := r.syncPluginMetadata(...)"
+			// After fix, it should check allVersions == nil and return result early.
+			Expect(srcStr).NotTo(ContainSubstring("_, result, err := r.syncPluginMetadata"),
+				"doReconcile should NOT discard allVersions from syncPluginMetadata; "+
+					"it must check for nil versions and return early when repository is unavailable")
 		})
 	})
 })
