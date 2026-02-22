@@ -25,14 +25,18 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/solver"
+	"github.com/lexfrei/minecraft-operator/pkg/testutil"
 )
 
 var _ = Describe("PaperMCServer Controller", func() {
@@ -810,6 +814,329 @@ var _ = Describe("PaperMCServer Controller", func() {
 					return false
 				})
 			}
+		})
+	})
+
+	Context("Reconcile flow with mocked dependencies", func() {
+		var (
+			reconciler *PaperMCServerReconciler
+			mockPaper  *testutil.MockPaperAPI
+			mockReg    *testutil.MockRegistryAPI
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			namespace = "default"
+			mockPaper = &testutil.MockPaperAPI{
+				Versions:     []string{"1.21.1", "1.21.2", "1.21.3", "1.21.4"},
+				BuildInfo:    &paper.BuildInfo{Version: "1.21.4", Build: 100, DownloadURL: "https://example.com/paper.jar"},
+				BuildNumbers: []int{90, 95, 100},
+			}
+			mockReg = &testutil.MockRegistryAPI{
+				Tags:       []string{"1.21.1-50", "1.21.2-60", "1.21.3-80", "1.21.4-100"},
+				ImageExist: true,
+			}
+			reconciler = &PaperMCServerReconciler{
+				Client:         k8sClient,
+				Scheme:         k8sClient.Scheme(),
+				PaperClient:    mockPaper,
+				RegistryClient: mockReg,
+				Solver:         solver.NewSimpleSolver(),
+			}
+		})
+
+		createServer := func(name string, spec mck8slexlav1alpha1.PaperMCServerSpec) {
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: namespace,
+					Labels: map[string]string{
+						"app": "test",
+					},
+				},
+				Spec: spec,
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+		}
+
+		deleteServer := func(name string) {
+			server := &mck8slexlav1alpha1.PaperMCServer{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, server)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, server)).To(Succeed())
+			}
+		}
+
+		It("should create StatefulSet and Service on first reconcile with latest strategy", func() {
+			serverName := "test-latest-reconcile"
+			createServer(serverName, mck8slexlav1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "latest",
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			})
+			defer deleteServer(serverName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+			// Verify StatefulSet created
+			var sts appsv1.StatefulSet
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &sts)).To(Succeed())
+			Expect(sts.Spec.Template.Spec.Containers[0].Image).To(
+				MatchRegexp(`docker\.io/lexfrei/papermc:\d+\.\d+\.\d+-\d+`),
+				"Image must be concrete version-build, never :latest")
+
+			// Verify Service created
+			var svc corev1.Service
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &svc)).To(Succeed())
+			Expect(svc.Spec.Ports).To(ContainElement(
+				HaveField("Name", Equal("minecraft"))))
+		})
+
+		It("should set Ready condition on successful reconcile", func() {
+			serverName := "test-ready-cond"
+			createServer(serverName, mck8slexlav1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "latest",
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			})
+			defer deleteServer(serverName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var server mck8slexlav1alpha1.PaperMCServer
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &server)).To(Succeed())
+
+			cond := findCondition(server.Status.Conditions, conditionTypeServerReady)
+			Expect(cond).NotTo(BeNil(), "Ready condition should be set")
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		})
+
+		It("should resolve version with pin strategy using specific version", func() {
+			serverName := "test-pin-reconcile"
+			createServer(serverName, mck8slexlav1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "pin",
+				Version:        "1.21.3",
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			})
+			defer deleteServer(serverName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var server mck8slexlav1alpha1.PaperMCServer
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &server)).To(Succeed())
+
+			Expect(server.Status.DesiredVersion).To(Equal("1.21.3"))
+			Expect(server.Status.DesiredBuild).To(BeNumerically(">", 0))
+		})
+
+		It("should resolve version with build-pin strategy using exact version and build", func() {
+			serverName := "test-buildpin-reconcile"
+			build := 95
+			createServer(serverName, mck8slexlav1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "build-pin",
+				Version:        "1.21.3",
+				Build:          &build,
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			})
+			defer deleteServer(serverName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var server mck8slexlav1alpha1.PaperMCServer
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &server)).To(Succeed())
+
+			Expect(server.Status.DesiredVersion).To(Equal("1.21.3"))
+			Expect(server.Status.DesiredBuild).To(Equal(95))
+		})
+
+		It("should fail when pin strategy has no version specified", func() {
+			serverName := "test-pin-no-version"
+			createServer(serverName, mck8slexlav1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "pin",
+				// Version intentionally empty
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			})
+			defer deleteServer(serverName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("version is required"))
+		})
+
+		It("should fail when no Docker Hub tags are available", func() {
+			serverName := "test-no-tags"
+			mockReg.Tags = []string{} // No tags
+			createServer(serverName, mck8slexlav1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "latest",
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			})
+			defer deleteServer(serverName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).To(HaveOccurred())
+
+			var server mck8slexlav1alpha1.PaperMCServer
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &server)).To(Succeed())
+
+			cond := findCondition(server.Status.Conditions, conditionTypeServerReady)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse),
+				"Ready should be False when version resolution fails")
+		})
+
+		It("should fail when pinned build does not exist in Docker Hub", func() {
+			serverName := "test-pin-nonexist"
+			build := 999
+			mockReg.TagExists = map[string]bool{
+				"1.21.3-999": false,
+			}
+			createServer(serverName, mck8slexlav1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "build-pin",
+				Version:        "1.21.3",
+				Build:          &build,
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			})
+			defer deleteServer(serverName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("does not exist"))
+		})
+
+		It("should be idempotent on second reconcile", func() {
+			serverName := "test-idempotent"
+			createServer(serverName, mck8slexlav1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "latest",
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			})
+			defer deleteServer(serverName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+
+			// First reconcile creates resources
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Get StatefulSet UID
+			var sts1 appsv1.StatefulSet
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &sts1)).To(Succeed())
+
+			// Second reconcile should not recreate
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var sts2 appsv1.StatefulSet
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &sts2)).To(Succeed())
+
+			Expect(sts2.UID).To(Equal(sts1.UID),
+				"Second reconcile should not recreate StatefulSet")
+		})
+
+		It("should add RCON port to Service when RCON enabled", func() {
+			serverName := "test-rcon-port"
+			createServer(serverName, mck8slexlav1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "latest",
+				RCON: mck8slexlav1alpha1.RCONConfig{
+					Enabled: true,
+					Port:    25575,
+					PasswordSecret: mck8slexlav1alpha1.SecretKeyRef{
+						Name: "rcon-secret",
+						Key:  "password",
+					},
+				},
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			})
+			defer deleteServer(serverName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var svc corev1.Service
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &svc)).To(Succeed())
+
+			var hasRCON bool
+			for _, port := range svc.Spec.Ports {
+				if port.Name == "rcon" {
+					hasRCON = true
+					Expect(port.Port).To(Equal(int32(25575)))
+					break
+				}
+			}
+			Expect(hasRCON).To(BeTrue(), "Service should have RCON port when RCON is enabled")
+		})
+
+		It("should return not found without error for deleted server", func() {
+			req := ctrl.Request{NamespacedName: types.NamespacedName{
+				Name: "nonexistent-server", Namespace: namespace,
+			}}
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
 		})
 	})
 })
