@@ -156,18 +156,12 @@ NAMESPACE ?= minecraft-operator-system
 
 .PHONY: helm-lint
 helm-lint: ## Lint Helm charts
-	helm lint charts/minecraft-operator-crds
 	helm lint charts/minecraft-operator
 
-.PHONY: helm-install-crds
-helm-install-crds: manifests ## Install CRDs via Helm
-	helm install minecraft-operator-crds charts/minecraft-operator-crds \
-		--create-namespace --namespace $(NAMESPACE)
-
 .PHONY: helm-install
-helm-install: helm-install-crds ## Install operator via Helm
+helm-install: manifests ## Install operator via Helm
 	helm install minecraft-operator charts/minecraft-operator \
-		--namespace $(NAMESPACE) \
+		--create-namespace --namespace $(NAMESPACE) \
 		--set image.repository=$(IMG) \
 		--set image.tag=latest
 
@@ -179,9 +173,8 @@ helm-upgrade: manifests ## Upgrade operator via Helm
 		--set image.tag=latest
 
 .PHONY: helm-uninstall
-helm-uninstall: ## Uninstall operator and CRDs via Helm
+helm-uninstall: ## Uninstall operator via Helm
 	-helm uninstall minecraft-operator --namespace $(NAMESPACE)
-	-helm uninstall minecraft-operator-crds --namespace $(NAMESPACE)
 
 ##@ Dependencies
 
