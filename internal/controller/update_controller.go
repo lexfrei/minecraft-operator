@@ -777,7 +777,22 @@ func (r *UpdateReconciler) performCombinedUpdate(
 		return errors.Wrap(err, "failed to delete marked plugins")
 	}
 
-	// Step 2: Update StatefulSet image to new Paper version
+	// Step 2: Download plugins to /data/plugins/update/ (BEFORE pod restart)
+	if err := r.applyPluginUpdates(ctx, server); err != nil {
+		return errors.Wrap(err, "failed to download plugins")
+	}
+
+	// Step 3: RCON graceful shutdown (warn players, save world)
+	rconClient, err := r.createRCONClient(ctx, server)
+	if err != nil {
+		return errors.Wrap(err, "failed to create RCON client")
+	}
+
+	if err := r.executeGracefulShutdownWithClient(ctx, server, rconClient); err != nil {
+		return errors.Wrap(err, "failed to execute graceful shutdown")
+	}
+
+	// Step 4: Update StatefulSet image to new Paper version
 	newImage := fmt.Sprintf("lexfrei/papermc:%s-%d",
 		server.Status.DesiredVersion,
 		server.Status.DesiredBuild)
@@ -786,14 +801,13 @@ func (r *UpdateReconciler) performCombinedUpdate(
 		return errors.Wrap(err, "failed to update StatefulSet image")
 	}
 
-	// Step 3: Download plugins to /data/plugins/update/
-	// This must happen BEFORE pod restarts to ensure plugins are ready
-	if err := r.applyPluginUpdates(ctx, server); err != nil {
-		return errors.Wrap(err, "failed to download plugins")
+	// Step 5: Delete pod to trigger StatefulSet recreation with new image
+	podName := server.Name + "-0"
+	if err := r.deletePod(ctx, podName, server.Namespace); err != nil {
+		return errors.Wrap(err, "failed to delete pod for recreation")
 	}
 
-	// Step 4: StatefulSet will do rolling update automatically with graceful shutdown
-	// We just need to wait for pod to be ready with new image
+	// Step 6: Wait for pod to restart with new image
 	if err := r.waitForPodReady(ctx, server); err != nil {
 		return errors.Wrap(err, "failed to wait for pod ready")
 	}
