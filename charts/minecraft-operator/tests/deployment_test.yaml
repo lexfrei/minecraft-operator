@@ -1,0 +1,38 @@
+# Bug 17: values.yaml declares metrics.port: 8080, but deployment.yaml hardcodes
+# --metrics-bind-address=:8443 and containerPort: 8443.
+# The metrics.port configuration is completely ignored.
+suite: deployment metrics port
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should use metrics.port from values for bind address
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--metrics-bind-address=:8080"
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--metrics-bind-address=:8443"
+
+  - it: should use metrics.port from values for containerPort
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 8080
+            name: metrics
+            protocol: TCP
+
+  - it: should respect custom metrics port
+    set:
+      metrics.port: 9090
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--metrics-bind-address=:9090"
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 9090
+            name: metrics
+            protocol: TCP
