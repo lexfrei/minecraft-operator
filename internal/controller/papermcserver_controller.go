@@ -1078,7 +1078,10 @@ func (r *PaperMCServerReconciler) resolvePluginVersionForServer(
 ) (string, error) {
 	// Get available versions from plugin status
 	if len(plugin.Status.AvailableVersions) == 0 {
-		return "", errors.New("no available versions in plugin status")
+		slog.InfoContext(ctx, "Plugin has no available versions yet, will retry",
+			"plugin", plugin.Name)
+
+		return "", nil
 	}
 
 	// Convert to PluginVersion slice for solver
@@ -1199,11 +1202,20 @@ func (r *PaperMCServerReconciler) resolvePluginVersionForServer(
 
 // buildPluginStatus constructs plugin status list for the server.
 // Version resolution is now done per-server to ensure correct compatibility.
+// Fields managed by other controllers (InstalledJARName, CurrentVersion, PendingDeletion)
+// are preserved from previous status.
 func (r *PaperMCServerReconciler) buildPluginStatus(
 	ctx context.Context,
 	server *mcv1alpha1.PaperMCServer,
 	matchedPlugins []mcv1alpha1.Plugin,
 ) []mcv1alpha1.ServerPluginStatus {
+	// Build lookup from existing status for field preservation
+	existing := make(map[string]mcv1alpha1.ServerPluginStatus, len(server.Status.Plugins))
+	for _, p := range server.Status.Plugins {
+		key := p.PluginRef.Namespace + "/" + p.PluginRef.Name
+		existing[key] = p
+	}
+
 	status := make([]mcv1alpha1.ServerPluginStatus, 0, len(matchedPlugins))
 
 	for i := range matchedPlugins {
@@ -1225,8 +1237,16 @@ func (r *PaperMCServerReconciler) buildPluginStatus(
 				Namespace: plugin.Namespace,
 			},
 			ResolvedVersion: resolvedVersion,
-			Compatible:      resolvedVersion != "", // Compatible if we found a version
+			Compatible:      resolvedVersion != "",
 			Source:          plugin.Spec.Source.Type,
+		}
+
+		// Preserve fields managed by other controllers
+		key := plugin.Namespace + "/" + plugin.Name
+		if prev, ok := existing[key]; ok {
+			pluginStatus.InstalledJARName = prev.InstalledJARName
+			pluginStatus.CurrentVersion = prev.CurrentVersion
+			pluginStatus.PendingDeletion = prev.PendingDeletion
 		}
 
 		status = append(status, pluginStatus)
