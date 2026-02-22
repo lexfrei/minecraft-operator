@@ -778,5 +778,40 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(statusEqual(a, b)).To(BeTrue(),
 				"statusEqual should return true for identical statuses")
 		})
+
+		It("should detect Conditions changes (Bug 27)", func() {
+			// Bug: statusEqual does not compare Conditions field.
+			// When conditions change (e.g., Ready transitions from True to False),
+			// statusEqual returns true, so Status().Update() is never called and
+			// condition changes are lost.
+			now := metav1.Now()
+			a := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				Conditions: []metav1.Condition{
+					{
+						Type:               "Ready",
+						Status:             metav1.ConditionTrue,
+						LastTransitionTime: now,
+						Reason:             "ReconcileSuccess",
+						Message:            "OK",
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				Conditions: []metav1.Condition{
+					{
+						Type:               "Ready",
+						Status:             metav1.ConditionFalse,
+						LastTransitionTime: now,
+						Reason:             "ReconcileError",
+						Message:            "something failed",
+					},
+				},
+			}
+
+			Expect(statusEqual(a, b)).To(BeFalse(),
+				"statusEqual should detect Conditions changes")
+		})
 	})
 })

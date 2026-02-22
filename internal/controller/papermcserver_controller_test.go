@@ -18,6 +18,10 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -740,6 +744,72 @@ var _ = Describe("PaperMCServer Controller", func() {
 			Expect(err).NotTo(HaveOccurred(),
 				"Empty available versions is transient, not an error")
 			Expect(version).To(BeEmpty())
+		})
+	})
+
+	Context("Conditions persistence ordering (Bug 26)", func() {
+		It("should call setCondition BEFORE Status().Update() in Reconcile", func() {
+			// Bug: In both Plugin and PaperMCServer Reconcile functions,
+			// setCondition is called AFTER Status().Update(). This means
+			// conditions are modified on the local object but never persisted
+			// to etcd. They must be set BEFORE the status update call.
+			for _, filePath := range []string{"papermcserver_controller.go", "plugin_controller.go"} {
+				fset := token.NewFileSet()
+				node, parseErr := parser.ParseFile(fset, filePath, nil, parser.AllErrors)
+				Expect(parseErr).NotTo(HaveOccurred(), "Failed to parse %s", filePath)
+
+				ast.Inspect(node, func(n ast.Node) bool {
+					funcDecl, ok := n.(*ast.FuncDecl)
+					if !ok {
+						return true
+					}
+					// Only check the top-level Reconcile method
+					if funcDecl.Name.Name != "Reconcile" {
+						return false
+					}
+					if funcDecl.Recv == nil {
+						return false
+					}
+
+					// Walk through statements tracking ordering
+					var statusUpdateLine, lastSetConditionLine int
+
+					ast.Inspect(funcDecl.Body, func(inner ast.Node) bool {
+						callExpr, ok := inner.(*ast.CallExpr)
+						if !ok {
+							return true
+						}
+
+						// Detect r.Status().Update() calls
+						sel, ok := callExpr.Fun.(*ast.SelectorExpr)
+						if ok && sel.Sel.Name == "Update" {
+							// Check if it's Status().Update()
+							if innerCall, ok := sel.X.(*ast.CallExpr); ok {
+								if innerSel, ok := innerCall.Fun.(*ast.SelectorExpr); ok {
+									if innerSel.Sel.Name == "Status" {
+										statusUpdateLine = fset.Position(callExpr.Pos()).Line
+									}
+								}
+							}
+						}
+
+						// Detect r.setCondition() calls
+						if ok && sel.Sel.Name == "setCondition" {
+							lastSetConditionLine = fset.Position(callExpr.Pos()).Line
+						}
+
+						return true
+					})
+
+					if statusUpdateLine > 0 && lastSetConditionLine > 0 {
+						Expect(lastSetConditionLine).To(BeNumerically("<", statusUpdateLine),
+							fmt.Sprintf("In %s: setCondition (line %d) must come BEFORE Status().Update() (line %d) "+
+								"so conditions are included in the status update",
+								filePath, lastSetConditionLine, statusUpdateLine))
+					}
+					return false
+				})
+			}
 		})
 	})
 })

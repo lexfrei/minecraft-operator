@@ -40,8 +40,9 @@ import (
 )
 
 const (
-	testNamespace        = "default"
-	updateControllerPath = "update_controller.go"
+	testNamespace               = "default"
+	updateControllerPath        = "update_controller.go"
+	papermcServerControllerPath = "papermcserver_controller.go"
 )
 
 var _ = Describe("UpdateController", func() {
@@ -2741,6 +2742,106 @@ var _ = Describe("UpdateController", func() {
 			result := reconciler.isInMaintenanceWindow(server)
 			Expect(result).To(BeFalse(),
 				"Invalid cron should block updates (safe default), not silently allow them")
+		})
+	})
+
+	Context("isInMaintenanceWindow uses slog without context (Bug 23)", func() {
+		It("should use slog.ErrorContext instead of slog.Error", func() {
+			// Bug: isInMaintenanceWindow uses slog.Error() without context on line 257.
+			// All logging must use slog.*Context(ctx, ...) variants per project standards.
+			fset := token.NewFileSet()
+			node, parseErr := parser.ParseFile(fset, updateControllerPath, nil, parser.AllErrors)
+			Expect(parseErr).NotTo(HaveOccurred())
+
+			ast.Inspect(node, func(n ast.Node) bool {
+				funcDecl, ok := n.(*ast.FuncDecl)
+				if !ok {
+					return true
+				}
+				if funcDecl.Name.Name != "isInMaintenanceWindow" {
+					return false
+				}
+
+				// Check that no slog.Error (without Context) calls exist in this function
+				ast.Inspect(funcDecl.Body, func(inner ast.Node) bool {
+					callExpr, ok := inner.(*ast.CallExpr)
+					if !ok {
+						return true
+					}
+					selExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
+					if !ok {
+						return true
+					}
+					ident, ok := selExpr.X.(*ast.Ident)
+					if !ok {
+						return true
+					}
+					if ident.Name == "slog" && selExpr.Sel.Name == "Error" {
+						Fail(fmt.Sprintf("isInMaintenanceWindow uses slog.Error() without context at line %d; should use slog.ErrorContext(ctx, ...)",
+							fset.Position(callExpr.Pos()).Line))
+					}
+					return true
+				})
+				return false
+			})
+		})
+	})
+
+	Context("detectCurrentPaperVersion uses slog without context (Bug 24)", func() {
+		It("should use slog.ErrorContext/WarnContext instead of slog.Error/Warn", func() {
+			// Bug: detectCurrentPaperVersion uses slog.Error() and slog.Warn()
+			// without context on lines 688, 699, 710, 720.
+			fset := token.NewFileSet()
+			node, parseErr := parser.ParseFile(fset, papermcServerControllerPath, nil, parser.AllErrors)
+			Expect(parseErr).NotTo(HaveOccurred())
+
+			ast.Inspect(node, func(n ast.Node) bool {
+				funcDecl, ok := n.(*ast.FuncDecl)
+				if !ok {
+					return true
+				}
+				if funcDecl.Name.Name != "detectCurrentPaperVersion" {
+					return false
+				}
+
+				// Check for slog.Error or slog.Warn (without Context) calls
+				ast.Inspect(funcDecl.Body, func(inner ast.Node) bool {
+					callExpr, ok := inner.(*ast.CallExpr)
+					if !ok {
+						return true
+					}
+					selExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
+					if !ok {
+						return true
+					}
+					ident, ok := selExpr.X.(*ast.Ident)
+					if !ok {
+						return true
+					}
+					if ident.Name == "slog" && (selExpr.Sel.Name == "Error" || selExpr.Sel.Name == "Warn") {
+						Fail(fmt.Sprintf("detectCurrentPaperVersion uses slog.%s() without context at line %d; should use slog.%sContext(ctx, ...)",
+							selExpr.Sel.Name, fset.Position(callExpr.Pos()).Line, selExpr.Sel.Name))
+					}
+					return true
+				})
+				return false
+			})
+		})
+	})
+
+	Context("downloadPluginToServer shell injection safety (Bug 25)", func() {
+		It("should not interpolate downloadURL directly into shell command string", func() {
+			// Bug: downloadURL is interpolated into fmt.Sprintf("curl ... '%s'", downloadURL).
+			// Single quotes can be broken with a URL containing single quotes.
+			// Safe approach: pass URL as separate argument to curl, not via sh -c string.
+			src, readErr := os.ReadFile(updateControllerPath)
+			Expect(readErr).NotTo(HaveOccurred())
+			srcStr := string(src)
+
+			// The curl command should NOT use fmt.Sprintf with downloadURL interpolated into sh -c string.
+			// Instead, it should pass the URL as a separate argument to avoid shell injection.
+			Expect(srcStr).NotTo(ContainSubstring(`"curl -fsSL -o /data/plugins/update/%s.jar '%s'"`),
+				"downloadURL should not be interpolated into shell string via fmt.Sprintf; use separate args to avoid injection")
 		})
 	})
 
