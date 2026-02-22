@@ -520,3 +520,66 @@ func TestPluginToData_WithAvailableVersions(t *testing.T) {
 	assert.Equal(t, []string{"1.21.1"}, result.AvailableVersions[0].SupportedVersions)
 	assert.NotNil(t, result.LastFetched)
 }
+
+// --- Invalid duration tests ---
+
+func TestPluginService_CreatePlugin_InvalidUpdateDelay(t *testing.T) {
+	// BUG: CreatePlugin silently ignores invalid UpdateDelay strings.
+	t.Parallel()
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(newTestScheme()).
+		Build()
+
+	svc := NewPluginService(fakeClient)
+
+	data := PluginCreateData{
+		Name:      "bad-delay-plugin",
+		Namespace: "default",
+		Source: PluginSourceData{
+			Type:    "hangar",
+			Project: "EssentialsX",
+		},
+		UpdateStrategy: "latest",
+		UpdateDelay:    "not-a-duration",
+	}
+
+	err := svc.CreatePlugin(context.Background(), data)
+	require.Error(t, err, "CreatePlugin should return error for invalid UpdateDelay")
+}
+
+func TestPluginService_UpdatePlugin_InvalidUpdateDelay(t *testing.T) {
+	// BUG: UpdatePlugin silently ignores invalid UpdateDelay strings.
+	t.Parallel()
+
+	existingPlugin := &mck8slexlav1alpha1.Plugin{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "delay-test-plugin",
+			Namespace: "default",
+		},
+		Spec: mck8slexlav1alpha1.PluginSpec{
+			Source: mck8slexlav1alpha1.PluginSource{
+				Type:    "hangar",
+				Project: "EssentialsX",
+			},
+			UpdateStrategy: "latest",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(newTestScheme()).
+		WithObjects(existingPlugin).
+		Build()
+
+	svc := NewPluginService(fakeClient)
+
+	badDelay := "invalid"
+	data := PluginUpdateData{
+		Namespace:   "default",
+		Name:        "delay-test-plugin",
+		UpdateDelay: &badDelay,
+	}
+
+	err := svc.UpdatePlugin(context.Background(), data)
+	require.Error(t, err, "UpdatePlugin should return error for invalid UpdateDelay")
+}

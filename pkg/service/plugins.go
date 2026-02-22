@@ -153,9 +153,11 @@ func (s *PluginService) CreatePlugin(ctx context.Context, data PluginCreateData)
 
 	if data.UpdateDelay != "" {
 		d, err := time.ParseDuration(data.UpdateDelay)
-		if err == nil {
-			plugin.Spec.UpdateDelay = &metav1.Duration{Duration: d}
+		if err != nil {
+			return errors.Wrapf(err, "invalid update delay %q", data.UpdateDelay)
 		}
+
+		plugin.Spec.UpdateDelay = &metav1.Duration{Duration: d}
 	}
 
 	if data.Port != 0 {
@@ -226,9 +228,11 @@ func (s *PluginService) UpdatePlugin(ctx context.Context, data PluginUpdateData)
 
 	if data.UpdateDelay != nil {
 		d, err := time.ParseDuration(*data.UpdateDelay)
-		if err == nil {
-			plugin.Spec.UpdateDelay = &metav1.Duration{Duration: d}
+		if err != nil {
+			return errors.Wrapf(err, "invalid update delay %q", *data.UpdateDelay)
 		}
+
+		plugin.Spec.UpdateDelay = &metav1.Duration{Duration: d}
 	}
 
 	if data.Port != nil {
