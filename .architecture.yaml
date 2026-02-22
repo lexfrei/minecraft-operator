@@ -45,7 +45,7 @@ technical_stack:
 
   external_libraries:
     hangar_client:
-      package: "github.com/lexfrei/go-hungar"
+      package: "github.com/lexfrei/go-hangar"
       version: "latest"  # Use latest stable
       purpose: "Hangar API client for PaperMC plugin repository"
 
@@ -189,7 +189,7 @@ structure:
       - "pkg/solver/simple_solver.go - Linear search MVP implementation"
       - "pkg/plugins/ - Plugin repository clients"
       - "pkg/plugins/client.go - Common interface"
-      - "pkg/plugins/hangar.go - Hangar API client (using go-hungar)"
+      - "pkg/plugins/hangar.go - Hangar API client (using go-hangar)"
       - "pkg/plugins/cache.go - API response caching"
       - "pkg/paper/ - Paper API client"
       - "pkg/paper/client.go - Paper version fetching"
@@ -593,7 +593,7 @@ decisions:
   - id: ADR-012
     date: 2025-10-31
     status: accepted
-    decision: "Use github.com/lexfrei/go-hungar for Hangar API client"
+    decision: "Use github.com/lexfrei/go-hangar for Hangar API client"
     reasoning: "Custom library already built for Hangar, maintained by same author, domain expertise"
     alternatives:
       - "Generic HTTP client: More work, no type safety"
@@ -1443,6 +1443,6 @@ references:
   kubebuilder_book: "https://book.kubebuilder.io"
   controller_runtime_docs: "https://pkg.go.dev/sigs.k8s.io/controller-runtime"
   papermc_docker: "https://github.com/lexfrei/papermc-docker"
-  hangar_api_client: "https://github.com/lexfrei/go-hungar"
+  hangar_api_client: "https://github.com/lexfrei/go-hangar"
   paper_api: "https://papermc.io/api/docs"
   rcon_protocol: "https://developer.valvesoftware.com/wiki/Source_RCON_Protocol"

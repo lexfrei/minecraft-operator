@@ -70,7 +70,7 @@ If you plan to build custom images or run the operator locally:
 | Tool | Purpose |
 |------|---------|
 | Podman or Docker | Container image builds |
-| Go 1.25+ | Local development |
+| Go 1.26+ | Local development |
 
 ## Network Requirements
 

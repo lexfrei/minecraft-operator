@@ -6,7 +6,7 @@ Set up your local development environment for Minecraft Operator.
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Go | 1.25+ | Language runtime |
+| Go | 1.26+ | Language runtime |
 | Podman or Docker | Latest | Container builds |
 | Helm | 3.14+ | Chart testing |
 | kubectl | 1.27+ | Cluster access |
@@ -23,8 +23,8 @@ Set up your local development environment for Minecraft Operator.
 === "Linux"
 
     ```bash
-    wget https://go.dev/dl/go1.25.linux-amd64.tar.gz
-    sudo tar -C /usr/local -xzf go1.25.linux-amd64.tar.gz
+    wget https://go.dev/dl/go1.26.linux-amd64.tar.gz
+    sudo tar -C /usr/local -xzf go1.26.linux-amd64.tar.gz
     export PATH=$PATH:/usr/local/go/bin
     ```
 

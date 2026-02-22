@@ -155,7 +155,7 @@ erDiagram
 When multiple Plugins match the same server:
 
 1. If any has `updateStrategy: latest`: solver picks optimal version
-2. If all have `updateStrategy: pinned`: highest semver wins (with warning)
+2. If all have `updateStrategy: pin`: highest semver wins (with warning)
 
 ## Version Resolution
 

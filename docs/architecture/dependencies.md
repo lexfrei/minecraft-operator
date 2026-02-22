@@ -60,10 +60,13 @@ Client library for the PaperMC Hangar API.
 **Usage in operator:**
 
 ```go
-import "github.com/lexfrei/go-hangar"
+import "github.com/lexfrei/go-hangar/pkg/hangar"
 
-client := hangar.NewClient()
-versions, err := client.GetProjectVersions("EssentialsX/Essentials")
+client := hangar.NewClient(hangar.Config{
+    BaseURL: hangar.DefaultBaseURL,
+    Timeout: hangar.DefaultTimeout,
+})
+versions, err := client.ListVersions(ctx, "EssentialsX", "Essentials", hangar.ListOptions{})
 ```
 
 ### Why a custom client?

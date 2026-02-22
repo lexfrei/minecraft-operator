@@ -125,6 +125,8 @@ spec:
   updateStrategy: latest  # Default: latest
   # If pin or build-pin, specify exact version:
   # version: "2.20.1"
+  # If build-pin, also specify build number:
+  # build: 456
 
   # Delay before applying new version (optional)
   # Allows community to test release before applying
@@ -485,7 +487,7 @@ Paper versions are fetched via the Paper API client (`pkg/paper/`).
 
    Constraint:
    - Find MAX plugin_version (after filtering) such that:
-     ∀ server ∈ servers: compatible(plugin_version, server.paperVersion) == true
+     ∀ server ∈ servers: compatible(plugin_version, server.version) == true
 
    Solution:
    - v2.1: SKIP (too new due to updateDelay)
@@ -660,9 +662,9 @@ Currently implemented as simple linear search (`SimpleSolver`). SAT solver plann
                  ▼
 ┌─────────────────────────────────────────┐
 │  Update Plugin status:                   │
-│  - resolvedVersion                       │
 │  - matchedInstances                      │
 │  - availableVersions (cache)             │
+│  - repositoryStatus                      │
 │  - conditions                            │
 └────────────────┬────────────────────────┘
                  │
@@ -853,7 +855,7 @@ minecraft-operator/
 │   ├── paper/                        # Paper API client for versions
 │   ├── plugins/
 │   │   ├── client.go                 # Common interface for plugin APIs
-│   │   ├── hangar.go                 # Hangar API client (using go-hungar)
+│   │   ├── hangar.go                 # Hangar API client (using go-hangar)
 │   │   └── cache.go                  # API response caching
 │   ├── rcon/
 │   │   └── client.go                 # RCON client (gorcon/rcon wrapper)
@@ -884,7 +886,7 @@ minecraft-operator/
 
 - **controller-runtime**: Framework for writing operators
 - **client-go**: Kubernetes client
-- **github.com/lexfrei/go-hungar**: Hangar API client for PaperMC plugin repository
+- **github.com/lexfrei/go-hangar**: Hangar API client for PaperMC plugin repository
 - **cockroachdb/errors**: Error handling with stack traces
 - **gorcon/rcon**: RCON client for Minecraft server communication
 - **robfig/cron**: Cron scheduling

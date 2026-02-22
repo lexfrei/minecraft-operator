@@ -22,10 +22,10 @@ A Kubernetes operator for managing PaperMC servers with automatic version manage
 
 ```bash
 # Add the Helm repository
-helm install minecraft-operator-crds oci://ghcr.io/lexfrei/charts/minecraft-operator-crds \
+helm install minecraft-operator-crds oci://ghcr.io/lexfrei/minecraft-operator-crds \
   --create-namespace --namespace minecraft-operator-system
 
-helm install minecraft-operator oci://ghcr.io/lexfrei/charts/minecraft-operator \
+helm install minecraft-operator oci://ghcr.io/lexfrei/minecraft-operator \
   --namespace minecraft-operator-system
 ```
 
@@ -89,7 +89,7 @@ spec:
 | `pin` | Stay on specific version, auto-update builds |
 | `build-pin` | Fully pinned version and build |
 
-See [docs/update-strategies.md](docs/update-strategies.md) for detailed guide.
+See [docs/configuration/update-strategies.md](docs/configuration/update-strategies.md) for detailed guide.
 
 ## Architecture
 

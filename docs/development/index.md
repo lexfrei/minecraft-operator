@@ -6,7 +6,7 @@ This section covers development setup and contribution guidelines.
 
 Minecraft Operator is built with:
 
-- **Go 1.25+** — Primary language
+- **Go 1.26+** — Primary language
 - **controller-runtime** — Kubernetes operator framework
 - **Kubebuilder v4** — Project scaffolding
 - **Helm** — Deployment charts

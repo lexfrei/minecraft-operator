@@ -160,7 +160,7 @@ When multiple Plugin resources reference the same project:
 | Scenario | Resolution |
 |----------|------------|
 | Any has `latest` | Solver picks optimal version |
-| All have `pinned` | Highest semver wins + warning |
+| All have `pin` | Highest semver wins + warning |
 
 ### No Compatible Version
 
@@ -186,17 +186,21 @@ The solver is implemented in `pkg/solver/`:
 
 ```go
 type Solver interface {
-    // FindPluginVersion finds the best plugin version for matched servers
-    FindPluginVersion(
-        plugin *v1alpha1.Plugin,
-        servers []v1alpha1.PaperMCServer,
+    // FindBestPluginVersion finds the maximum plugin version compatible with ALL matched servers.
+    FindBestPluginVersion(
+        ctx context.Context,
+        plugin *mcv1alpha1.Plugin,
+        servers []mcv1alpha1.PaperMCServer,
+        allVersions []plugins.PluginVersion,
     ) (string, error)
 
-    // FindServerVersion finds the best server version compatible with plugins
-    FindServerVersion(
-        server *v1alpha1.PaperMCServer,
-        plugins []v1alpha1.Plugin,
-    ) (string, int, error)
+    // FindBestPaperVersion finds the maximum Paper version compatible with ALL matched plugins.
+    FindBestPaperVersion(
+        ctx context.Context,
+        server *mcv1alpha1.PaperMCServer,
+        matchedPlugins []mcv1alpha1.Plugin,
+        paperVersions []string,
+    ) (string, error)
 }
 ```
 

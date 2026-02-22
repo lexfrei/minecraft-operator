@@ -714,7 +714,7 @@ The `updateDelay` field provides a grace period before applying new versions, al
 
 **Field specification**:
 
-- **Type**: Duration (e.g., `168h`, `7d`, `336h`)
+- **Type**: Duration (e.g., `168h`, `336h`) — uses Go duration format (`h`, `m`, `s`)
 - **Optional**: Yes (defaults to 0 = no delay)
 - **Applies to**: Both `PaperMCServer` and `Plugin` resources
 - **Behavior**: When not specified or set to `0`, updates apply immediately (subject to maintenance windows)

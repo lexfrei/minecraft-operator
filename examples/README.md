@@ -107,29 +107,33 @@ helm uninstall minecraft-operator-crds -n minecraft-operator-system
 
 The operator supports four version management modes:
 
-**1. Latest (`paperVersion: "latest"`)**
+**1. Latest (`updateStrategy: "latest"`)**
+
 - Always uses the latest available Paper version from Docker Hub
 - Suitable for development/testing environments
 - See: `examples/simple-server.yaml`
 
-**2. Auto (`paperVersion: "auto"`)**
+**2. Auto (`updateStrategy: "auto"`)**
+
 - Solver automatically picks the best version compatible with ALL matched plugins
 - Ideal for production with multiple plugins
 - See: `examples/server-auto-version.yaml`
 
-**3. Version Pin (`paperVersion: "1.21.10"`)**
+**3. Version Pin (`updateStrategy: "pin"`, `version: "1.21.10"`)**
+
 - Pin major.minor.patch version, auto-update to latest build
 - Operator verifies each build exists in Docker Hub before applying
 - Good balance between stability and security updates
-- Example: `paperVersion: "1.21.10"` → uses latest available build (e.g., 1.21.10-91)
+- Example: `version: "1.21.10"` → uses latest available build (e.g., 1.21.10-91)
 
-**4. Full Pin (`paperVersion: "1.21.10-91"`)**
+**4. Full Pin (`updateStrategy: "build-pin"`, `version: "1.21.10"`, `build: 91`)**
+
 - Pin specific version AND build number
 - No automatic updates - full manual control
 - Best for maximum stability
 - See: `examples/server-pinned-version.yaml`
 
-**Note:** The operator manages the container image automatically based on `paperVersion`. The `image` field in `podTemplate.spec.containers` is ignored for the Paper container.
+**Note:** The operator manages the container image automatically based on `updateStrategy` and `version`. The `image` field in `podTemplate.spec.containers` is ignored for the Paper container.
 
 ### Add More Plugins
 
@@ -144,7 +148,7 @@ spec:
   source:
     type: hangar
     project: "WorldEdit"
-  versionPolicy: latest
+  updateStrategy: "latest"
   instanceSelector:
     matchLabels:
       environment: creative  # Only on creative servers

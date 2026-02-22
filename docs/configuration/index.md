@@ -73,8 +73,10 @@ Plugins are matched to servers via label selectors. The constraint solver ensure
 
 | Strategy | Description | Use Case |
 |----------|-------------|----------|
-| `latest` | Always newest plugin version | Most plugins |
-| `pinned` | Fixed version, no auto-updates | Known stable versions |
+| `latest` | Always newest compatible version | Most plugins |
+| `auto` | Solver picks best compatible version | Multi-server compatibility |
+| `pin` | Fixed version, auto-update builds | Stable versions with bug fixes |
+| `build-pin` | Fully pinned version and build | Maximum stability |
 
 ## Example Configurations
 

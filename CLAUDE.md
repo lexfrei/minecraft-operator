@@ -141,7 +141,7 @@ Three main controllers work together:
 
 ### External Libraries
 
-- `github.com/lexfrei/go-hungar`: Hangar API client (use this for PaperMC plugin repository)
+- `github.com/lexfrei/go-hangar`: Hangar API client (use this for PaperMC plugin repository)
 - `controller-runtime`: Kubernetes operator framework
 - `robfig/cron`: Cron scheduling
 - `Masterminds/semver`: Version comparison
@@ -187,7 +187,7 @@ minecraft-operator/
 
 ```bash
 # Prerequisites
-go version    # Need 1.25+
+go version    # Need 1.26+
 podman --version
 helm version  # Need 3.14+
 
