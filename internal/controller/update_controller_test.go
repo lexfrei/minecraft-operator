@@ -397,6 +397,86 @@ var _ = Describe("UpdateController", func() {
 			Expect(newJob.Removed).To(BeFalse())
 		})
 
+		It("should NOT recreate cron job when spec is unchanged on re-reconcile", func() {
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.0",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: true,
+						PasswordSecret: mcv1alpha1.SecretKeyRef{
+							Name: "rcon-secret",
+							Key:  "password",
+						},
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:latest",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+			req := reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+			}
+
+			// First reconcile - should add cron job
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mockCron.Jobs).To(HaveLen(1))
+
+			// Get first job ID
+			var firstJobID testutil.MockCronJob
+			for _, job := range mockCron.Jobs {
+				firstJobID = *job
+				break
+			}
+			Expect(firstJobID.Removed).To(BeFalse())
+
+			// Second reconcile - same spec, should NOT create new job
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Still only 1 job (not removed + re-added)
+			activeCount := 0
+			for _, job := range mockCron.Jobs {
+				if !job.Removed {
+					activeCount++
+				}
+			}
+			Expect(activeCount).To(Equal(1), "Expected exactly 1 active cron job after re-reconcile")
+
+			// Same job retained (not removed and replaced)
+			job := mockCron.GetJob(firstJobID.ID)
+			Expect(job).NotTo(BeNil())
+			Expect(job.Removed).To(BeFalse(), "Original job should not have been removed")
+		})
+
 		It("should handle multiple servers with independent cron schedules", func() {
 			server1 := &mcv1alpha1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{

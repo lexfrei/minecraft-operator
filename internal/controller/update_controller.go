@@ -64,7 +64,14 @@ type UpdateReconciler struct {
 
 	// Track cron entries per server
 	cronEntriesMu sync.RWMutex
-	cronEntries   map[string]cron.EntryID
+	cronEntries   map[string]cronEntryInfo
+}
+
+// cronEntryInfo stores both the cron entry ID and the spec string
+// to avoid needing to retrieve the spec from the scheduler.
+type cronEntryInfo struct {
+	ID   cron.EntryID
+	Spec string
 }
 
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers,verbs=get;list;watch;update;patch
@@ -83,7 +90,7 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if r.cronEntries == nil {
 		r.cronEntriesMu.Lock()
 		if r.cronEntries == nil {
-			r.cronEntries = make(map[string]cron.EntryID)
+			r.cronEntries = make(map[string]cronEntryInfo)
 		}
 		r.cronEntriesMu.Unlock()
 	}
@@ -227,38 +234,34 @@ func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1a
 
 	cronSpec := server.Spec.UpdateSchedule.MaintenanceWindow.Cron
 
-	// Check if cron job already exists
+	// Check if cron job already exists with same spec
 	r.cronEntriesMu.RLock()
-	existingID, exists := r.cronEntries[serverKey]
+	existing, exists := r.cronEntries[serverKey]
 	r.cronEntriesMu.RUnlock()
 
 	if exists {
-		// Check if spec changed
-		existingJob := r.getExistingJobSpec(existingID)
-		if existingJob != cronSpec {
-			// Spec changed - remove old and add new
-			r.removeCronJob(serverKey)
-			slog.InfoContext(ctx, "Cron spec changed, updating job", "old", existingJob, "new", cronSpec)
-		} else {
+		if existing.Spec == cronSpec {
 			// Spec unchanged - nothing to do
 			return nil
 		}
+		// Spec changed - remove old and add new
+		r.removeCronJob(serverKey)
+		slog.InfoContext(ctx, "Cron spec changed, updating job", "old", existing.Spec, "new", cronSpec)
 	}
 
 	// Add new cron job
 	entryID, err := r.cron.AddFunc(cronSpec, func() {
 		// Trigger reconciliation on cron schedule
 		slog.InfoContext(ctx, "Maintenance window triggered by cron", "server", serverKey)
-		// Note: actual update logic will be implemented in later iterations
 	})
 
 	if err != nil {
 		return errors.Wrap(err, "failed to add cron job")
 	}
 
-	// Store entry ID
+	// Store entry ID and spec together
 	r.cronEntriesMu.Lock()
-	r.cronEntries[serverKey] = entryID
+	r.cronEntries[serverKey] = cronEntryInfo{ID: entryID, Spec: cronSpec}
 	r.cronEntriesMu.Unlock()
 
 	slog.InfoContext(ctx, "Added cron job", "server", serverKey, "spec", cronSpec, "entryID", entryID)
@@ -270,25 +273,10 @@ func (r *UpdateReconciler) removeCronJob(serverKey string) {
 	r.cronEntriesMu.Lock()
 	defer r.cronEntriesMu.Unlock()
 
-	if entryID, exists := r.cronEntries[serverKey]; exists {
-		r.cron.Remove(entryID)
+	if entry, exists := r.cronEntries[serverKey]; exists {
+		r.cron.Remove(entry.ID)
 		delete(r.cronEntries, serverKey)
 	}
-}
-
-// getExistingJobSpec gets the cron spec for an existing job.
-func (r *UpdateReconciler) getExistingJobSpec(entryID cron.EntryID) string {
-	// For mock scheduler, we can retrieve the spec
-	if mock, ok := r.cron.(*testutil.MockCronScheduler); ok {
-		job := mock.GetJob(entryID)
-		if job != nil {
-			return job.Spec
-		}
-	}
-
-	// For real scheduler, we cannot retrieve the spec easily
-	// In production, we would track specs separately or always recreate
-	return ""
 }
 
 // downloadFile downloads a file from URL to targetPath with context support.
@@ -1089,7 +1077,7 @@ func (r *UpdateReconciler) SetCron(scheduler testutil.CronScheduler) {
 func (r *UpdateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Initialize cron entries map
 	if r.cronEntries == nil {
-		r.cronEntries = make(map[string]cron.EntryID)
+		r.cronEntries = make(map[string]cronEntryInfo)
 	}
 
 	// Start cron scheduler if not mock
