@@ -44,6 +44,7 @@ const (
 	testNamespace               = "default"
 	updateControllerPath        = "update_controller.go"
 	papermcServerControllerPath = "papermcserver_controller.go"
+	funcPerformCombinedUpdate   = "performCombinedUpdate"
 )
 
 var _ = Describe("UpdateController", func() {
@@ -1919,7 +1920,7 @@ var _ = Describe("UpdateController", func() {
 			var foundFunc bool
 			ast.Inspect(f, func(n ast.Node) bool {
 				fn, ok := n.(*ast.FuncDecl)
-				if !ok || fn.Name.Name != "performCombinedUpdate" {
+				if !ok || fn.Name.Name != funcPerformCombinedUpdate {
 					return true
 				}
 				foundFunc = true
@@ -2054,7 +2055,7 @@ var _ = Describe("UpdateController", func() {
 
 			ast.Inspect(f, func(n ast.Node) bool {
 				fn, ok := n.(*ast.FuncDecl)
-				if !ok || fn.Name.Name != "performCombinedUpdate" {
+				if !ok || fn.Name.Name != funcPerformCombinedUpdate {
 					return true
 				}
 				foundFunc = true
@@ -3605,7 +3606,7 @@ var _ = Describe("UpdateController", func() {
 			var foundFunc bool
 			ast.Inspect(f, func(n ast.Node) bool {
 				fn, ok := n.(*ast.FuncDecl)
-				if !ok || fn.Name.Name != "performCombinedUpdate" {
+				if !ok || fn.Name.Name != funcPerformCombinedUpdate {
 					return true
 				}
 				foundFunc = true
