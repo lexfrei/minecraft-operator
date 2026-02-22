@@ -373,16 +373,23 @@ func statusEqual(a, b *mcv1alpha1.PluginStatus) bool {
 		}
 	}
 
-	// Compare Conditions
+	// Compare Conditions (order-independent, keyed by Type)
 	if len(a.Conditions) != len(b.Conditions) {
 		return false
 	}
 
-	for i := range a.Conditions {
-		if a.Conditions[i].Type != b.Conditions[i].Type ||
-			a.Conditions[i].Status != b.Conditions[i].Status ||
-			a.Conditions[i].Reason != b.Conditions[i].Reason ||
-			a.Conditions[i].Message != b.Conditions[i].Message {
+	conditionMap := make(map[string]metav1.Condition, len(a.Conditions))
+	for _, c := range a.Conditions {
+		conditionMap[c.Type] = c
+	}
+
+	for _, c := range b.Conditions {
+		prev, ok := conditionMap[c.Type]
+		if !ok {
+			return false
+		}
+
+		if prev.Status != c.Status || prev.Reason != c.Reason || prev.Message != c.Message {
 			return false
 		}
 	}
