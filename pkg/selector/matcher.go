@@ -78,8 +78,8 @@ func FindMatchingPlugins(
 		// Check if plugin's instanceSelector matches the server labels
 		s, err := metav1.LabelSelectorAsSelector(&plugin.Spec.InstanceSelector)
 		if err != nil {
-			// Log error but continue with other plugins
-			continue
+			return nil, errors.Wrapf(err, "plugin %s/%s has invalid instanceSelector",
+				plugin.Namespace, plugin.Name)
 		}
 
 		if s.Matches(labels.Set(serverLabels)) {
