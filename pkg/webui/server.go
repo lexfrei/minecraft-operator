@@ -3,7 +3,9 @@ package webui
 import (
 	"context"
 	"fmt"
+	"html"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -170,7 +172,8 @@ func (s *Server) handleServerResolve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.triggerServerReconciliation(ctx, serverName, namespace); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to trigger reconciliation: %v", err), http.StatusInternalServerError)
+		http.Error(w, html.EscapeString(fmt.Sprintf("Failed to trigger reconciliation: %v", err)),
+			http.StatusInternalServerError)
 		return
 	}
 
@@ -181,7 +184,9 @@ func (s *Server) handleServerResolve(w http.ResponseWriter, r *http.Request) {
 		`white-space: nowrap;">⏳ Resolving...</button>` +
 		`<div hx-get="/ui/server/status?name=%s&namespace=%s&attempt=1" ` +
 		`hx-trigger="load delay:1s" hx-target="#solver-status-%s" hx-swap="innerHTML"></div>`
-	_, _ = fmt.Fprintf(w, buttonHTML, serverName, namespace, serverName)
+	_, _ = fmt.Fprintf(w, buttonHTML,
+		url.QueryEscape(serverName), url.QueryEscape(namespace),
+		html.EscapeString(serverName))
 }
 
 // solverStatusInfo holds parsed solver status from conditions.
@@ -266,11 +271,14 @@ func (s *Server) renderSolverStatus(
 ) {
 	nextAttempt := attempt + 1
 
+	escapedName := url.QueryEscape(serverName)
+	escapedNS := url.QueryEscape(namespace)
+
 	// Solver is actively running
 	if status.solverRunning {
 		statusHTML := `<span style="color: orange;" hx-get="/ui/server/status?name=%s&namespace=%s&attempt=%d" ` +
 			`hx-trigger="load delay:2s" hx-target="this" hx-swap="outerHTML">⏳ Running solver...</span>`
-		_, _ = fmt.Fprintf(w, statusHTML, serverName, namespace, nextAttempt)
+		_, _ = fmt.Fprintf(w, statusHTML, escapedName, escapedNS, nextAttempt)
 		return
 	}
 
@@ -295,7 +303,7 @@ func (s *Server) renderSolverStatus(
 	// Still working - continue polling
 	statusHTML := `<span style="color: orange;" hx-get="/ui/server/status?name=%s&namespace=%s&attempt=%d" ` +
 		`hx-trigger="load delay:2s" hx-target="this" hx-swap="outerHTML">⏳ Working...</span>`
-	_, _ = fmt.Fprintf(w, statusHTML, serverName, namespace, nextAttempt)
+	_, _ = fmt.Fprintf(w, statusHTML, escapedName, escapedNS, nextAttempt)
 }
 
 // handlePluginResolve triggers plugin reconciliation by adding an annotation.
@@ -315,12 +323,13 @@ func (s *Server) handlePluginResolve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.triggerPluginReconciliation(ctx, pluginName, namespace); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to trigger reconciliation: %v", err), http.StatusInternalServerError)
+		http.Error(w, html.EscapeString(fmt.Sprintf("Failed to trigger reconciliation: %v", err)),
+			http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprintf(w, "Plugin %s reconciliation triggered", pluginName)
+	_, _ = fmt.Fprintf(w, "Plugin %s reconciliation triggered", html.EscapeString(pluginName))
 }
 
 // triggerPluginReconciliation triggers plugin reconciliation by adding an annotation.
