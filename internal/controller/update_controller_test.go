@@ -1301,7 +1301,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(pluginsToDelete[0].InstalledJARName).To(Equal("TestPlugin-1.0.0.jar"))
 		})
 
-		It("should skip plugins without InstalledJARName", func() {
+		It("should include plugins without InstalledJARName for immediate deletion", func() {
 			By("creating a server")
 			server := &mcv1alpha1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1372,8 +1372,9 @@ var _ = Describe("UpdateController", func() {
 			By("calling getPluginsToDelete")
 			pluginsToDelete := reconciler.getPluginsToDelete(server)
 
-			By("verifying no plugins are returned")
-			Expect(pluginsToDelete).To(BeEmpty())
+			By("verifying plugin is included for immediate deletion completion")
+			Expect(pluginsToDelete).To(HaveLen(1),
+				"Plugins with empty InstalledJARName should be returned for immediate mark-as-deleted")
 		})
 
 		It("should update Plugin.DeletionProgress after JAR deletion", func() {
@@ -1515,6 +1516,265 @@ var _ = Describe("UpdateController", func() {
 			names := []string{pluginsToDelete[0].PluginRef.Name, pluginsToDelete[1].PluginRef.Name}
 			Expect(names).To(ContainElement("plugin-1"))
 			Expect(names).To(ContainElement("plugin-2"))
+		})
+		It("should delete plugin JARs from both plugins/ and update/ directories", func() {
+			By("creating mock executor that records commands")
+			mockExecutor := &testutil.MockPodExecutor{}
+
+			By("creating a Plugin with DeletionProgress for markJARAsDeleted")
+			plugin := &mcv1alpha1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "plugin-both-dirs",
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PluginSpec{
+					Source: mcv1alpha1.PluginSource{
+						Type:    "hangar",
+						Project: "TestPlugin",
+					},
+					UpdateStrategy: "latest",
+					InstanceSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"test": "true",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
+
+			plugin.Status.DeletionProgress = []mcv1alpha1.DeletionProgressEntry{
+				{
+					ServerName: serverName,
+					Namespace:  namespace,
+					JARDeleted: false,
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, plugin)).To(Succeed())
+
+			By("calling deletePluginJAR with InstalledJARName set")
+			deleteReconciler := &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: mockExecutor,
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+			}
+
+			pluginStatus := mcv1alpha1.ServerPluginStatus{
+				PluginRef: mcv1alpha1.PluginRef{
+					Name:      "plugin-both-dirs",
+					Namespace: namespace,
+				},
+				InstalledJARName: "plugin-both-dirs.jar",
+				PendingDeletion:  true,
+			}
+
+			err := deleteReconciler.deletePluginJAR(ctx, server, pluginStatus)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying rm command deletes from both directories")
+			Expect(mockExecutor.Calls).To(HaveLen(1))
+			rmCommand := mockExecutor.Calls[0].Command
+			fullCmd := rmCommand[len(rmCommand)-1] // last arg to "sh -c" is the command string
+			Expect(fullCmd).To(ContainSubstring("/data/plugins/plugin-both-dirs.jar"))
+			Expect(fullCmd).To(ContainSubstring("/data/plugins/update/plugin-both-dirs.jar"))
+		})
+
+		It("should immediately mark as deleted when InstalledJARName is empty", func() {
+			By("creating a Plugin with DeletionProgress")
+			plugin := &mcv1alpha1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "plugin-never-installed",
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PluginSpec{
+					Source: mcv1alpha1.PluginSource{
+						Type:    "hangar",
+						Project: "TestPlugin",
+					},
+					UpdateStrategy: "latest",
+					InstanceSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"test": "true",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
+
+			plugin.Status.DeletionProgress = []mcv1alpha1.DeletionProgressEntry{
+				{
+					ServerName: serverName,
+					Namespace:  namespace,
+					JARDeleted: false,
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, plugin)).To(Succeed())
+
+			By("calling deletePluginJAR with empty InstalledJARName")
+			deleteReconciler := &UpdateReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+			}
+
+			pluginStatus := mcv1alpha1.ServerPluginStatus{
+				PluginRef: mcv1alpha1.PluginRef{
+					Name:      "plugin-never-installed",
+					Namespace: namespace,
+				},
+				InstalledJARName: "",
+				PendingDeletion:  true,
+			}
+
+			err := deleteReconciler.deletePluginJAR(ctx, server, pluginStatus)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying Plugin DeletionProgress is marked as deleted")
+			updatedPlugin := &mcv1alpha1.Plugin{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      plugin.Name,
+				Namespace: plugin.Namespace,
+			}, updatedPlugin)).To(Succeed())
+
+			Expect(updatedPlugin.Status.DeletionProgress).To(HaveLen(1))
+			Expect(updatedPlugin.Status.DeletionProgress[0].JARDeleted).To(BeTrue())
+		})
+	})
+
+	Context("applyPluginUpdates sets InstalledJARName", func() {
+		var (
+			ctx        context.Context
+			reconciler *UpdateReconciler
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			namespace = testNamespace
+		})
+
+		It("should set InstalledJARName and CurrentVersion after download", func() {
+			By("creating a mock executor")
+			mockExecutor := &testutil.MockPodExecutor{}
+
+			By("creating a Plugin with AvailableVersions")
+			plugin := &mcv1alpha1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-download-plugin",
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PluginSpec{
+					Source: mcv1alpha1.PluginSource{
+						Type:    "hangar",
+						Project: "TestDownload",
+					},
+					UpdateStrategy: "latest",
+					InstanceSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"test": "true",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
+
+			now := metav1.Now()
+			plugin.Status.AvailableVersions = []mcv1alpha1.PluginVersionInfo{
+				{
+					Version:           "1.0.0",
+					DownloadURL:       "https://example.com/test-download-plugin-1.0.0.jar",
+					ReleasedAt:        now,
+					CachedAt:          now,
+					MinecraftVersions: []string{"1.21.1"},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, plugin)).To(Succeed())
+
+			By("setting up reconciler and server")
+			reconciler = &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: mockExecutor,
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-server-download",
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: false,
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:1.21.1-100",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+			server.Status = mcv1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				Plugins: []mcv1alpha1.ServerPluginStatus{
+					{
+						PluginRef: mcv1alpha1.PluginRef{
+							Name:      "test-download-plugin",
+							Namespace: namespace,
+						},
+						ResolvedVersion: "1.0.0",
+						Compatible:      true,
+						Source:          "hangar",
+					},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, server)).To(Succeed())
+
+			By("calling applyPluginUpdates")
+			err := reconciler.applyPluginUpdates(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying InstalledJARName and CurrentVersion are set")
+			Expect(server.Status.Plugins).To(HaveLen(1))
+			Expect(server.Status.Plugins[0].InstalledJARName).To(Equal("test-download-plugin.jar"),
+				"InstalledJARName should be set after successful download")
+			Expect(server.Status.Plugins[0].CurrentVersion).To(Equal("1.0.0"),
+				"CurrentVersion should be set after successful download")
+
+			By("cleaning up")
+			_ = k8sClient.Delete(ctx, server)
+			_ = k8sClient.Delete(ctx, plugin)
 		})
 	})
 
@@ -2120,7 +2380,7 @@ var _ = Describe("UpdateController", func() {
 								Name:      "never-installed-plugin",
 								Namespace: "default",
 							},
-							PendingDeletion: true,
+							PendingDeletion:  true,
 							InstalledJARName: "", // never installed
 						},
 					},
