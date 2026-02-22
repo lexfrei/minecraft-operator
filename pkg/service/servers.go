@@ -253,9 +253,11 @@ func (s *ServerService) CreateServer(ctx context.Context, data ServerCreateData)
 
 	if data.UpdateDelay != "" {
 		d, err := time.ParseDuration(data.UpdateDelay)
-		if err == nil {
-			server.Spec.UpdateDelay = &metav1.Duration{Duration: d}
+		if err != nil {
+			return errors.Wrapf(err, "invalid update delay %q", data.UpdateDelay)
 		}
+
+		server.Spec.UpdateDelay = &metav1.Duration{Duration: d}
 	}
 
 	if data.CheckCron != "" {
@@ -296,9 +298,11 @@ func (s *ServerService) UpdateServer(ctx context.Context, data ServerUpdateData)
 
 	if data.UpdateDelay != nil {
 		d, err := time.ParseDuration(*data.UpdateDelay)
-		if err == nil {
-			server.Spec.UpdateDelay = &metav1.Duration{Duration: d}
+		if err != nil {
+			return errors.Wrapf(err, "invalid update delay %q", *data.UpdateDelay)
 		}
+
+		server.Spec.UpdateDelay = &metav1.Duration{Duration: d}
 	}
 
 	if data.CheckCron != nil {

@@ -1709,7 +1709,9 @@ func updateHistoryEqual(a, b *mcv1alpha1.UpdateHistory) bool {
 	if a == nil {
 		return true
 	}
-	return a.Successful == b.Successful && a.PreviousVersion == b.PreviousVersion
+	return a.Successful == b.Successful &&
+		a.PreviousVersion == b.PreviousVersion &&
+		a.AppliedAt.Equal(&b.AppliedAt)
 }
 
 // SetupWithManager sets up the controller with the Manager.
