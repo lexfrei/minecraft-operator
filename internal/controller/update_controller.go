@@ -51,7 +51,6 @@ const (
 	conditionTypeUpdating  = "Updating"
 	reasonUpdateInProgress = "UpdateInProgress"
 	reasonUpdateComplete   = "UpdateComplete"
-	reasonUpdateFailed     = "UpdateFailed"
 )
 
 // UpdateReconciler reconciles PaperMCServer resources for scheduled updates.
@@ -61,6 +60,9 @@ type UpdateReconciler struct {
 	PaperClient  *paper.Client
 	PluginClient plugins.PluginClient
 	cron         testutil.CronScheduler
+
+	// nowFunc returns current time; override in tests for deterministic behavior.
+	nowFunc func() time.Time
 
 	// Track cron entries per server
 	cronEntriesMu sync.RWMutex
@@ -137,6 +139,15 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				return ctrl.Result{RequeueAfter: remainingDelay}, nil
 			}
 			return ctrl.Result{}, nil
+		}
+
+		// Check if we are within the maintenance window
+		if !r.isInMaintenanceWindow(&server) {
+			slog.InfoContext(ctx, "Outside maintenance window, deferring update",
+				"server", server.Name,
+				"maintenanceWindowCron", server.Spec.UpdateSchedule.MaintenanceWindow.Cron)
+
+			return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 		}
 	}
 
@@ -215,6 +226,72 @@ func (r *UpdateReconciler) shouldApplyUpdate(server *mcv1alpha1.PaperMCServer) (
 	// Delay not satisfied - return remaining time
 	remaining := delay - timeSinceRelease
 	return false, remaining
+}
+
+// maintenanceWindowDuration is the duration after cron trigger during which updates are allowed.
+const maintenanceWindowDuration = 1 * time.Hour
+
+// now returns the current time, using nowFunc if set (for testing).
+func (r *UpdateReconciler) now() time.Time {
+	if r.nowFunc != nil {
+		return r.nowFunc()
+	}
+
+	return time.Now()
+}
+
+// isInMaintenanceWindow checks if the current time is within the maintenance window.
+// The maintenance window starts at the cron trigger time and lasts for maintenanceWindowDuration.
+// Returns true if maintenance window is disabled (updates always allowed).
+func (r *UpdateReconciler) isInMaintenanceWindow(server *mcv1alpha1.PaperMCServer) bool {
+	mw := server.Spec.UpdateSchedule.MaintenanceWindow
+	if !mw.Enabled || mw.Cron == "" {
+		return true // No maintenance window configured, always allow
+	}
+
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+
+	schedule, err := parser.Parse(mw.Cron)
+	if err != nil {
+		slog.Error("Failed to parse maintenance window cron, allowing update",
+			"cron", mw.Cron, "error", err)
+
+		return true // Can't parse cron, don't block
+	}
+
+	now := r.now()
+
+	// Find the last trigger time by checking when the schedule would have fired
+	// before now. We check backwards up to 7 days.
+	lastTrigger := findLastCronTrigger(schedule, now)
+	if lastTrigger.IsZero() {
+		return false // No trigger found within lookback period
+	}
+
+	windowEnd := lastTrigger.Add(maintenanceWindowDuration)
+
+	return now.After(lastTrigger) && now.Before(windowEnd)
+}
+
+// findLastCronTrigger finds the most recent time the cron schedule triggered before now.
+func findLastCronTrigger(schedule cron.Schedule, now time.Time) time.Time {
+	// Walk backwards in 1-hour steps up to 7 days to find a window
+	lookback := 7 * 24 * time.Hour
+
+	candidate := now.Add(-lookback)
+	var lastTrigger time.Time
+
+	for {
+		next := schedule.Next(candidate)
+		if next.After(now) {
+			break
+		}
+
+		lastTrigger = next
+		candidate = next
+	}
+
+	return lastTrigger
 }
 
 // manageCronSchedule adds, updates, or removes cron jobs based on server spec.

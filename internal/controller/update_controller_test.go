@@ -1953,4 +1953,93 @@ var _ = Describe("UpdateController", func() {
 			Skip("Requires complex mocking of delete operations")
 		})
 	})
+
+	Context("Maintenance window enforcement", func() {
+		It("should allow update when inside maintenance window", func() {
+			// Maintenance window: Sunday 4:00 AM
+			// Current time: Sunday 4:30 AM (within 1-hour window)
+			sunday430AM := time.Date(2026, 2, 22, 4, 30, 0, 0, time.UTC)
+			reconciler := &UpdateReconciler{
+				nowFunc: func() time.Time { return sunday430AM },
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+				},
+			}
+
+			Expect(reconciler.isInMaintenanceWindow(server)).To(BeTrue(),
+				"Should be inside maintenance window at Sunday 4:30 AM")
+		})
+
+		It("should reject update when outside maintenance window", func() {
+			// Maintenance window: Sunday 4:00 AM
+			// Current time: Wednesday 10:00 AM (outside window)
+			wednesday10AM := time.Date(2026, 2, 25, 10, 0, 0, 0, time.UTC)
+			reconciler := &UpdateReconciler{
+				nowFunc: func() time.Time { return wednesday10AM },
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+				},
+			}
+
+			Expect(reconciler.isInMaintenanceWindow(server)).To(BeFalse(),
+				"Should be outside maintenance window at Wednesday 10 AM")
+		})
+
+		It("should allow update when maintenance window is disabled", func() {
+			reconciler := &UpdateReconciler{}
+
+			server := &mcv1alpha1.PaperMCServer{
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: false,
+						},
+					},
+				},
+			}
+
+			Expect(reconciler.isInMaintenanceWindow(server)).To(BeTrue(),
+				"Should allow when maintenance window is disabled")
+		})
+
+		It("should reject update when just past the 1-hour window", func() {
+			// Maintenance window: Sunday 4:00 AM
+			// Current time: Sunday 5:01 AM (just past 1-hour window)
+			sunday501AM := time.Date(2026, 2, 22, 5, 1, 0, 0, time.UTC)
+			reconciler := &UpdateReconciler{
+				nowFunc: func() time.Time { return sunday501AM },
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+				},
+			}
+
+			Expect(reconciler.isInMaintenanceWindow(server)).To(BeFalse(),
+				"Should reject update just after the 1-hour maintenance window")
+		})
+	})
 })
