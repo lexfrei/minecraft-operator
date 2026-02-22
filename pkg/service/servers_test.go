@@ -856,3 +856,59 @@ func TestNewServerService(t *testing.T) {
 
 	assert.NotNil(t, svc)
 }
+
+// --- Invalid duration tests ---
+
+func TestServerService_CreateServer_InvalidUpdateDelay(t *testing.T) {
+	// BUG: CreateServer silently ignores invalid UpdateDelay strings.
+	// "not-a-duration" should cause an error, not be silently dropped.
+	t.Parallel()
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(newTestSchemeWithAppsV1()).
+		Build()
+
+	svc := NewServerService(fakeClient)
+
+	data := ServerCreateData{
+		Name:           "bad-delay-server",
+		Namespace:      "default",
+		UpdateStrategy: "auto",
+		Version:        "1.21.1",
+		UpdateDelay:    "not-a-duration",
+	}
+
+	err := svc.CreateServer(context.Background(), data)
+	require.Error(t, err, "CreateServer should return error for invalid UpdateDelay")
+}
+
+func TestServerService_UpdateServer_InvalidUpdateDelay(t *testing.T) {
+	// BUG: UpdateServer silently ignores invalid UpdateDelay strings.
+	t.Parallel()
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(newTestSchemeWithAppsV1()).
+		WithObjects(&mck8slexlav1alpha1.PaperMCServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "delay-test",
+				Namespace: "default",
+			},
+			Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "auto",
+				Version:        "1.21.1",
+			},
+		}).
+		Build()
+
+	svc := NewServerService(fakeClient)
+
+	badDelay := "invalid"
+	data := ServerUpdateData{
+		Namespace:   "default",
+		Name:        "delay-test",
+		UpdateDelay: &badDelay,
+	}
+
+	err := svc.UpdateServer(context.Background(), data)
+	require.Error(t, err, "UpdateServer should return error for invalid UpdateDelay")
+}

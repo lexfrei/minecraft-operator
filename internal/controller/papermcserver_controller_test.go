@@ -1874,6 +1874,29 @@ var _ = Describe("PaperMCServer Controller", func() {
 	})
 })
 
+var _ = Describe("PaperMCServerController helpers", func() {
+	Context("updateHistoryEqual", func() {
+		It("should detect different AppliedAt timestamps as not equal", func() {
+			// BUG: updateHistoryEqual only compares Successful and PreviousVersion,
+			// ignoring AppliedAt. Two updates with different timestamps but same
+			// Successful/PreviousVersion are incorrectly considered equal.
+			a := &mck8slexlav1alpha1.UpdateHistory{
+				AppliedAt:       metav1.NewTime(time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)),
+				PreviousVersion: "1.21.0",
+				Successful:      true,
+			}
+			b := &mck8slexlav1alpha1.UpdateHistory{
+				AppliedAt:       metav1.NewTime(time.Date(2025, 6, 2, 10, 0, 0, 0, time.UTC)),
+				PreviousVersion: "1.21.0",
+				Successful:      true,
+			}
+
+			Expect(updateHistoryEqual(a, b)).To(BeFalse(),
+				"updateHistoryEqual must detect different AppliedAt as not equal")
+		})
+	})
+})
+
 // findCondition returns the condition with the given type from the slice, or nil if not found.
 func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
 	for i := range conditions {
