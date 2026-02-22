@@ -1,0 +1,162 @@
+# Contract: "RBAC grants exactly the permissions the operator needs"
+# These tests guarantee that the operator has the required permissions
+# to manage CRDs, StatefulSets, Pods, Secrets, and perform leader election.
+suite: rbac
+templates:
+  - templates/rbac/role.yaml
+  - templates/manager-rolebinding.yaml
+  - templates/leader-election-role.yaml
+  - templates/leader-election-rolebinding.yaml
+tests:
+  # ClusterRole: CRD permissions
+  - it: should grant full CRUD on PaperMCServer and Plugin CRDs
+    template: templates/rbac/role.yaml
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - mc.k8s.lex.la
+            resources:
+              - papermcservers
+              - plugins
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+
+  # ClusterRole: StatefulSet permissions
+  - it: should grant StatefulSet management permissions
+    template: templates/rbac/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - apps
+            resources:
+              - statefulsets
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+
+  # ClusterRole: Pod exec for RCON
+  - it: should grant pod exec permission for RCON shutdown
+    template: templates/rbac/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - pods/exec
+            verbs:
+              - create
+
+  # ClusterRole: Secret read for RCON password
+  - it: should grant Secret access for RCON password retrieval
+    template: templates/rbac/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - persistentvolumeclaims
+              - secrets
+              - services
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - patch
+              - update
+              - watch
+
+  # ClusterRole: Status subresource permissions
+  - it: should grant status update permissions on CRDs
+    template: templates/rbac/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - mc.k8s.lex.la
+            resources:
+              - papermcservers/status
+              - plugins/status
+            verbs:
+              - get
+              - patch
+              - update
+
+  # ClusterRoleBinding: references correct SA
+  - it: should bind ClusterRole to controller ServiceAccount
+    template: templates/manager-rolebinding.yaml
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: roleRef.kind
+          value: ClusterRole
+      - equal:
+          path: roleRef.name
+          value: manager-role
+      - matchRegex:
+          path: subjects[0].name
+          pattern: ".*-controller-manager$"
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+
+  # Leader election: namespace-scoped Role
+  - it: should create namespace-scoped leader election Role
+    template: templates/leader-election-role.yaml
+    asserts:
+      - isKind:
+          of: Role
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - coordination.k8s.io
+            resources:
+              - leases
+            verbs:
+              - get
+              - list
+              - watch
+              - create
+              - update
+              - patch
+              - delete
+
+  # Leader election: RoleBinding references correct Role and SA
+  - it: should bind leader election Role to controller ServiceAccount
+    template: templates/leader-election-rolebinding.yaml
+    asserts:
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: roleRef.kind
+          value: Role
+      - matchRegex:
+          path: roleRef.name
+          pattern: ".*-leader-election-role$"
+      - matchRegex:
+          path: subjects[0].name
+          pattern: ".*-controller-manager$"

@@ -1,0 +1,169 @@
+# Contract: "WebUI resources are conditionally created based on feature flags"
+# Feature flags compose correctly: webui.enabled gates all resources,
+# ingress.enabled and httproute.enabled are secondary gates.
+suite: webui
+templates:
+  - templates/webui-service.yaml
+  - templates/webui-ingress.yaml
+  - templates/webui-httproute.yaml
+tests:
+  # Service
+  - it: should create WebUI Service when webui enabled
+    template: templates/webui-service.yaml
+    set:
+      webui.enabled: true
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - equal:
+          path: spec.ports[0].port
+          value: 8082
+      - equal:
+          path: spec.ports[0].targetPort
+          value: webui
+
+  - it: should not render WebUI Service when webui disabled
+    template: templates/webui-service.yaml
+    set:
+      webui.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should use custom service type
+    template: templates/webui-service.yaml
+    set:
+      webui.enabled: true
+      webui.service.type: LoadBalancer
+      webui.service.port: 9090
+    asserts:
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+      - equal:
+          path: spec.ports[0].port
+          value: 9090
+
+  # Ingress
+  - it: should create Ingress only when both webui AND ingress enabled
+    template: templates/webui-ingress.yaml
+    set:
+      webui.enabled: true
+      webui.ingress.enabled: true
+      webui.ingress.hosts:
+        - host: mc.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: spec.rules[0].host
+          value: mc.example.com
+
+  - it: should not render Ingress when webui disabled even if ingress enabled
+    template: templates/webui-ingress.yaml
+    set:
+      webui.enabled: false
+      webui.ingress.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render Ingress when webui enabled but ingress disabled
+    template: templates/webui-ingress.yaml
+    set:
+      webui.enabled: true
+      webui.ingress.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should configure Ingress TLS when set
+    template: templates/webui-ingress.yaml
+    set:
+      webui.enabled: true
+      webui.ingress.enabled: true
+      webui.ingress.hosts:
+        - host: mc.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+      webui.ingress.tls:
+        - secretName: mc-tls
+          hosts:
+            - mc.example.com
+    asserts:
+      - equal:
+          path: spec.tls[0].secretName
+          value: mc-tls
+      - contains:
+          path: spec.tls[0].hosts
+          content: mc.example.com
+
+  - it: should set ingressClassName when specified
+    template: templates/webui-ingress.yaml
+    set:
+      webui.enabled: true
+      webui.ingress.enabled: true
+      webui.ingress.className: nginx
+      webui.ingress.hosts:
+        - host: mc.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+
+  # HTTPRoute
+  - it: should create HTTPRoute only when both webui AND httproute enabled
+    template: templates/webui-httproute.yaml
+    set:
+      webui.enabled: true
+      webui.httproute.enabled: true
+    asserts:
+      - isKind:
+          of: HTTPRoute
+
+  - it: should not render HTTPRoute when webui disabled
+    template: templates/webui-httproute.yaml
+    set:
+      webui.enabled: false
+      webui.httproute.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should template parentRefs from values
+    template: templates/webui-httproute.yaml
+    set:
+      webui.enabled: true
+      webui.httproute.enabled: true
+      webui.httproute.parentRefs:
+        - name: my-gateway
+          namespace: gateway-ns
+    asserts:
+      - equal:
+          path: spec.parentRefs[0].name
+          value: my-gateway
+      - equal:
+          path: spec.parentRefs[0].namespace
+          value: gateway-ns
+
+  - it: should template hostnames from values
+    template: templates/webui-httproute.yaml
+    set:
+      webui.enabled: true
+      webui.httproute.enabled: true
+      webui.httproute.hostnames:
+        - mc.example.com
+    asserts:
+      - contains:
+          path: spec.hostnames
+          content: mc.example.com

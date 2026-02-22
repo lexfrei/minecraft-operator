@@ -1,10 +1,68 @@
-# Bug 17: values.yaml declares metrics.port: 8080, but deployment.yaml hardcodes
-# --metrics-bind-address=:8443 and containerPort: 8443.
-# The metrics.port configuration is completely ignored.
-suite: deployment metrics port
+# Contract: "The Deployment template produces a working operator pod"
+# These tests guarantee that helm install with various value combinations
+# produces a functional Kubernetes Deployment.
+suite: deployment
 templates:
   - templates/deployment.yaml
 tests:
+  - it: should produce valid Deployment with default values
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: manager
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "ghcr.io/lexfrei/minecraft-operator:.+"
+
+  - it: should default image tag to Chart.AppVersion when not set
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/lexfrei/minecraft-operator:0.0.0-dev"
+
+  - it: should use custom image repository and tag
+    set:
+      image.repository: registry.example.com/my-operator
+      image.tag: v1.2.3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "registry.example.com/my-operator:v1.2.3"
+
+  - it: should include webui args when webui is enabled
+    set:
+      webui.enabled: true
+      webui.port: 8082
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--webui-enabled=true"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--webui-bind-address=:8082"
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 8082
+            name: webui
+            protocol: TCP
+
+  - it: should not include webui args when webui is disabled
+    set:
+      webui.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--webui-enabled=true"
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--webui-bind-address=:8082"
+
   - it: should use metrics.port from values for bind address
     asserts:
       - contains:
@@ -36,3 +94,107 @@ tests:
             containerPort: 9090
             name: metrics
             protocol: TCP
+
+  - it: should enforce Pod Security Standards restricted profile
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: should drop ALL capabilities from container
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: should template resource limits from values
+    set:
+      resources.limits.cpu: "1"
+      resources.limits.memory: "1Gi"
+      resources.requests.cpu: "200m"
+      resources.requests.memory: "256Mi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "1"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 1Gi
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+
+  - it: should apply custom pod annotations
+    set:
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+          value: "8080"
+
+  - it: should always have health probes on port 8081
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: health
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /readyz
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 8081
+            name: health
+            protocol: TCP
+
+  - it: should apply nodeSelector when set
+    set:
+      nodeSelector:
+        kubernetes.io/os: linux
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+
+  - it: should apply tolerations when set
+    set:
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: minecraft
+          effect: NoSchedule
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: dedicated
+            operator: Equal
+            value: minecraft
+            effect: NoSchedule
+
+  - it: should use correct ServiceAccount name
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.serviceAccountName
+          pattern: ".*-controller-manager$"

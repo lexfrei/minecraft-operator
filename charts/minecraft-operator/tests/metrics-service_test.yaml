@@ -1,0 +1,62 @@
+# Contract: "Metrics service is conditionally created and correctly configured"
+suite: metrics service
+templates:
+  - templates/metrics-service.yaml
+  - templates/metrics-reader-clusterrole.yaml
+tests:
+  - it: should create metrics Service when metrics enabled
+    template: templates/metrics-service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.ports[0].port
+          value: 8080
+      - equal:
+          path: spec.ports[0].targetPort
+          value: metrics
+
+  - it: should not render metrics Service when metrics disabled
+    template: templates/metrics-service.yaml
+    set:
+      metrics.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should use custom metrics port
+    template: templates/metrics-service.yaml
+    set:
+      metrics.port: 9090
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 9090
+
+  - it: should select controller-manager pods
+    template: templates/metrics-service.yaml
+    asserts:
+      - equal:
+          path: spec.selector.control-plane
+          value: controller-manager
+
+  - it: should create metrics reader ClusterRole when metrics enabled
+    template: templates/metrics-reader-clusterrole.yaml
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - contains:
+          path: rules
+          content:
+            nonResourceURLs:
+              - /metrics
+            verbs:
+              - get
+
+  - it: should not render metrics reader ClusterRole when metrics disabled
+    template: templates/metrics-reader-clusterrole.yaml
+    set:
+      metrics.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
