@@ -501,6 +501,40 @@ func TestRCONClient_GracefulShutdown_StopError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to stop server")
 }
 
+// --- Context cancellation during save wait ---
+
+func TestRCONClient_GracefulShutdown_ContextCancellation_DuringSaveWait(t *testing.T) {
+	t.Parallel()
+
+	client, err := NewRCONClient("localhost", 25575, "secret")
+	require.NoError(t, err)
+
+	mock := newMockRCONConn()
+	client.conn = mock
+
+	// Use a context that expires after 100ms — well before the 2s sleep after save-all
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+
+	// No warnings: save-all → sleep(2s) → stop
+	// BUG: time.Sleep(2 * time.Second) on line 126 does NOT respect context.
+	// With 100ms timeout, save-all succeeds, then sleep blocks for 2 full seconds
+	// instead of returning immediately when context expires.
+	err = client.GracefulShutdown(ctx, []string{}, time.Millisecond)
+	elapsed := time.Since(start)
+
+	// If context is properly respected during the save wait,
+	// the function should return within ~200ms (context timeout + some margin).
+	// BUG: Currently takes ~2s because time.Sleep ignores context.
+	assert.Less(t, elapsed, 500*time.Millisecond,
+		"GracefulShutdown should respect context during save wait, not block for 2 seconds")
+
+	// Should return an error (either context cancelled or shutdown cancelled)
+	require.Error(t, err, "Should return error when context expires during save wait")
+}
+
 // --- Concurrency tests ---
 
 func TestRCONClient_SendCommand_Concurrent(t *testing.T) {

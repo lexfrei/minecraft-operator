@@ -122,8 +122,12 @@ func (c *RCONClient) GracefulShutdown(
 		return errors.Wrap(err, "failed to save world")
 	}
 
-	// Wait a moment for save to complete
-	time.Sleep(2 * time.Second)
+	// Wait a moment for save to complete, but respect context cancellation
+	select {
+	case <-ctx.Done():
+		return errors.Wrap(ctx.Err(), "shutdown cancelled during save wait")
+	case <-time.After(2 * time.Second):
+	}
 
 	// Send stop command
 	_, err = c.SendCommand(ctx, "stop")
