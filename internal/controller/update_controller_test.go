@@ -3453,6 +3453,84 @@ var _ = Describe("UpdateController", func() {
 		})
 	})
 
+	Context("Reconcile with no available update", func() {
+		It("should not requeue when outside maintenance window and no available update", func() {
+			// BUG: When AvailableUpdate is nil, shouldApplyUpdate returns true (line 220),
+			// causing the reconciler to check the maintenance window. If outside the window,
+			// it requeues every 5 minutes unnecessarily — there's no update to apply.
+			// The AvailableUpdate nil check at line 166 should come BEFORE the maintenance
+			// window check, not after.
+			namespace := "no-update-ns"
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: namespace},
+			}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, ns)
+			}()
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "no-update-server",
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "auto",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0", // Sunday 4am
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: "papermc", Image: "docker.io/lexfrei/papermc:1.21.1-100"},
+							},
+						},
+					},
+				},
+				Status: mcv1alpha1.PaperMCServerStatus{
+					CurrentVersion:  "1.21.1",
+					CurrentBuild:    100,
+					AvailableUpdate: nil, // No available update
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, server)
+			}()
+
+			// Set time to Wednesday 2pm — outside Sunday 4am maintenance window
+			wednesday2pm := time.Date(2025, 6, 4, 14, 0, 0, 0, time.UTC)
+			reconciler := &UpdateReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				nowFunc: func() time.Time {
+					return wednesday2pm
+				},
+				cronEntries: make(map[string]cronEntryInfo),
+				cron:        testutil.NewMockCronScheduler(),
+			}
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "no-update-server",
+					Namespace: namespace,
+				},
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(time.Duration(0)),
+				"Should NOT requeue when no available update — maintenance window check is irrelevant")
+		})
+	})
+
 	Context("Image tag construction", func() {
 		It("should use fully qualified docker.io registry prefix", func() {
 			// BUG: performCombinedUpdate constructs image as "lexfrei/papermc:..."

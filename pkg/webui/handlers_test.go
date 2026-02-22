@@ -488,6 +488,51 @@ func TestHandleApplyNowFromPluginRouteReturnsError(t *testing.T) {
 	}
 }
 
+func TestParseServerFormRejectsInvalidNamespace(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	// Valid name, but invalid namespace (uppercase letters violate RFC 1123)
+	form := url.Values{
+		"name":           {"my-server"},
+		"namespace":      {"INVALID-NS"},
+		"updateStrategy": {"auto"},
+		"version":        {"1.21.1"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/server/create", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	_, err := srv.parseServerFormToData(req)
+	if err == nil {
+		t.Error("parseServerFormToData should reject invalid namespace (uppercase not allowed in K8s names)")
+	}
+}
+
+func TestParsePluginFormRejectsInvalidNamespace(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	// Valid name, but namespace contains spaces
+	form := url.Values{
+		"name":           {"my-plugin"},
+		"namespace":      {"bad namespace"},
+		"sourceType":     {"hangar"},
+		"project":        {"EssentialsX"},
+		"updateStrategy": {"latest"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	_, err := srv.parsePluginFormToData(req)
+	if err == nil {
+		t.Error("parsePluginFormToData should reject invalid namespace (spaces not allowed in K8s names)")
+	}
+}
+
 func TestHandleServerDeleteRemovesServer(t *testing.T) {
 	t.Parallel()
 
