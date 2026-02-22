@@ -1512,16 +1512,12 @@ func (r *PaperMCServerReconciler) setUpdateBlocked(
 		reasonUpdateBlocked, reason)
 }
 
-// clearUpdateBlocked clears the update blocked status.
+// clearUpdateBlocked clears the update blocked status unconditionally.
 func (r *PaperMCServerReconciler) clearUpdateBlocked(server *mcv1alpha1.PaperMCServer) {
-	if server.Status.UpdateBlocked != nil && server.Status.UpdateBlocked.Blocked {
-		server.Status.UpdateBlocked = &mcv1alpha1.UpdateBlockedStatus{
-			Blocked: false,
-		}
+	server.Status.UpdateBlocked = nil
 
-		r.setCondition(server, conditionTypeUpdateBlocked, metav1.ConditionFalse,
-			reasonUpdateUnblocked, "No compatibility issues preventing update")
-	}
+	r.setCondition(server, conditionTypeUpdateBlocked, metav1.ConditionFalse,
+		reasonUpdateUnblocked, "No compatibility issues preventing update")
 }
 
 // setCondition sets or updates a condition in the server status.

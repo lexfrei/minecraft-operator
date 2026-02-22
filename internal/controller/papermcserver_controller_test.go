@@ -297,6 +297,75 @@ var _ = Describe("PaperMCServer Controller", func() {
 		})
 	})
 
+	Context("clearUpdateBlocked behavior", func() {
+		It("should clear UpdateBlocked condition even when Blocked is already false", func() {
+			reconciler := &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-clear-blocked",
+					Namespace:  "default",
+					Generation: 1,
+				},
+				Status: mck8slexlav1alpha1.PaperMCServerStatus{
+					UpdateBlocked: &mck8slexlav1alpha1.UpdateBlockedStatus{
+						Blocked: false, // Already cleared struct-level
+					},
+				},
+			}
+
+			// Manually set condition to True (simulating stale condition)
+			reconciler.setCondition(server, conditionTypeUpdateBlocked, metav1.ConditionTrue,
+				reasonUpdateBlocked, "stale block reason")
+
+			// Call clearUpdateBlocked
+			reconciler.clearUpdateBlocked(server)
+
+			// UpdateBlocked should be nil
+			Expect(server.Status.UpdateBlocked).To(BeNil())
+
+			// Condition should be False
+			cond := findCondition(server.Status.Conditions, conditionTypeUpdateBlocked)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		})
+
+		It("should clear UpdateBlocked when Blocked is true", func() {
+			reconciler := &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-clear-blocked-true",
+					Namespace:  "default",
+					Generation: 1,
+				},
+				Status: mck8slexlav1alpha1.PaperMCServerStatus{
+					UpdateBlocked: &mck8slexlav1alpha1.UpdateBlockedStatus{
+						Blocked: true,
+						Reason:  "some block reason",
+					},
+				},
+			}
+
+			reconciler.setCondition(server, conditionTypeUpdateBlocked, metav1.ConditionTrue,
+				reasonUpdateBlocked, "some block reason")
+
+			reconciler.clearUpdateBlocked(server)
+
+			Expect(server.Status.UpdateBlocked).To(BeNil())
+
+			cond := findCondition(server.Status.Conditions, conditionTypeUpdateBlocked)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		})
+	})
+
 	Context("serverStatusEqual comparison", func() {
 		It("should detect changes in AvailableUpdate content", func() {
 
@@ -356,3 +425,14 @@ var _ = Describe("PaperMCServer Controller", func() {
 		})
 	})
 })
+
+// findCondition returns the condition with the given type from the slice, or nil if not found.
+func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
+		}
+	}
+
+	return nil
+}
