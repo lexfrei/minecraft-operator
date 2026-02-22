@@ -102,7 +102,15 @@ func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Run reconciliation logic
 	result, err := r.doReconcile(ctx, &plugin)
 
-	// Update status if changed
+	// Set conditions based on result BEFORE status update so they are persisted
+	if err != nil {
+		slog.ErrorContext(ctx, "Reconciliation failed", "error", err)
+		r.setCondition(&plugin, conditionTypeReady, metav1.ConditionFalse, reasonReconcileError, err.Error())
+	} else {
+		r.setCondition(&plugin, conditionTypeReady, metav1.ConditionTrue, reasonReconcileSuccess, "Plugin reconciled successfully")
+	}
+
+	// Update status if changed (includes conditions set above)
 	if err != nil || !statusEqual(&plugin.Status, originalStatus) {
 		if updateErr := r.Status().Update(ctx, &plugin); updateErr != nil {
 			slog.ErrorContext(ctx, "Failed to update Plugin status", "error", updateErr)
@@ -110,14 +118,6 @@ func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				err = updateErr
 			}
 		}
-	}
-
-	// Set conditions based on result
-	if err != nil {
-		slog.ErrorContext(ctx, "Reconciliation failed", "error", err)
-		r.setCondition(&plugin, conditionTypeReady, metav1.ConditionFalse, reasonReconcileError, err.Error())
-	} else {
-		r.setCondition(&plugin, conditionTypeReady, metav1.ConditionTrue, reasonReconcileSuccess, "Plugin reconciled successfully")
 	}
 
 	return result, err
@@ -343,6 +343,20 @@ func statusEqual(a, b *mcv1alpha1.PluginStatus) bool {
 		if a.AvailableVersions[i].Version != b.AvailableVersions[i].Version ||
 			a.AvailableVersions[i].DownloadURL != b.AvailableVersions[i].DownloadURL ||
 			a.AvailableVersions[i].Hash != b.AvailableVersions[i].Hash {
+			return false
+		}
+	}
+
+	// Compare Conditions
+	if len(a.Conditions) != len(b.Conditions) {
+		return false
+	}
+
+	for i := range a.Conditions {
+		if a.Conditions[i].Type != b.Conditions[i].Type ||
+			a.Conditions[i].Status != b.Conditions[i].Status ||
+			a.Conditions[i].Reason != b.Conditions[i].Reason ||
+			a.Conditions[i].Message != b.Conditions[i].Message {
 			return false
 		}
 	}

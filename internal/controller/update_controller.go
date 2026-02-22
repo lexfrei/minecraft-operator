@@ -143,7 +143,7 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 
 		// Check if we are within the maintenance window
-		if !r.isInMaintenanceWindow(&server) {
+		if !r.isInMaintenanceWindow(ctx, &server) {
 			slog.InfoContext(ctx, "Outside maintenance window, deferring update",
 				"server", server.Name,
 				"maintenanceWindowCron", server.Spec.UpdateSchedule.MaintenanceWindow.Cron)
@@ -244,7 +244,7 @@ func (r *UpdateReconciler) now() time.Time {
 // isInMaintenanceWindow checks if the current time is within the maintenance window.
 // The maintenance window starts at the cron trigger time and lasts for maintenanceWindowDuration.
 // Returns true if maintenance window is disabled (updates always allowed).
-func (r *UpdateReconciler) isInMaintenanceWindow(server *mcv1alpha1.PaperMCServer) bool {
+func (r *UpdateReconciler) isInMaintenanceWindow(ctx context.Context, server *mcv1alpha1.PaperMCServer) bool {
 	mw := server.Spec.UpdateSchedule.MaintenanceWindow
 	if !mw.Enabled || mw.Cron == "" {
 		return true // No maintenance window configured, always allow
@@ -254,7 +254,7 @@ func (r *UpdateReconciler) isInMaintenanceWindow(server *mcv1alpha1.PaperMCServe
 
 	schedule, err := parser.Parse(mw.Cron)
 	if err != nil {
-		slog.Error("Failed to parse maintenance window cron, blocking update",
+		slog.ErrorContext(ctx, "Failed to parse maintenance window cron, blocking update",
 			"cron", mw.Cron, "error", err)
 
 		return false // Can't parse cron, block updates as safe default
@@ -442,12 +442,9 @@ func (r *UpdateReconciler) downloadPluginToServer(
 	namespace := server.Namespace
 	container := containerNamePaperMC
 
-	// Build curl command to download directly to /data/plugins/update/
-	curlCmd := fmt.Sprintf(
-		"curl -fsSL -o /data/plugins/update/%s.jar '%s'",
-		pluginName,
-		downloadURL,
-	)
+	// Download directly to /data/plugins/update/ using curl with separate args
+	// to avoid shell injection via downloadURL
+	outputPath := fmt.Sprintf("/data/plugins/update/%s.jar", pluginName)
 
 	slog.InfoContext(ctx, "Downloading plugin to server",
 		"server", server.Name,
@@ -455,7 +452,7 @@ func (r *UpdateReconciler) downloadPluginToServer(
 		"url", downloadURL)
 
 	_, err := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
-		[]string{"sh", "-c", curlCmd})
+		[]string{"curl", "-fsSL", "-o", outputPath, downloadURL})
 	if err != nil {
 		return errors.Wrapf(err, "failed to download plugin %s", pluginName)
 	}

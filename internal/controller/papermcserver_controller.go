@@ -111,17 +111,7 @@ func (r *PaperMCServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Run reconciliation logic
 	result, err := r.doReconcile(ctx, &server)
 
-	// Update status if changed
-	if err != nil || !serverStatusEqual(&server.Status, originalStatus) {
-		if updateErr := r.Status().Update(ctx, &server); updateErr != nil {
-			slog.ErrorContext(ctx, "Failed to update PaperMCServer status", "error", updateErr)
-			if err == nil {
-				err = updateErr
-			}
-		}
-	}
-
-	// Set conditions based on result
+	// Set conditions based on result BEFORE status update so they are persisted
 	if err != nil {
 		slog.ErrorContext(ctx, "Reconciliation failed", "error", err)
 		r.setCondition(&server, conditionTypeServerReady, metav1.ConditionFalse,
@@ -129,6 +119,16 @@ func (r *PaperMCServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	} else {
 		r.setCondition(&server, conditionTypeServerReady, metav1.ConditionTrue,
 			reasonServerReconcileSuccess, "Server reconciled successfully")
+	}
+
+	// Update status if changed (includes conditions set above)
+	if err != nil || !serverStatusEqual(&server.Status, originalStatus) {
+		if updateErr := r.Status().Update(ctx, &server); updateErr != nil {
+			slog.ErrorContext(ctx, "Failed to update PaperMCServer status", "error", updateErr)
+			if err == nil {
+				err = updateErr
+			}
+		}
 	}
 
 	return result, err
@@ -226,7 +226,7 @@ func (r *PaperMCServerReconciler) updateServerStatus(
 	matchedPlugins []mcv1alpha1.Plugin,
 ) {
 	// Detect current Paper version and build from StatefulSet
-	currentVersion, currentBuild := r.detectCurrentPaperVersion(statefulSet)
+	currentVersion, currentBuild := r.detectCurrentPaperVersion(ctx, statefulSet)
 	server.Status.CurrentVersion = currentVersion
 	server.Status.CurrentBuild = currentBuild
 
@@ -670,7 +670,7 @@ func (r *PaperMCServerReconciler) buildService(
 //
 // NOTE: The :latest tag is deprecated and should not be used in new deployments.
 // This function still handles it for backward compatibility with existing deployments.
-func (r *PaperMCServerReconciler) detectCurrentPaperVersion(statefulSet *appsv1.StatefulSet) (string, int) {
+func (r *PaperMCServerReconciler) detectCurrentPaperVersion(ctx context.Context, statefulSet *appsv1.StatefulSet) (string, int) {
 	if statefulSet == nil || len(statefulSet.Spec.Template.Spec.Containers) == 0 {
 		return "", 0
 	}
@@ -685,7 +685,7 @@ func (r *PaperMCServerReconciler) detectCurrentPaperVersion(statefulSet *appsv1.
 	matches := imageRegex.FindStringSubmatch(image)
 
 	if len(matches) < 3 {
-		slog.Error("Failed to parse image",
+		slog.ErrorContext(ctx, "Failed to parse image",
 			"error", errors.New("image format mismatch"),
 			"image", image)
 		return "", 0
@@ -696,7 +696,7 @@ func (r *PaperMCServerReconciler) detectCurrentPaperVersion(statefulSet *appsv1.
 	// Handle "latest" tag specially (DEPRECATED)
 	// This is only for backward compatibility with existing deployments
 	if tag == versionPolicyLatest {
-		slog.Warn("DEPRECATED: Detected :latest tag in existing deployment",
+		slog.WarnContext(ctx, "DEPRECATED: Detected :latest tag in existing deployment",
 			"image", image,
 			"recommendation", "The :latest tag is deprecated. New deployments use concrete version-build tags.")
 		return versionPolicyLatest, 0
@@ -707,7 +707,7 @@ func (r *PaperMCServerReconciler) detectCurrentPaperVersion(statefulSet *appsv1.
 	tagMatches := tagRegex.FindStringSubmatch(tag)
 
 	if len(tagMatches) < 3 {
-		slog.Error("Failed to parse tag",
+		slog.ErrorContext(ctx, "Failed to parse tag",
 			"error", errors.New("tag format mismatch"),
 			"tag", tag,
 			"image", image)
@@ -717,7 +717,7 @@ func (r *PaperMCServerReconciler) detectCurrentPaperVersion(statefulSet *appsv1.
 	paperVersion := tagMatches[1]
 	build, err := strconv.Atoi(tagMatches[2])
 	if err != nil {
-		slog.Error("Failed to parse build number",
+		slog.ErrorContext(ctx, "Failed to parse build number",
 			"error", err,
 			"buildStr", tagMatches[2])
 		return paperVersion, 0

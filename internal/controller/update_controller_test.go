@@ -966,7 +966,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(mockExec.Calls[0].PodName).To(Equal("test-exec-server-0"))
 			Expect(mockExec.Calls[0].Namespace).To(Equal("default"))
 			Expect(mockExec.Calls[0].Container).To(Equal("papermc"))
-			Expect(mockExec.Calls[0].Command).To(ContainElement("sh"))
+			Expect(mockExec.Calls[0].Command).To(ContainElement("curl"))
 		})
 
 		It("should use PodExecutor for deleting plugin JARs instead of kubectl", func() {
@@ -2622,7 +2622,7 @@ var _ = Describe("UpdateController", func() {
 				},
 			}
 
-			Expect(reconciler.isInMaintenanceWindow(server)).To(BeTrue(),
+			Expect(reconciler.isInMaintenanceWindow(context.Background(), server)).To(BeTrue(),
 				"Should be inside maintenance window at Sunday 4:30 AM")
 		})
 
@@ -2645,7 +2645,7 @@ var _ = Describe("UpdateController", func() {
 				},
 			}
 
-			Expect(reconciler.isInMaintenanceWindow(server)).To(BeFalse(),
+			Expect(reconciler.isInMaintenanceWindow(context.Background(), server)).To(BeFalse(),
 				"Should be outside maintenance window at Wednesday 10 AM")
 		})
 
@@ -2663,7 +2663,7 @@ var _ = Describe("UpdateController", func() {
 				},
 			}
 
-			Expect(reconciler.isInMaintenanceWindow(server)).To(BeTrue(),
+			Expect(reconciler.isInMaintenanceWindow(context.Background(), server)).To(BeTrue(),
 				"Should allow when maintenance window is disabled")
 		})
 
@@ -2686,7 +2686,7 @@ var _ = Describe("UpdateController", func() {
 				},
 			}
 
-			Expect(reconciler.isInMaintenanceWindow(server)).To(BeFalse(),
+			Expect(reconciler.isInMaintenanceWindow(context.Background(), server)).To(BeFalse(),
 				"Should reject update just after the 1-hour maintenance window")
 		})
 	})
@@ -2739,7 +2739,7 @@ var _ = Describe("UpdateController", func() {
 				},
 			}
 
-			result := reconciler.isInMaintenanceWindow(server)
+			result := reconciler.isInMaintenanceWindow(context.Background(), server)
 			Expect(result).To(BeFalse(),
 				"Invalid cron should block updates (safe default), not silently allow them")
 		})
