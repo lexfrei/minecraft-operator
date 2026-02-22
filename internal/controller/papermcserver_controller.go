@@ -1606,6 +1606,15 @@ func serverStatusEqual(a, b *mcv1alpha1.PaperMCServerStatus) bool {
 		if a.UpdateBlocked.Reason != b.UpdateBlocked.Reason {
 			return false
 		}
+		if (a.UpdateBlocked.BlockedBy == nil) != (b.UpdateBlocked.BlockedBy == nil) {
+			return false
+		}
+		if a.UpdateBlocked.BlockedBy != nil && b.UpdateBlocked.BlockedBy != nil {
+			if a.UpdateBlocked.BlockedBy.Plugin != b.UpdateBlocked.BlockedBy.Plugin ||
+				a.UpdateBlocked.BlockedBy.Version != b.UpdateBlocked.BlockedBy.Version {
+				return false
+			}
+		}
 	}
 	if !pluginStatusSliceEqual(a.Plugins, b.Plugins) {
 		return false
@@ -1658,7 +1667,10 @@ func pluginStatusSliceEqual(a, b []mcv1alpha1.ServerPluginStatus) bool {
 		if !ok {
 			return false
 		}
-		if prev.ResolvedVersion != p.ResolvedVersion || prev.Compatible != p.Compatible {
+		if prev.ResolvedVersion != p.ResolvedVersion || prev.Compatible != p.Compatible ||
+			prev.CurrentVersion != p.CurrentVersion || prev.DesiredVersion != p.DesiredVersion ||
+			prev.Source != p.Source || prev.PendingDeletion != p.PendingDeletion ||
+			prev.InstalledJARName != p.InstalledJARName {
 			return false
 		}
 	}
@@ -1674,7 +1686,19 @@ func availableUpdateEqual(a, b *mcv1alpha1.AvailableUpdate) bool {
 	if a == nil {
 		return true
 	}
-	return a.Version == b.Version && a.Build == b.Build
+	if a.Version != b.Version || a.Build != b.Build {
+		return false
+	}
+	if len(a.Plugins) != len(b.Plugins) {
+		return false
+	}
+	for i := range a.Plugins {
+		if a.Plugins[i].PluginRef != b.Plugins[i].PluginRef ||
+			a.Plugins[i].Version != b.Plugins[i].Version {
+			return false
+		}
+	}
+	return true
 }
 
 // updateHistoryEqual compares two UpdateHistory pointers for equality.
