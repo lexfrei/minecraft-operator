@@ -827,6 +827,116 @@ var _ = Describe("UpdateController", func() {
 			Expect(should).To(BeTrue(), "Should return true when no update available")
 			Expect(remaining).To(Equal(time.Duration(0)), "No remaining time")
 		})
+
+		It("should use nowFunc for updateDelay calculation instead of time.Since", func() {
+			// BUG: shouldApplyUpdate uses time.Since() which always calls
+			// time.Now() instead of r.now() which respects the mocked nowFunc.
+			// This makes the function untestable with mocked time.
+			//
+			// Scenario: nowFunc is set to 2 days in the future.
+			// Release was 1 day ago (real time). UpdateDelay is 36 hours.
+			// With time.Since(): timeSinceRelease = 1 day < 36h delay → BLOCKED (wrong)
+			// With r.now(): timeSinceRelease = 3 days > 36h delay → ALLOWED (correct)
+			realNow := time.Now()
+			releaseTime := metav1.NewTime(realNow.Add(-24 * time.Hour)) // Released 1 day ago (real)
+			futureNow := realNow.Add(48 * time.Hour)                   // Mock: 2 days in the future
+
+			futureReconciler := &UpdateReconciler{
+				Client:  k8sClient,
+				Scheme:  k8sClient.Scheme(),
+				nowFunc: func() time.Time { return futureNow },
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "latest",
+					UpdateDelay:    &metav1.Duration{Duration: 36 * time.Hour},
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: true,
+						PasswordSecret: mcv1alpha1.SecretKeyRef{
+							Name: "rcon-secret",
+							Key:  "password",
+						},
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:latest",
+								},
+							},
+						},
+					},
+				},
+				Status: mcv1alpha1.PaperMCServerStatus{
+					CurrentVersion: "1.21.0",
+					CurrentBuild:   100,
+					AvailableUpdate: &mcv1alpha1.AvailableUpdate{
+						Version:    "1.21.1",
+						Build:      150,
+						ReleasedAt: releaseTime,
+					},
+				},
+			}
+
+			// With nowFunc = futureNow, the release is effectively 3 days old (> 36h delay)
+			// so the update should be allowed
+			should, remaining := futureReconciler.shouldApplyUpdate(server)
+			Expect(should).To(BeTrue(),
+				"shouldApplyUpdate should use r.now() for delay calculation, not time.Since()")
+			Expect(remaining).To(Equal(time.Duration(0)),
+				"No remaining time when delay is satisfied per mocked clock")
+		})
+
+		It("should use nowFunc for apply-now annotation staleness check", func() {
+			// BUG: shouldApplyNow uses time.Since() for annotation age,
+			// not r.now(). With mocked time, staleness check is wrong.
+			//
+			// Scenario: Annotation was set 2 hours ago (real time).
+			// nowFunc is set to 30 minutes ago. With time.Since(), age = 2h.
+			// With r.now(), age = 1.5h. Both under 24h so this particular
+			// combo passes. But if annotation was set 25h ago (real) and nowFunc
+			// is 2h ago, time.Since() says 25h > 24h (stale), but r.now()
+			// would say 23h < 24h (valid).
+			realNow := time.Now()
+			annotationTime := realNow.Add(-25 * time.Hour) // 25h ago in real time
+			mockedNow := realNow.Add(-2 * time.Hour)       // Mock: 2h in the past
+
+			pastReconciler := &UpdateReconciler{
+				Client:  k8sClient,
+				Scheme:  k8sClient.Scheme(),
+				nowFunc: func() time.Time { return mockedNow },
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-apply-now-mock",
+					Namespace: "default",
+					Annotations: map[string]string{
+						AnnotationApplyNow: fmt.Sprintf("%d", annotationTime.Unix()),
+					},
+				},
+			}
+
+			ctx := context.Background()
+			result := pastReconciler.shouldApplyNow(ctx, server)
+			// With r.now() = mockedNow: age = mockedNow - annotationTime = 23h < 24h → valid
+			// With time.Since(): age = realNow - annotationTime = 25h > 24h → stale (wrong)
+			Expect(result).To(BeTrue(),
+				"shouldApplyNow should use r.now() for staleness check, not time.Since()")
+		})
 	})
 
 	Context("JAR downloads", func() {
