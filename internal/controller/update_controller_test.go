@@ -248,7 +248,7 @@ var _ = Describe("UpdateController", func() {
 				},
 			}
 
-			// Bug 29: Invalid cron should NOT return error (permanent error causes infinite retry loop).
+			// Invalid cron should NOT return error (permanent error causes infinite retry loop).
 			// Instead, it should set a CronScheduleValid condition to False and continue.
 			_, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
@@ -1799,7 +1799,7 @@ var _ = Describe("UpdateController", func() {
 		})
 	})
 
-	Context("performCombinedUpdate operation order (Bug 13)", func() {
+	Context("performCombinedUpdate operation order", func() {
 		It("should call applyPluginUpdates BEFORE updateStatefulSetImage", func() {
 			// Verify via AST that in performCombinedUpdate,
 			// applyPluginUpdates is called before updateStatefulSetImage.
@@ -1852,7 +1852,7 @@ var _ = Describe("UpdateController", func() {
 		})
 	})
 
-	Context("performCombinedUpdate RCON shutdown (Bug 14)", func() {
+	Context("performCombinedUpdate RCON shutdown", func() {
 		It("should perform RCON graceful shutdown during combined update", func() {
 			// performPluginOnlyUpdate does RCON shutdown (step 3-4):
 			//   - createRCONClient
@@ -1982,7 +1982,7 @@ var _ = Describe("UpdateController", func() {
 		})
 	})
 
-	Context("waitForPodReady context propagation (Bug 15)", func() {
+	Context("waitForPodReady context propagation", func() {
 		It("should pass timeout context to API calls, not parent context", func() {
 			// waitForPodReady creates ctxTimeout with 10-minute deadline:
 			//   ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Minute)
@@ -2708,7 +2708,7 @@ var _ = Describe("UpdateController", func() {
 
 	Context("Plugin deletion with empty InstalledJARName", func() {
 		It("should immediately mark JAR as deleted when InstalledJARName is empty", func() {
-			// Bug 8: When a plugin was never installed (InstalledJARName empty),
+			// Regression: When a plugin was never installed (InstalledJARName empty),
 			// the update controller should immediately mark the JAR as deleted
 			// instead of waiting for a 10-minute timeout.
 			server := &mcv1alpha1.PaperMCServer{
@@ -2738,8 +2738,8 @@ var _ = Describe("UpdateController", func() {
 
 	Context("Maintenance window cron parse error", func() {
 		It("should block updates when cron expression is invalid", func() {
-			// Bug: isInMaintenanceWindow returns true (allows update) when cron
-			// parse fails. This silently bypasses maintenance windows on typos.
+			// Regression: isInMaintenanceWindow used to return true (allows update)
+			// when cron parse fails. This silently bypasses maintenance windows on typos.
 			// Safe default: block updates on parse error.
 			reconciler := &UpdateReconciler{}
 
@@ -2760,9 +2760,9 @@ var _ = Describe("UpdateController", func() {
 		})
 	})
 
-	Context("isInMaintenanceWindow uses slog without context (Bug 23)", func() {
+	Context("isInMaintenanceWindow uses slog without context", func() {
 		It("should use slog.ErrorContext instead of slog.Error", func() {
-			// Bug: isInMaintenanceWindow uses slog.Error() without context on line 257.
+			// Regression: isInMaintenanceWindow used to call slog.Error() without context.
 			// All logging must use slog.*Context(ctx, ...) variants per project standards.
 			fset := token.NewFileSet()
 			node, parseErr := parser.ParseFile(fset, updateControllerPath, nil, parser.AllErrors)
@@ -2802,10 +2802,10 @@ var _ = Describe("UpdateController", func() {
 		})
 	})
 
-	Context("detectCurrentPaperVersion uses slog without context (Bug 24)", func() {
+	Context("detectCurrentPaperVersion uses slog without context", func() {
 		It("should use slog.ErrorContext/WarnContext instead of slog.Error/Warn", func() {
-			// Bug: detectCurrentPaperVersion uses slog.Error() and slog.Warn()
-			// without context on lines 688, 699, 710, 720.
+			// Regression: detectCurrentPaperVersion used to call slog.Error() and slog.Warn()
+			// without context. All logging must use context variants per project standards.
 			fset := token.NewFileSet()
 			node, parseErr := parser.ParseFile(fset, papermcServerControllerPath, nil, parser.AllErrors)
 			Expect(parseErr).NotTo(HaveOccurred())
@@ -2844,9 +2844,9 @@ var _ = Describe("UpdateController", func() {
 		})
 	})
 
-	Context("downloadPluginToServer shell injection safety (Bug 25)", func() {
+	Context("downloadPluginToServer shell injection safety", func() {
 		It("should not interpolate downloadURL directly into shell command string", func() {
-			// Bug: downloadURL is interpolated into fmt.Sprintf("curl ... '%s'", downloadURL).
+			// Regression: downloadURL used to be interpolated into fmt.Sprintf("curl ... '%s'", downloadURL).
 			// Single quotes can be broken with a URL containing single quotes.
 			// Safe approach: pass URL as separate argument to curl, not via sh -c string.
 			src, readErr := os.ReadFile(updateControllerPath)
@@ -2868,7 +2868,7 @@ var _ = Describe("UpdateController", func() {
 		)
 
 		BeforeEach(func() {
-			namespace = "default"
+			namespace = testNamespace
 			mockCron = testutil.NewMockCronScheduler()
 			reconciler = &UpdateReconciler{
 				Client:      k8sClient,
@@ -2976,7 +2976,7 @@ var _ = Describe("UpdateController", func() {
 			req := reconcile.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
 			result, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(5 * time.Minute),
+			Expect(result.RequeueAfter).To(Equal(5*time.Minute),
 				"Should requeue after 5 minutes when outside maintenance window")
 		})
 
@@ -3044,7 +3044,7 @@ var _ = Describe("UpdateController", func() {
 		)
 
 		BeforeEach(func() {
-			namespace = "default"
+			namespace = testNamespace
 			reconciler = &UpdateReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
@@ -3157,7 +3157,7 @@ var _ = Describe("UpdateController", func() {
 		)
 
 		BeforeEach(func() {
-			namespace = "default"
+			namespace = testNamespace
 			reconciler = &UpdateReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
@@ -3326,10 +3326,10 @@ var _ = Describe("UpdateController", func() {
 
 	Context("applyPluginUpdates empty downloadURL", func() {
 		It("should skip plugins with empty downloadURL without error", func() {
-			// Bug: When downloadURL is empty (e.g., after Bug 12 ExternalURL filter),
-			// applyPluginUpdates adds an error to downloadErrors. This means plugins
-			// that simply don't have a download URL (legitimate state) cause the
-			// entire update to be reported as failed.
+			// When downloadURL is empty (e.g., after ExternalURL filter removal),
+			// applyPluginUpdates should not add an error to downloadErrors. Plugins
+			// that simply don't have a download URL (legitimate state) should not cause
+			// the entire update to be reported as failed.
 			// Instead, plugins with empty downloadURL should be silently skipped
 			// (logged as info, not treated as error).
 			src, readErr := os.ReadFile(updateControllerPath)

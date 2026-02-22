@@ -72,8 +72,8 @@ const (
 // PaperAPI abstracts PaperMC API operations for testability.
 type PaperAPI interface {
 	GetPaperVersions(ctx context.Context) ([]string, error)
-	GetPaperBuild(ctx context.Context, version string) (*paper.BuildInfo, error)
-	GetBuilds(ctx context.Context, version string) ([]int, error)
+	GetPaperBuild(ctx context.Context, ver string) (*paper.BuildInfo, error)
+	GetBuilds(ctx context.Context, ver string) ([]int, error)
 }
 
 // RegistryAPI abstracts Docker registry operations for testability.

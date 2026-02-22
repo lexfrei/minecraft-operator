@@ -32,8 +32,8 @@ import (
 // TestNoTestutilImportInProductionCode verifies that production code does not
 // import the pkg/testutil package.
 //
-// Bug 16: update_controller.go and cmd/main.go import pkg/testutil in
-// production code. The CronScheduler interface and RealCronScheduler wrapper
+// Regression: update_controller.go and cmd/main.go used to import pkg/testutil
+// in production code. The CronScheduler interface and RealCronScheduler wrapper
 // live in pkg/testutil, which is a test-only package by convention.
 // Production code should not depend on test utilities.
 func TestNoTestutilImportInProductionCode(t *testing.T) {
@@ -67,7 +67,7 @@ func TestNoTestutilImportInProductionCode(t *testing.T) {
 		for _, imp := range f.Imports {
 			importPath := strings.Trim(imp.Path.Value, "\"")
 			assert.NotContains(t, importPath, "pkg/testutil",
-				"Bug 16: Production file %s imports pkg/testutil. "+
+				"Production file %s imports pkg/testutil. "+
 					"CronScheduler interface and RealCronScheduler should be moved "+
 					"out of the testutil package into a production package "+
 					"(e.g., pkg/cron or internal/cron).",
@@ -84,7 +84,7 @@ func TestNoTestutilImportInProductionCode(t *testing.T) {
 		for _, imp := range f.Imports {
 			importPath := strings.Trim(imp.Path.Value, "\"")
 			assert.NotContains(t, importPath, "pkg/testutil",
-				"Bug 16: cmd/main.go imports pkg/testutil. "+
+				"cmd/main.go imports pkg/testutil. "+
 					"Production binary should not depend on test utilities.")
 		}
 	}
@@ -138,7 +138,7 @@ func TestCronSchedulerInterfaceLocation(t *testing.T) {
 	}
 
 	assert.False(t, foundInTestutil,
-		"Bug 16: CronScheduler interface is defined in pkg/testutil/cron.go. "+
+		"CronScheduler interface is defined in pkg/testutil/cron.go. "+
 			"Production interfaces should live in production packages, not test utilities. "+
 			"Move CronScheduler and RealCronScheduler to a dedicated package (e.g., pkg/cron/).")
 }

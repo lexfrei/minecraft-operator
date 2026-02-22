@@ -22,6 +22,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -578,11 +579,142 @@ var _ = Describe("PaperMCServer Controller", func() {
 			Expect(equal).To(BeFalse(),
 				"serverStatusEqual should detect LastUpdate changes")
 		})
+
+		It("should treat nil and empty Plugins slice as equal", func() {
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Plugins:        nil,
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Plugins:        []mck8slexlav1alpha1.ServerPluginStatus{},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeTrue(),
+				"nil and empty Plugins slice should be equal to prevent infinite reconcile loops")
+		})
+
+		It("should treat nil and empty Conditions slice as equal", func() {
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Conditions:     nil,
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Conditions:     []metav1.Condition{},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeTrue(),
+				"nil and empty Conditions slice should be equal to prevent infinite reconcile loops")
+		})
+
+		It("should detect Conditions content changes", func() {
+			now := metav1.Now()
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Conditions: []metav1.Condition{
+					{
+						Type:               "Ready",
+						Status:             metav1.ConditionTrue,
+						LastTransitionTime: now,
+						Reason:             "ReconcileSuccess",
+						Message:            "OK",
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Conditions: []metav1.Condition{
+					{
+						Type:               "Ready",
+						Status:             metav1.ConditionFalse,
+						LastTransitionTime: now,
+						Reason:             "ReconcileError",
+						Message:            "something failed",
+					},
+				},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeFalse(),
+				"serverStatusEqual should detect Conditions content changes")
+		})
+
+		It("should detect Plugin content changes", func() {
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+					{
+						PluginRef:       mck8slexlav1alpha1.PluginRef{Name: "my-plugin", Namespace: "default"},
+						ResolvedVersion: "1.0.0",
+						Compatible:      true,
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+					{
+						PluginRef:       mck8slexlav1alpha1.PluginRef{Name: "my-plugin", Namespace: "default"},
+						ResolvedVersion: "2.0.0",
+						Compatible:      false,
+					},
+				},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeFalse(),
+				"serverStatusEqual should detect Plugin ResolvedVersion and Compatible changes")
+		})
+
+		It("should detect UpdateBlocked changes", func() {
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				UpdateBlocked:  nil,
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				UpdateBlocked: &mck8slexlav1alpha1.UpdateBlockedStatus{
+					Blocked: true,
+				},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeFalse(),
+				"serverStatusEqual should detect UpdateBlocked nil vs non-nil")
+		})
 	})
 
 	Context("buildPluginStatus preserves existing data", func() {
 		It("should preserve InstalledJARName from previous status", func() {
-			// Bug 11: buildPluginStatus overwrites entire status,
+			// Regression: buildPluginStatus used to overwrite entire status,
 			// losing InstalledJARName set by update controller
 			reconciler := &PaperMCServerReconciler{
 				Client: k8sClient,
@@ -705,7 +837,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 	Context("resolvePluginVersionForServer with empty versions", func() {
 		It("should not return error when plugin has no available versions yet", func() {
-			// Bug 9: Race condition - Plugin controller hasn't fetched metadata yet.
+			// Race condition: Plugin controller hasn't fetched metadata yet.
 			// This should not be logged as ERROR; it's a transient state.
 			reconciler := &PaperMCServerReconciler{
 				Client: k8sClient,
@@ -751,11 +883,11 @@ var _ = Describe("PaperMCServer Controller", func() {
 		})
 	})
 
-	Context("Conditions persistence ordering (Bug 26)", func() {
+	Context("Conditions persistence ordering", func() {
 		It("should call setCondition BEFORE Status().Update() in Reconcile", func() {
-			// Bug: In both Plugin and PaperMCServer Reconcile functions,
-			// setCondition is called AFTER Status().Update(). This means
-			// conditions are modified on the local object but never persisted
+			// Regression: In both Plugin and PaperMCServer Reconcile functions,
+			// setCondition used to be called AFTER Status().Update(). This means
+			// conditions were modified on the local object but never persisted
 			// to etcd. They must be set BEFORE the status update call.
 			for _, filePath := range []string{"papermcserver_controller.go", "plugin_controller.go"} {
 				fset := token.NewFileSet()
@@ -1137,6 +1269,230 @@ var _ = Describe("PaperMCServer Controller", func() {
 			result, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(Equal(ctrl.Result{}))
+		})
+	})
+
+	Context("buildPluginVersionPairs", func() {
+		It("should return empty pairs for no plugins", func() {
+			reconciler := &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Solver: solver.NewSimpleSolver(),
+			}
+
+			pairs := reconciler.buildPluginVersionPairs(ctx, "1.21.1", nil)
+			Expect(pairs).To(BeEmpty())
+		})
+
+		It("should skip plugins with no available versions", func() {
+			reconciler := &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Solver: solver.NewSimpleSolver(),
+			}
+
+			plugins := []mck8slexlav1alpha1.Plugin{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "empty-plugin",
+						Namespace: "default",
+					},
+					Status: mck8slexlav1alpha1.PluginStatus{
+						AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{},
+					},
+				},
+			}
+
+			pairs := reconciler.buildPluginVersionPairs(ctx, "1.21.1", plugins)
+			Expect(pairs).To(BeEmpty())
+		})
+
+		It("should resolve version for plugins with available versions", func() {
+			reconciler := &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Solver: solver.NewSimpleSolver(),
+			}
+
+			now := metav1.Now()
+			plugins := []mck8slexlav1alpha1.Plugin{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-plugin",
+						Namespace: "default",
+					},
+					Spec: mck8slexlav1alpha1.PluginSpec{
+						UpdateStrategy: "latest",
+					},
+					Status: mck8slexlav1alpha1.PluginStatus{
+						AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+							{
+								Version:           "2.0.0",
+								MinecraftVersions: []string{"1.21", "1.21.1"},
+								DownloadURL:       "https://example.com/v2.jar",
+								CachedAt:          now,
+								ReleasedAt:        metav1.NewTime(time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)),
+							},
+							{
+								Version:           "1.0.0",
+								MinecraftVersions: []string{"1.20", "1.21"},
+								DownloadURL:       "https://example.com/v1.jar",
+								CachedAt:          now,
+								ReleasedAt:        metav1.NewTime(time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)),
+							},
+						},
+					},
+				},
+			}
+
+			pairs := reconciler.buildPluginVersionPairs(ctx, "1.21.1", plugins)
+			Expect(pairs).To(HaveLen(1))
+			Expect(pairs[0].PluginRef.Name).To(Equal("test-plugin"))
+			Expect(pairs[0].PluginRef.Namespace).To(Equal("default"))
+			Expect(pairs[0].Version).NotTo(BeEmpty())
+		})
+
+		It("should handle multiple plugins", func() {
+			reconciler := &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Solver: solver.NewSimpleSolver(),
+			}
+
+			now := metav1.Now()
+			plugins := []mck8slexlav1alpha1.Plugin{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "plugin-a",
+						Namespace: "default",
+					},
+					Status: mck8slexlav1alpha1.PluginStatus{
+						AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+							{
+								Version:           "1.0.0",
+								MinecraftVersions: []string{"1.21.1"},
+								DownloadURL:       "https://example.com/a.jar",
+								CachedAt:          now,
+								ReleasedAt:        metav1.NewTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)),
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "plugin-b",
+						Namespace: "ns2",
+					},
+					Status: mck8slexlav1alpha1.PluginStatus{
+						AvailableVersions: nil, // No versions — should be skipped
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "plugin-c",
+						Namespace: "default",
+					},
+					Status: mck8slexlav1alpha1.PluginStatus{
+						AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+							{
+								Version:           "3.0.0",
+								MinecraftVersions: []string{"1.21.1"},
+								DownloadURL:       "https://example.com/c.jar",
+								CachedAt:          now,
+								ReleasedAt:        metav1.NewTime(time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)),
+							},
+						},
+					},
+				},
+			}
+
+			pairs := reconciler.buildPluginVersionPairs(ctx, "1.21.1", plugins)
+			// plugin-b has no versions and should be skipped
+			Expect(pairs).To(HaveLen(2))
+			Expect(pairs[0].PluginRef.Name).To(Equal("plugin-a"))
+			Expect(pairs[1].PluginRef.Name).To(Equal("plugin-c"))
+		})
+	})
+
+	Context("findBuildUpdate", func() {
+		It("should return update when newer build is available", func() {
+			mockPaper := &testutil.MockPaperAPI{
+				BuildInfo: &paper.BuildInfo{
+					Version: "1.21.1",
+					Build:   150,
+				},
+			}
+			reconciler := &PaperMCServerReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PaperClient: mockPaper,
+				Solver:      solver.NewSimpleSolver(),
+			}
+
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+					Version: "1.21.1",
+				},
+				Status: mck8slexlav1alpha1.PaperMCServerStatus{
+					CurrentBuild: 100,
+				},
+			}
+
+			update, err := reconciler.findBuildUpdate(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(update).NotTo(BeNil())
+			Expect(update.Version).To(Equal("1.21.1"))
+			Expect(update.Build).To(Equal(150))
+		})
+
+		It("should return nil when already on latest build", func() {
+			mockPaper := &testutil.MockPaperAPI{
+				BuildInfo: &paper.BuildInfo{
+					Version: "1.21.1",
+					Build:   100,
+				},
+			}
+			reconciler := &PaperMCServerReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PaperClient: mockPaper,
+				Solver:      solver.NewSimpleSolver(),
+			}
+
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+					Version: "1.21.1",
+				},
+				Status: mck8slexlav1alpha1.PaperMCServerStatus{
+					CurrentBuild: 100,
+				},
+			}
+
+			update, err := reconciler.findBuildUpdate(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(update).To(BeNil())
+		})
+
+		It("should return error when PaperClient fails", func() {
+			mockPaper := &testutil.MockPaperAPI{
+				BuildInfoErr: fmt.Errorf("API unavailable"),
+			}
+			reconciler := &PaperMCServerReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PaperClient: mockPaper,
+				Solver:      solver.NewSimpleSolver(),
+			}
+
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+					Version: "1.21.1",
+				},
+			}
+
+			update, err := reconciler.findBuildUpdate(ctx, server, nil)
+			Expect(err).To(HaveOccurred())
+			Expect(update).To(BeNil())
 		})
 	})
 })

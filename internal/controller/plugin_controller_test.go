@@ -604,7 +604,7 @@ var _ = Describe("Plugin Controller", func() {
 
 	Context("forceCompleteStaleDeletions bugs", func() {
 		It("should accept context parameter for logging", func() {
-			// Bug: forceCompleteStaleDeletions uses slog.Warn() without context.
+			// Regression: forceCompleteStaleDeletions used to call slog.Warn() without context.
 			// Per project standards, must use slog.WarnContext(ctx, ...).
 			// Verify via AST that the function accepts ctx parameter.
 			fset := token.NewFileSet()
@@ -637,8 +637,8 @@ var _ = Describe("Plugin Controller", func() {
 		})
 
 		It("should persist changes to status after force-completing", func() {
-			// Bug: forceCompleteStaleDeletions modifies in-memory status
-			// but never calls r.Status().Update(). Changes are lost on next reconciliation.
+			// Regression: forceCompleteStaleDeletions used to modify in-memory status
+			// but never called r.Status().Update(). Changes were lost on next reconciliation.
 			// Verify via AST that the function calls r.Status().Update() or
 			// that the caller (reconcileDelete) persists after calling it.
 			fset := token.NewFileSet()
@@ -696,9 +696,9 @@ var _ = Describe("Plugin Controller", func() {
 		now := metav1.Now()
 
 		It("should detect DownloadURL change in AvailableVersions", func() {
-			// Bug: statusEqual only compares len(AvailableVersions), not content.
-			// When downloadURL changes (e.g., from GitHub page URL to empty after Bug 12 fix),
-			// status update is skipped because len stays the same.
+			// Regression: statusEqual used to only compare len(AvailableVersions), not content.
+			// When downloadURL changes (e.g., from GitHub page URL to empty after ExternalURL
+			// filter removal), status update was skipped because len stays the same.
 			a := &mck8slexlav1alpha1.PluginStatus{
 				RepositoryStatus: "available",
 				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
@@ -714,7 +714,7 @@ var _ = Describe("Plugin Controller", func() {
 				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
 					{
 						Version:     "2.21.2",
-						DownloadURL: "", // Empty after Bug 12 fix
+						DownloadURL: "", // Empty after ExternalURL filter removal
 						CachedAt:    now,
 					},
 				},
@@ -784,11 +784,53 @@ var _ = Describe("Plugin Controller", func() {
 				"statusEqual should return true for identical statuses")
 		})
 
-		It("should detect Conditions changes (Bug 27)", func() {
-			// Bug: statusEqual does not compare Conditions field.
+		It("should treat nil and empty AvailableVersions as equal", func() {
+			a := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus:  "available",
+				AvailableVersions: nil,
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus:  "available",
+				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{},
+			}
+
+			Expect(statusEqual(a, b)).To(BeTrue(),
+				"nil and empty AvailableVersions should be equal to prevent infinite reconcile loops")
+		})
+
+		It("should treat nil and empty MatchedInstances as equal", func() {
+			a := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				MatchedInstances: nil,
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				MatchedInstances: []mck8slexlav1alpha1.MatchedInstance{},
+			}
+
+			Expect(statusEqual(a, b)).To(BeTrue(),
+				"nil and empty MatchedInstances should be equal to prevent infinite reconcile loops")
+		})
+
+		It("should treat nil and empty Conditions as equal", func() {
+			a := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				Conditions:       nil,
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				Conditions:       []metav1.Condition{},
+			}
+
+			Expect(statusEqual(a, b)).To(BeTrue(),
+				"nil and empty Conditions should be equal to prevent infinite reconcile loops")
+		})
+
+		It("should detect Conditions changes", func() {
+			// Regression: statusEqual did not compare Conditions field.
 			// When conditions change (e.g., Ready transitions from True to False),
-			// statusEqual returns true, so Status().Update() is never called and
-			// condition changes are lost.
+			// statusEqual returned true, so Status().Update() was never called and
+			// condition changes were lost.
 			now := metav1.Now()
 			a := &mck8slexlav1alpha1.PluginStatus{
 				RepositoryStatus: "available",
@@ -820,11 +862,11 @@ var _ = Describe("Plugin Controller", func() {
 		})
 	})
 
-	Context("doReconcile early return on unavailable repository (Bug 28)", func() {
+	Context("doReconcile early return on unavailable repository", func() {
 		It("should return early and use syncPluginMetadata result when no versions available", func() {
-			// Bug: When syncPluginMetadata returns nil versions (repo unavailable, no cache),
-			// it returns result={RequeueAfter: 5m}, err=nil. But doReconcile only checks
-			// err != nil, ignoring the result. It continues to set VersionResolved=True
+			// Regression: When syncPluginMetadata returns nil versions (repo unavailable, no cache),
+			// it returns result={RequeueAfter: 5m}, err=nil. But doReconcile only checked
+			// err != nil, ignoring the result. It continued to set VersionResolved=True
 			// and Ready=True even though no metadata was fetched.
 			//
 			// Fix: doReconcile should check if allVersions is nil and return
@@ -845,9 +887,9 @@ var _ = Describe("Plugin Controller", func() {
 
 	Context("Reconcile flow with mocked dependencies", func() {
 		var (
-			reconciler  *PluginReconciler
-			mockPlugin  *testutil.MockPluginClient
-			namespace   string
+			reconciler *PluginReconciler
+			mockPlugin *testutil.MockPluginClient
+			namespace  string
 		)
 
 		BeforeEach(func() {
@@ -1024,7 +1066,7 @@ var _ = Describe("Plugin Controller", func() {
 			result, err := reconciler.Reconcile(ctx, req)
 			// err is nil because handleRepositoryError returns nil error with RequeueAfter
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(5 * time.Minute),
+			Expect(result.RequeueAfter).To(Equal(5*time.Minute),
 				"Should requeue after 5 minutes when repository unavailable")
 
 			var plugin mck8slexlav1alpha1.Plugin
@@ -1070,7 +1112,7 @@ var _ = Describe("Plugin Controller", func() {
 			// Third reconcile: uses cached data
 			result, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(15 * time.Minute),
+			Expect(result.RequeueAfter).To(Equal(15*time.Minute),
 				"Should continue normal requeue when cache is used")
 
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
@@ -1157,7 +1199,7 @@ var _ = Describe("Plugin Controller", func() {
 			result, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred(),
 				"Unsupported source type is handled gracefully, not returned as error")
-			Expect(result.RequeueAfter).To(Equal(5 * time.Minute),
+			Expect(result.RequeueAfter).To(Equal(5*time.Minute),
 				"Should requeue after 5 minutes like any unavailable repo")
 
 			var plugin mck8slexlav1alpha1.Plugin
