@@ -120,14 +120,19 @@ spec:
     type: hangar  # Currently only hangar, planned: modrinth, spigot, url
     project: "EssentialsX"
 
-  # Versioning policy
-  versionPolicy: latest  # latest or pinned
-  # If pinned, specify exact version:
-  # pinnedVersion: "2.20.1"
+  # Update strategy for version management
+  # Valid values: latest, auto, pin, build-pin
+  updateStrategy: latest  # Default: latest
+  # If pin or build-pin, specify exact version:
+  # version: "2.20.1"
 
   # Delay before applying new version (optional)
   # Allows community to test release before applying
   updateDelay: 168h  # 7 days after release (format: duration string)
+
+  # Optional: network port that this plugin exposes (e.g., 8123 for Dynmap)
+  # If specified, this port will be added to the Service of all matched servers (TCP+UDP)
+  # port: 8123
 
   # Selector for choosing servers to apply plugin to
   instanceSelector:
@@ -161,9 +166,6 @@ status:
       cachedAt: "2025-10-20T03:00:00Z"
       releasedAt: "2025-10-01T10:00:00Z"
 
-  # Current resolved version for matched servers
-  resolvedVersion: "2.20.1"
-
   # Repository status
   repositoryStatus: available  # available, unavailable, orphaned
   lastFetched: "2025-10-20T03:00:00Z"
@@ -172,21 +174,30 @@ status:
   matchedInstances:
     - name: survival-server
       namespace: minecraft
-      paperVersion: "1.21.0"
+      version: "1.21.0"
       compatible: true
     - name: creative-server
       namespace: minecraft
-      paperVersion: "1.20.4"
+      version: "1.20.4"
       compatible: true
+
+  # Deletion progress (populated during plugin deletion with finalizer)
+  # deletionProgress:
+  #   - serverName: survival-server
+  #     namespace: minecraft
+  #     jarDeleted: false
+  #     deletionRequestedAt: "2025-10-20T03:00:00Z"
 
   conditions:
     - type: Ready
       status: "True"
       lastTransitionTime: "2025-10-20T03:00:00Z"
 
-    - type: CompatibilityWarning
-      status: "False"
-      message: ""
+    - type: RepositoryAvailable
+      status: "True"
+
+    - type: VersionResolved
+      status: "True"
 ```
 
 #### PaperMCServer CRD
@@ -204,8 +215,19 @@ metadata:
     type: survival
     region: eu
 spec:
-  # Paper version: "latest" or specific version like "1.21.1"
-  paperVersion: "latest"
+  # Update strategy for Paper version management
+  # Valid values: latest, auto, pin, build-pin
+  # - latest: always use newest available version from Docker Hub
+  # - auto: use constraint solver to find best version compatible with plugins
+  # - pin: pin to specific version, auto-update to latest build (requires version)
+  # - build-pin: pin to specific version and build (requires version and build)
+  updateStrategy: auto
+
+  # Paper version (required for pin and build-pin strategies)
+  # version: "1.21.1"
+
+  # Paper build number (required for build-pin strategy)
+  # build: 91
 
   # Delay before applying new Paper version (optional)
   # Allows community to test release before applying
@@ -235,12 +257,21 @@ spec:
       key: password
     port: 25575
 
+  # Service configuration (optional)
+  service:
+    type: LoadBalancer  # LoadBalancer, NodePort, or ClusterIP
+    # annotations:
+    #   metallb.universe.tf/loadBalancerIPs: "192.168.1.100"
+    # loadBalancerIP: "192.168.1.100"
+
   # Pod settings (simplified, can be extended)
   podTemplate:
     spec:
       containers:
       - name: papermc
-        image: lexfrei/papermc:latest
+        # NOTE: Image is managed by operator. All update strategies resolve to
+        # concrete version-build tags (e.g., docker.io/lexfrei/papermc:1.21.1-91).
+        # The :latest tag is NEVER used.
         resources:
           requests:
             memory: "2Gi"
@@ -250,8 +281,13 @@ spec:
             cpu: "2000m"
 
 status:
-  # Observed state
-  currentPaperVersion: "1.21.0-build-123"
+  # Observed state (separate version and build fields)
+  currentVersion: "1.21.0"
+  currentBuild: 123
+
+  # Desired state (resolved from updateStrategy)
+  desiredVersion: "1.21.1"
+  desiredBuild: 145
 
   # Plugins applied to this server via selectors
   plugins:
@@ -259,8 +295,11 @@ status:
         name: essentialsx
         namespace: minecraft
       resolvedVersion: "2.20.1"
+      currentVersion: "2.20.0"
+      desiredVersion: "2.20.1"
       compatible: true
       source: hangar
+      installedJarName: "essentialsx.jar"
 
     - pluginRef:
         name: dynmap
@@ -268,10 +307,12 @@ status:
       resolvedVersion: "3.7-beta-1"
       compatible: true
       source: hangar
+      # pendingDeletion: false  # Set true when Plugin CRD is deleted
 
   # Available update (solver result)
   availableUpdate:
-    paperVersion: "1.21.1-build-145"
+    version: "1.21.1"
+    build: 145
     releasedAt: "2025-10-17T10:00:00Z"  # For updateDelay calculation
     plugins:
       - pluginRef:
@@ -285,8 +326,16 @@ status:
   # Last update
   lastUpdate:
     appliedAt: "2025-10-13T04:00:00Z"
-    previousPaperVersion: "1.21.0-build-100"
+    previousVersion: "1.21.0"
     successful: true
+
+  # Update blocked status (set when plugin compatibility prevents update)
+  # updateBlocked:
+  #   blocked: true
+  #   reason: "Plugin 'dynmap' is incompatible with Paper 1.22.0"
+  #   blockedBy:
+  #     plugin: dynmap
+  #     version: "3.7-beta-1"
 
   # Conditions (standard K8s pattern)
   conditions:
@@ -294,14 +343,23 @@ status:
       status: "True"
       lastTransitionTime: "2025-10-20T04:15:00Z"
 
+    - type: StatefulSetReady
+      status: "True"
+
     - type: UpdateAvailable
       status: "True"
       lastTransitionTime: "2025-10-20T03:00:00Z"
-      message: "Paper 1.21.1 available with all plugins compatible"
+      message: "Update to 1.21.1 available"
+
+    - type: UpdateBlocked
+      status: "False"
 
     - type: Updating
       status: "False"
       lastTransitionTime: "2025-10-13T04:05:00Z"
+
+    - type: CronScheduleValid
+      status: "True"
 ```
 
 #### Usage Examples
@@ -317,7 +375,7 @@ spec:
   source:
     type: hangar
     project: "EssentialsX"
-  versionPolicy: latest
+  updateStrategy: latest
   instanceSelector:
     matchLabels:
       type: survival
@@ -334,8 +392,8 @@ spec:
   source:
     type: hangar
     project: "SomePlugin"
-  versionPolicy: pinned
-  pinnedVersion: "1.5.0"
+  updateStrategy: pin
+  version: "1.5.0"
   instanceSelector:
     matchLabels:
       server: "example-server"
@@ -353,7 +411,8 @@ spec:
   source:
     type: hangar
     project: "Dynmap"
-  versionPolicy: latest
+  updateStrategy: latest
+  port: 8123  # Dynmap web interface port
   instanceSelector:
     matchLabels:
       env: production
@@ -368,8 +427,9 @@ spec:
   source:
     type: hangar
     project: "Dynmap"
-  versionPolicy: pinned
-  pinnedVersion: "3.6.0"
+  updateStrategy: pin
+  version: "3.6.0"
+  port: 8123
   instanceSelector:
     matchLabels:
       env: staging
@@ -383,26 +443,24 @@ For each Plugin resource, find the optimal plugin version that is compatible wit
 
 ### Input Data
 
-From platform APIs we receive:
+From platform APIs we receive (see `pkg/plugins/client.go`):
 
 ```go
 type PluginVersion struct {
-    Version          string
+    Version           string
+    ReleaseDate       time.Time
+    PaperVersions     []string  // Compatible Paper versions
     MinecraftVersions []string  // Supported versions, e.g. ["1.20.0", "1.20.4", "1.21.0"]
-    DownloadURL      string
-    Hash             string
-}
-
-type PaperVersion struct {
-    Version          string  // "1.21.0"
-    Build            int
-    MinecraftVersion string  // "1.21.0"
+    DownloadURL       string
+    Hash              string
 }
 ```
 
+Paper versions are fetched via the Paper API client (`pkg/paper/`).
+
 ### Algorithm
 
-#### For Plugin with versionPolicy: latest
+#### For Plugin with updateStrategy: latest
 
 1. **Collect matched servers:**
    - Find all PaperMCServer resources via `instanceSelector`
@@ -440,15 +498,15 @@ type PaperVersion struct {
    - All matched servers receive the same plugin version
    - If no solution found - warning in Plugin status
 
-#### For Plugin with versionPolicy: pinned
+#### For Plugin with updateStrategy: pin
 
 1. **Check compatibility:**
    - Find matched servers
-   - Verify that `pinnedVersion` is compatible with all
+   - Verify that `version` is compatible with all
 
 2. **Result:**
    - If compatible - apply to all
-   - If not - warning in status, but don't block (user made pinned decision)
+   - If not - warning in status, but don't block (user made pin decision)
 
 #### For PaperMCServer
 
@@ -504,14 +562,14 @@ If v2.0 is needed on new servers - options:
 
    ```yaml
    Plugin dynmap-legacy:
-     versionPolicy: pinned
-     pinnedVersion: "1.0"
+     updateStrategy: pin
+     version: "1.0"
      instanceSelector:
        matchLabels:
          server: server1
 
    Plugin dynmap-new:
-     versionPolicy: latest
+     updateStrategy: latest
      instanceSelector:
        matchExpressions:
          - key: server
@@ -545,22 +603,27 @@ If v2.0 is needed on new servers - options:
 ### Implementation
 
 ```go
-// Solver interface
-type CompatibilitySolver interface {
-    // For Plugin: find best version for all matched servers
-    ResolvePluginVersion(plugin *Plugin, servers []*PaperMCServer) (*PluginVersion, error)
+// Solver interface (pkg/solver/solver.go)
+type Solver interface {
+    // FindBestPluginVersion finds the maximum plugin version compatible with ALL matched servers.
+    FindBestPluginVersion(
+        ctx context.Context,
+        plugin *mcv1alpha1.Plugin,
+        servers []mcv1alpha1.PaperMCServer,
+        allVersions []plugins.PluginVersion,
+    ) (string, error)
 
-    // For Server: find maximum Paper version considering all plugins
-    ResolveServerUpdate(server *PaperMCServer, plugins []*Plugin) (*UpdatePlan, error)
-}
-
-type UpdatePlan struct {
-    PaperVersion    string
-    PluginVersions  map[string]string  // plugin name -> version
+    // FindBestPaperVersion finds the maximum Paper version compatible with ALL matched plugins.
+    FindBestPaperVersion(
+        ctx context.Context,
+        server *mcv1alpha1.PaperMCServer,
+        matchedPlugins []mcv1alpha1.Plugin,
+        paperVersions []string,
+    ) (string, error)
 }
 ```
 
-Can start with simple algorithm (linear search), then add SAT solver for optimization.
+Currently implemented as simple linear search (`SimpleSolver`). SAT solver planned for Phase 2.
 
 ## Update Flow
 
@@ -749,14 +812,14 @@ Can start with simple algorithm (linear search), then add SAT solver for optimiz
 
 #### Plugin changed → Trigger PaperMCServer reconciliation
 
-- When Plugin spec changes (source, versionPolicy, selector)
-- When resolvedVersion changes in Plugin status
+- When Plugin spec changes (source, updateStrategy, selector)
+- When plugin metadata (availableVersions) changes in Plugin status
 - All matched servers must be recalculated
 
 #### PaperMCServer changed → Trigger Plugin reconciliation
 
 - When labels change (may change matching)
-- When spec.paperVersion changes
+- When spec.version or spec.updateStrategy changes
 - All Plugins with selectors that might match this server
 
 #### Optimization
@@ -773,32 +836,36 @@ Can start with simple algorithm (linear search), then add SAT solver for optimiz
 minecraft-operator/
 ├── api/
 │   └── v1alpha1/
-│       ├── plugin_types.go           # Plugin CRD
-│       ├── papermcserver_types.go    # PaperMCServer CRD
+│       ├── plugin_types.go           # Plugin CRD types
+│       ├── papermcserver_types.go    # PaperMCServer CRD types
 │       └── zz_generated.deepcopy.go
-├── controllers/
-│   ├── plugin_controller.go          # Reconciliation for Plugin
-│   ├── papermcserver_controller.go   # Reconciliation for PaperMCServer
-│   └── update_controller.go          # Maintenance window updates
+├── cmd/
+│   └── main.go                       # Operator entrypoint
+├── internal/
+│   └── controller/
+│       ├── constants.go              # Shared constants (strategies, finalizers, annotations)
+│       ├── plugin_controller.go      # Reconciliation for Plugin
+│       ├── papermcserver_controller.go # Reconciliation for PaperMCServer
+│       └── update_controller.go      # Maintenance window updates
 ├── pkg/
-│   ├── solver/
-│   │   ├── solver.go                 # Constraint solver interface
-│   │   ├── simple_solver.go          # Linear search implementation
-│   │   └── z3_solver.go              # Z3-based solver (future)
+│   ├── api/                          # API utilities
+│   ├── cron/                         # Cron scheduler abstraction
+│   ├── paper/                        # Paper API client for versions
 │   ├── plugins/
 │   │   ├── client.go                 # Common interface for plugin APIs
 │   │   ├── hangar.go                 # Hangar API client (using go-hungar)
-│   │   ├── modrinth.go               # Modrinth API client (future)
-│   │   ├── spigot.go                 # Spigot API client (future)
 │   │   └── cache.go                  # API response caching
-│   ├── paper/
-│   │   └── client.go                 # Paper API client for versions
 │   ├── rcon/
-│   │   └── client.go                 # RCON client
-│   ├── selector/
-│   │   └── matcher.go                # Label selector matching logic
-│   └── version/
-│       └── comparator.go             # Minecraft version comparison
+│   │   └── client.go                 # RCON client (gorcon/rcon wrapper)
+│   ├── registry/                     # Docker registry API client
+│   ├── selector/                     # Label selector matching logic
+│   ├── service/                      # Service utilities
+│   ├── solver/
+│   │   ├── solver.go                 # Constraint solver interface
+│   │   └── simple_solver.go          # Linear search implementation
+│   ├── testutil/                     # Test helpers
+│   ├── version/                      # Minecraft version comparison
+│   └── webui/                        # Web UI for server status
 ├── charts/
 │   ├── minecraft-operator-crds/      # CRD chart (separate lifecycle)
 │   │   ├── crds/                     # Generated CRDs (controller-gen output)
@@ -808,7 +875,7 @@ minecraft-operator/
 │       ├── templates/                # Helm templates (Deployment, RBAC, etc.)
 │       ├── Chart.yaml                # With dependency on CRD chart
 │       └── values.yaml               # crds.enabled: true (default)
-└── main.go
+└── examples/                         # Example CRs for testing
 ```
 
 **Note**: CRDs are in a separate chart with independent lifecycle. Operator chart depends on CRD chart via `Chart.yaml` dependencies with `condition: crds.enabled` for optional installation.
@@ -818,10 +885,11 @@ minecraft-operator/
 - **controller-runtime**: Framework for writing operators
 - **client-go**: Kubernetes client
 - **github.com/lexfrei/go-hungar**: Hangar API client for PaperMC plugin repository
-- **Z3** or **gophersat**: Constraint solver (optional, for optimization)
+- **cockroachdb/errors**: Error handling with stack traces
+- **gorcon/rcon**: RCON client for Minecraft server communication
 - **robfig/cron**: Cron scheduling
-- **rcon-cli** or custom: RCON client
 - **Masterminds/semver**: Version comparison
+- **log/slog**: Structured logging (Go stdlib)
 
 ### Container Images and Charts
 
@@ -909,7 +977,10 @@ spec:
 
       containers:
       - name: papermc
-        image: lexfrei/papermc:latest
+        # Image is managed by operator using concrete version-build tags.
+        # Example: docker.io/lexfrei/papermc:1.21.1-91
+        # The :latest tag is NEVER used.
+        image: docker.io/lexfrei/papermc:1.21.1-91
         volumeMounts:
         - name: data
           mountPath: /data
@@ -926,102 +997,46 @@ spec:
           claimName: survival-server-data
 ```
 
-**Update process by operator:**
+**Update process by operator (actual implementation):**
 
-```go
-// 1. Operator mounts PVC (via exec in pod or via init container)
-// 2. Downloads new JARs
-pluginJar := downloadPlugin(plugin.Status.ResolvedVersion)
-
-// 3. Copies to plugins/update/
-// NOTE: Need to verify if this folder exists, must test!
-copyFile(pluginJar, "/data/plugins/update/plugin-name.jar")
-
-// 4. For Paper JAR - direct replacement
-if paperUpdated {
-    copyFile(paperJar, "/data/server.jar")
-}
-
-// 5. Delete pod
-k8s.Delete(pod)
-
-// 6. StatefulSet recreates pod with same PVC
-// 7. Paper starts and applies updates automatically
+```text
+1. Delete plugins marked for PendingDeletion (rm via exec in pod)
+2. Download plugin JARs via exec in pod:
+   - curl -fsSL -o /data/plugins/update/{name}.jar {downloadURL}
+   - Verify SHA256 checksum
+3. For Paper version change: update StatefulSet container image tag
+4. RCON graceful shutdown (warn players, save-all, stop)
+5. Delete pod via Kubernetes API
+6. StatefulSet recreates pod with same PVC
+7. Paper starts and applies plugins from /data/plugins/update/
 ```
 
-**Alternative: Init Container** (if direct PVC access is difficult):
+#### Verified Behavior
 
-```yaml
-initContainers:
-- name: plugin-updater
-  image: minecraft-operator/updater:latest
-  volumeMounts:
-  - name: data
-    mountPath: /data
-  env:
-  - name: PLUGINS_TO_UPDATE
-    value: |
-      essentialsx:2.20.1:https://hangar.papermc.io/.../download
-      dynmap:3.7-beta-1:https://hangar.papermc.io/.../download
-  command:
-  - /bin/sh
-  - -c
-  - |
-    mkdir -p /data/plugins/update
-    # Download and place plugins
-    while IFS=: read name version url; do
-      wget -O "/data/plugins/update/${name}.jar" "$url"
-    done <<< "$PLUGINS_TO_UPDATE"
-```
-
-#### TODO: Verify
-
-- ✅ Does `plugins/update/` folder exist by default in Paper
-- ✅ Does automatic deletion of old versions work
-- ⚠️ How does Paper handle dependencies between plugins during hot-swap
+- ✅ `plugins/update/` folder: Paper creates it on startup if missing
+- ✅ Automatic deletion of old versions: Paper matches by `plugin.yml` name, not JAR filename (since PR #6575, April 2022)
+- ⚠️ Plugin dependencies during hot-swap: not handled by Paper, load order may vary
 
 ### API Metadata Caching
 
 **Two-level caching:**
 
-1. **In-memory cache** (with TTL ~1 hour):
-   - For fast reconciliation loops
+1. **In-memory cache** (`CachedPluginClient` in `pkg/plugins/cache.go`):
+   - TTL-based wrapper around `PluginClient` interface
+   - Caches `GetVersions` and `GetCompatibility` results
    - Reset on operator restart
 
 2. **Persistent cache in Plugin.status**:
-   - For protection against API unavailability
-   - For orphaned plugins
-   - Stores `availableVersions` with `cachedAt` timestamps
+   - Plugin controller stores fetched versions in `status.availableVersions`
+   - Fallback when repository is unavailable (status set to `orphaned`)
+   - Each entry includes `cachedAt` timestamp
 
-```go
-type CacheManager struct {
-    memoryCache map[string]*CachedPlugin
-    ttl         time.Duration
-}
+**Caching flow in Plugin controller:**
 
-func (c *CacheManager) GetPluginVersions(plugin *Plugin) ([]PluginVersion, error) {
-    // 1. Try memory cache
-    if cached, ok := c.memoryCache[plugin.Name]; ok && !cached.Expired() {
-        return cached.Versions, nil
-    }
-
-    // 2. Try fetching from API
-    versions, err := c.fetchFromAPI(plugin)
-    if err == nil {
-        c.updateCache(plugin.Name, versions)
-        c.updatePluginStatus(plugin, versions)
-        return versions, nil
-    }
-
-    // 3. Fallback to Plugin.status.availableVersions
-    if plugin.Status.AvailableVersions != nil {
-        plugin.Status.RepositoryStatus = "orphaned"
-        return plugin.Status.AvailableVersions, nil
-    }
-
-    return nil, err
-}
-```
+1. Fetch from repository API (through `CachedPluginClient`)
+2. On success: update `status.availableVersions`, set `repositoryStatus: available`
+3. On failure with cache: use `status.availableVersions`, set `repositoryStatus: orphaned`
+4. On failure without cache: set `repositoryStatus: unavailable`, requeue after 5 minutes
 
 ## Monitoring and Observability
 
@@ -1147,7 +1162,7 @@ rules:
 
 - Modrinth and SpigotMC support
 - SAT solver integration for optimization
-- UI/Dashboard for visualizing plugin and server state
+- Enhanced Web UI (basic web UI exists in `pkg/webui/`)
 - Webhook validation for CRDs (validate selector correctness)
 - URL-based plugin support with manual compatibility override
 
@@ -1198,7 +1213,7 @@ rules:
    # Plugin 1: latest version
    Plugin essentialsx-latest:
      project: "EssentialsX"
-     versionPolicy: latest  # → 2.20.1
+     updateStrategy: latest  # → 2.20.1
      instanceSelector:
        matchLabels:
          type: survival
@@ -1206,8 +1221,8 @@ rules:
    # Plugin 2: pinned old version
    Plugin essentialsx-legacy:
      project: "EssentialsX"  # SAME plugin!
-     versionPolicy: pinned
-     pinnedVersion: "2.19.0"
+     updateStrategy: pin
+     version: "2.19.0"
      instanceSelector:
        matchLabels:
          type: survival      # SAME servers!
@@ -1217,12 +1232,12 @@ rules:
 
    When multiple Plugin resources with the same `source.project` match the same servers:
 
-   1. **If any Plugin has `versionPolicy: latest`**: Use constraint solver
+   1. **If any Plugin has `updateStrategy: latest`**: Use constraint solver
       - The solver automatically finds the best compatible version
       - Pinned versions from other Plugins are treated as constraints
       - Result: optimal version that satisfies all compatibility requirements
 
-   2. **If all Plugins have `versionPolicy: pinned`**: Use newest version
+   2. **If all Plugins have `updateStrategy: pin`**: Use newest version
       - Compare semantic versions (e.g., 2.20.1 > 2.19.0)
       - The highest version wins
       - Warning event is emitted about the conflict
@@ -1236,72 +1251,61 @@ rules:
 
 ### Current Implementation vs Design
 
-As of 2025-11, the following differences exist between the design document and actual implementation:
+As of 2026-02, all core components described in the design are fully implemented.
 
-#### Implemented Components (~85%)
+#### Implemented Components (100%)
 
-- ✅ **API Types (CRDs)**: Fully implemented as designed
+- ✅ **API Types (CRDs)**: Fully implemented
   - Plugin CRD with all spec and status fields
-  - PaperMCServer CRD with all required fields
-  - **Extension**: Added `paperBuild` field to PaperMCServer for granular build control
+  - PaperMCServer CRD with all required fields including `version`, `build`, `updateStrategy`
+  - Four update strategies: `latest`, `auto`, `pin`, `build-pin`
 
-- ✅ **Plugin Controller**: 100% complete
-  - Fetches plugin metadata from repositories
+- ✅ **Plugin Controller**: Complete
+  - Fetches plugin metadata from repositories (Hangar)
   - Finds matched servers via label selectors
-  - Runs constraint solver for version resolution
-  - Updates Plugin status with resolved versions
+  - Updates Plugin status with available versions and matched instances
   - Handles orphaned state when repository unavailable
-  - Applies updateDelay filtering
+  - Finalizer-based JAR cleanup on Plugin deletion
 
-- ✅ **PaperMCServer Controller**: 80% complete
+- ✅ **PaperMCServer Controller**: Complete
   - Ensures StatefulSet and Service exist
   - Finds matched plugins via selectors
-  - Runs solver for Paper version selection
-  - Updates server status with current state
-  - **Missing**: Does not apply updates (only detects them)
+  - Resolves plugin versions per-server using solver
+  - Resolves desired Paper version based on update strategy
+  - Detects available updates and sets conditions
+  - Verifies image existence in Docker Hub registry
+
+- ✅ **Update Controller**: Complete
+  - Cron-based scheduling for maintenance windows
+  - Apply-now annotation for immediate updates
+  - RCON graceful shutdown before updates
+  - Plugin JAR downloads to `/data/plugins/update/`
+  - StatefulSet image update for Paper version changes
+  - Pod deletion to trigger StatefulSet recreation
+  - Plugin deletion (PendingDeletion cleanup)
+  - Update history tracking in server status
 
 - ✅ **Cross-Resource Triggers**: Fully implemented
   - Plugin changes trigger PaperMCServer reconciliation
   - PaperMCServer label changes trigger Plugin reconciliation
 
 - ✅ **Supporting Packages**: All implemented
-  - `pkg/solver/` - Constraint solver
-  - `pkg/plugins/` - Plugin API clients
+  - `pkg/solver/` - Constraint solver (simple linear search)
+  - `pkg/plugins/` - Plugin API clients (Hangar)
   - `pkg/paper/` - Paper API client
-  - `pkg/rcon/` - RCON client
+  - `pkg/rcon/` - RCON client (gorcon/rcon wrapper)
+  - `pkg/registry/` - Docker registry API client
   - `pkg/selector/` - Label selector matching
-  - `pkg/version/` - Version comparison
+  - `pkg/version/` - Minecraft version comparison
+  - `pkg/cron/` - Cron scheduler abstraction
+  - `pkg/webui/` - Web UI for server status
 
-#### Not Yet Implemented (~15%)
+#### Structural Notes
 
-- ❌ **Update Controller**: Critical missing component
-  - Purpose: Applies updates during maintenance windows
-  - Responsibilities:
-    - Cron-based scheduling for maintenance windows
-    - RCON graceful shutdown before updates
-    - JAR downloads to `/data/plugins/update/`
-    - Pod deletion to trigger StatefulSet recreation
-  - **Current state**: PaperMCServer Controller only DETECTS available updates via `status.availableUpdate`, but does not APPLY them
-
-#### Minor Structural Differences (Non-Breaking)
-
-- **Controllers location**: `internal/controller/` instead of `controllers/` (standard Go practice)
-- **Main entrypoint**: `cmd/main.go` instead of root `main.go` (recommended structure)
-- **Additional feature**: Service creation for each PaperMCServer (not explicitly in design, but logical addition)
-
-### Migration Path
-
-To complete the implementation and match the design:
-
-1. Implement Update Controller with:
-   - Cron job runner for maintenance windows
-   - RCON graceful shutdown integration
-   - JAR download and placement in `plugins/update/`
-   - Pod deletion logic with proper error handling
-
-2. Add update history tracking to PaperMCServer status
-
-3. Implement metrics and events as documented
+- **Controllers location**: `internal/controller/` (standard Go practice)
+- **Main entrypoint**: `cmd/main.go` (recommended structure)
+- **Service creation**: Automatic Service management for each PaperMCServer
+- **Version resolution**: Plugin version resolution is per-server (in PaperMCServer controller), not global (Plugin controller only caches metadata)
 
 ## Glossary
 

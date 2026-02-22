@@ -157,13 +157,13 @@ The operator maintains detailed status information:
 
 ```yaml
 status:
-  currentPaperVersion: "1.21.1"
-  currentPaperBuild: 91
-  desiredPaperVersion: "1.21.1"
-  desiredPaperBuild: 91
+  currentVersion: "1.21.1"
+  currentBuild: 91
+  desiredVersion: "1.21.1"
+  desiredBuild: 91
   availableUpdate:
-    paperVersion: "1.21.2"
-    paperBuild: 115
+    version: "1.21.2"
+    build: 115
     releasedAt: "2024-01-15T10:00:00Z"
     foundAt: "2024-01-22T03:00:00Z"
 ```
@@ -180,7 +180,7 @@ status:
 
 **Version resolution**:
 
-- Uses the Paper version specified in `paperVersion` field
+- Uses the Paper version specified in `version` field
 - Finds the latest build available for that version
 - Validates compatibility with matched plugins (for the pinned version)
 
@@ -188,13 +188,13 @@ status:
 
 - No version updates (stays on pinned version)
 - Automatic build updates during maintenance windows
-- If you want to change versions, update the `paperVersion` field manually
+- If you want to change versions, update the `version` field manually
 
 **Use cases**:
 
 - Production servers that need stability on a specific Minecraft version
 - When plugins only support a specific version range
-- Gradual migration to new versions (manually update `paperVersion` when ready)
+- Gradual migration to new versions (manually update `version` when ready)
 - When you want bug fixes but not feature changes
 
 **Example**:
@@ -206,7 +206,7 @@ metadata:
   name: stable-server
 spec:
   updateStrategy: "pin"
-  paperVersion: "1.21.1"  # Required for pin strategy
+  version: "1.21.1"  # Required for pin strategy
   updateSchedule:
     checkCron: "0 3 * * *"
     maintenanceWindow:
@@ -219,7 +219,7 @@ spec:
 To upgrade to a new version, edit the spec:
 
 ```bash
-kubectl patch papermcserver stable-server --type=merge -p '{"spec":{"paperVersion":"1.21.2"}}'
+kubectl patch papermcserver stable-server --type=merge -p '{"spec":{"version":"1.21.2"}}'
 ```
 
 The operator will then resolve the latest build for 1.21.2 during the next maintenance window.
@@ -236,14 +236,14 @@ The operator will then resolve the latest build for 1.21.2 during the next maint
 
 **Version resolution**:
 
-- Uses exact `paperVersion` and `paperBuild` specified in spec
+- Uses exact `version` and `build` specified in spec
 - Validates the version-build combination exists
 - Checks plugin compatibility for information purposes
 
 **Update behavior**:
 
 - No automatic updates
-- To update, manually change `paperVersion` and/or `paperBuild` fields
+- To update, manually change `version` and/or `build` fields
 - Useful for maximum stability and predictability
 
 **Use cases**:
@@ -263,8 +263,8 @@ metadata:
   name: certified-server
 spec:
   updateStrategy: "build-pin"
-  paperVersion: "1.21.1"   # Required
-  paperBuild: 91           # Required
+  version: "1.21.1"   # Required
+  build: 91            # Required
   updateSchedule:
     checkCron: "0 3 * * *"
     maintenanceWindow:
@@ -277,11 +277,11 @@ spec:
 ```bash
 # Update to a new build
 kubectl patch papermcserver certified-server --type=merge \
-  -p '{"spec":{"paperBuild":95}}'
+  -p '{"spec":{"build":95}}'
 
 # Update to a new version and build
 kubectl patch papermcserver certified-server --type=merge \
-  -p '{"spec":{"paperVersion":"1.21.2","paperBuild":115}}'
+  -p '{"spec":{"version":"1.21.2","build":115}}'
 ```
 
 ## Plugin Update Strategies
@@ -546,7 +546,7 @@ metadata:
     environment: production
 spec:
   updateStrategy: "pin"
-  paperVersion: "1.21.1"
+  version: "1.21.1"
   updateDelay: 168h
 ---
 apiVersion: mc.k8s.lex.la/v1alpha1
@@ -606,8 +606,8 @@ metadata:
     criticality: high
 spec:
   updateStrategy: "build-pin"
-  paperVersion: "1.21.1"
-  paperBuild: 91
+  version: "1.21.1"
+  build: 91
 ---
 apiVersion: mc.k8s.lex.la/v1alpha1
 kind: Plugin
@@ -637,7 +637,7 @@ metadata:
     type: mixed
 spec:
   updateStrategy: "pin"
-  paperVersion: "1.21.1"
+  version: "1.21.1"
 ---
 # Critical plugin - pinned
 apiVersion: mc.k8s.lex.la/v1alpha1
@@ -740,7 +740,7 @@ Day 7+: Next maintenance window applies the update
 - Development: `24h` - Quick updates for testing
 - Staging: `168h` (7 days) - Standard delay
 - Production: `336h` (14 days) - Conservative delay
-- Critical production: Use `pinned`/`build-pin` with manual updates
+- Critical production: Use `pin`/`build-pin` with manual updates
 
 ## Initial Deployment Behavior
 
@@ -764,16 +764,16 @@ On initial deployment (no existing server):
 
 ### For `pin` Strategy
 
-1. Validate `paperVersion` is specified
+1. Validate `version` is specified
 2. Find latest build for that version
-3. Create StatefulSet with `paperVersion-latestBuild`
+3. Create StatefulSet with `version-latestBuild`
 4. Monitor for new builds of the pinned version
 
 ### For `build-pin` Strategy
 
-1. Validate both `paperVersion` and `paperBuild` are specified
+1. Validate both `version` and `build` are specified
 2. Verify the version-build combination exists
-3. Create StatefulSet with exact tag `paperVersion-paperBuild`
+3. Create StatefulSet with exact tag `version-build`
 4. No further version changes without spec updates
 
 ## Important Notes
@@ -816,7 +816,7 @@ status:
     blockedBy:
       plugin: "essentialsx"
       version: "2.20.1"
-      supportedPaperVersions: ["1.20.4", "1.21.1"]
+      supportedVersions: ["1.20.4", "1.21.1"]
 ```
 
 ### Maintenance Windows
@@ -839,12 +839,14 @@ updateSchedule:
 
 All updates use graceful shutdown via RCON:
 
-1. Operator sends RCON `save-all` command
-2. Operator sends RCON `stop` command
-3. Paper saves world, unloads plugins, shuts down cleanly
-4. Pod terminates
-5. StatefulSet recreates pod with new image
-6. Paper starts with updated version/plugins
+1. Operator sends warning messages to players via RCON `say` commands (with intervals)
+2. Operator sends RCON `save-all` command
+3. Wait for save to complete
+4. Operator sends RCON `stop` command
+5. Paper saves world, unloads plugins, shuts down cleanly
+6. Pod terminates
+7. StatefulSet recreates pod with new image
+8. Paper starts with updated version/plugins
 
 This prevents world corruption and data loss.
 
@@ -873,7 +875,7 @@ This prevents world corruption and data loss.
 **Check**:
 
 1. Verify `updateStrategy` is what you expect
-2. Check `status.desiredPaperVersion` vs `status.currentPaperVersion`
+2. Check `status.desiredVersion` vs `status.currentVersion`
 3. Review solver logic in `status.availableUpdate`
 4. Ensure `updateDelay` is configured correctly
 
@@ -884,7 +886,7 @@ The operator does not perform downgrades by default. To rollback:
 ```bash
 # Change to build-pin strategy with old version
 kubectl patch papermcserver my-server --type=merge \
-  -p '{"spec":{"updateStrategy":"build-pin","paperVersion":"1.21.1","paperBuild":91}}'
+  -p '{"spec":{"updateStrategy":"build-pin","version":"1.21.1","build":91}}'
 ```
 
 Rollbacks require manual intervention for safety.

@@ -223,9 +223,9 @@ Standard Kubernetes conditions.
 
 | Type | Description |
 |------|-------------|
-| `Ready` | Plugin is ready and compatible |
-| `MetadataFetched` | Repository metadata is available |
-| `Compatible` | Plugin is compatible with all matched servers |
+| `Ready` | Plugin reconciled successfully |
+| `RepositoryAvailable` | Plugin repository is accessible |
+| `VersionResolved` | Metadata fetched and servers matched |
 
 ## Complete Example
 

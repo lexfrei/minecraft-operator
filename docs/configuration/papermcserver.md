@@ -284,10 +284,13 @@ Standard Kubernetes conditions.
 
 | Type | Description |
 |------|-------------|
-| `Ready` | Server is running and accessible |
-| `Available` | StatefulSet is available |
-| `Progressing` | Update in progress |
-| `Degraded` | Server has issues |
+| `Ready` | Server reconciled successfully |
+| `StatefulSetReady` | StatefulSet has ready replicas |
+| `UpdateAvailable` | New Paper version/build available |
+| `UpdateBlocked` | Update blocked by plugin incompatibility |
+| `Updating` | Update currently in progress |
+| `SolverRunning` | Constraint solver is executing |
+| `CronScheduleValid` | Maintenance window cron is valid |
 
 ## Complete Example
 
