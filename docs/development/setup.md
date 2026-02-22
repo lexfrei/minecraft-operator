@@ -69,6 +69,9 @@ make vet
 # Unit tests with envtest
 make test
 
+# Helm chart template tests
+helm unittest charts/minecraft-operator
+
 # E2E tests (creates Kind cluster)
 make test-e2e
 ```
@@ -79,9 +82,28 @@ make test-e2e
 # Run tests with coverage
 make test
 
-# View coverage
+# View coverage report
 go tool cover -html=cover.out
+
+# Check controller coverage (target: 60%+)
+go test ./internal/controller/... -coverprofile=cover.out \
+  && go tool cover -func=cover.out | grep total
 ```
+
+### Helm Chart Tests
+
+The operator Helm chart uses [helm-unittest](https://github.com/helm-unittest/helm-unittest) for template validation:
+
+```bash
+# Install plugin
+helm plugin install https://github.com/helm-unittest/helm-unittest
+
+# Run chart tests
+helm unittest charts/minecraft-operator
+```
+
+Test suites cover deployment, RBAC, service account, metrics service, and WebUI templates.
+Tests live in `charts/minecraft-operator/tests/`.
 
 ## Run Linter
 
@@ -141,6 +163,13 @@ make run
 ```
 
 ## Helm Development
+
+### Test Charts
+
+```bash
+# Run template tests
+helm unittest charts/minecraft-operator
+```
 
 ### Lint Charts
 
@@ -212,6 +241,7 @@ Enable:
 | `make vet` | Run go vet |
 | `make test` | Run unit tests |
 | `make test-e2e` | Run E2E tests (Kind cluster) |
+| `helm unittest charts/minecraft-operator` | Run Helm chart template tests |
 | `make lint` | Run golangci-lint |
 | `make lint-fix` | Auto-fix lint issues |
 | `make build` | Build binary to bin/manager |

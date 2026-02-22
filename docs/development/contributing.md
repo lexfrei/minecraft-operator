@@ -113,6 +113,7 @@ slog.InfoContext(ctx, fmt.Sprintf("Update to %s available", version))
 Before submitting:
 
 - [ ] Tests pass: `make test`
+- [ ] Helm chart tests pass: `helm unittest charts/minecraft-operator`
 - [ ] Linter passes: `make lint`
 - [ ] Code generated: `make manifests generate`
 - [ ] Documentation updated
@@ -122,15 +123,15 @@ Before submitting:
 
 ### High Priority
 
-- **Test coverage** for `pkg/solver/` and `pkg/plugins/`
 - **Modrinth plugin source** support
 - **Documentation improvements**
+- **Plugin E2E tests** — requires mock Hangar server in-cluster
 
 ### Medium Priority
 
-- E2E test expansion
 - Prometheus metrics
 - Web UI enhancements
+- Spigot plugin source support
 
 ### Good First Issues
 

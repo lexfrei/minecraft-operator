@@ -47,7 +47,7 @@ helm install minecraft-operator \
 | Value | Description | Default |
 |-------|-------------|---------|
 | `serviceAccount.create` | Create service account | `true` |
-| `serviceAccount.automount` | Automount API credentials | `true` |
+| `serviceAccount.automountServiceAccountToken` | Automount API credentials | `true` |
 | `serviceAccount.annotations` | SA annotations | `{}` |
 | `serviceAccount.name` | SA name override | `""` |
 

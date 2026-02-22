@@ -64,6 +64,7 @@ minecraft-operator/
 │   ├── plugins/            # Plugin API clients
 │   ├── rcon/               # RCON client
 │   ├── registry/           # Docker Hub client
+│   ├── testutil/           # Test mocks and helpers
 │   └── webui/              # Web UI
 ├── charts/                 # Helm charts
 │   ├── minecraft-operator-crds/
@@ -86,8 +87,9 @@ minecraft-operator/
 The project uses multiple testing strategies:
 
 | Type | Command | Description |
-|------|---------|-------------|
-| Unit | `make test` | Fast tests with envtest |
+| --- | --- | --- |
+| Unit | `make test` | Controller and package tests with envtest |
+| Helm | `helm unittest charts/minecraft-operator` | Chart template validation |
 | E2E | `make test-e2e` | Full cluster tests (Kind) |
 | Lint | `make lint` | Code quality checks |
 
