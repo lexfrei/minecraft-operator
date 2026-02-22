@@ -513,7 +513,8 @@ func (r *UpdateReconciler) applyPluginUpdates(
 	updatedCount := 0
 	var downloadErrors []error
 
-	for _, pluginStatus := range server.Status.Plugins {
+	for i := range server.Status.Plugins {
+		pluginStatus := &server.Status.Plugins[i]
 		pluginName := pluginStatus.PluginRef.Name
 
 		plugin, exists := pluginMap[pluginName]
@@ -553,6 +554,9 @@ func (r *UpdateReconciler) applyPluginUpdates(
 			continue
 		}
 
+		// Track installed JAR name and version
+		pluginStatus.InstalledJARName = pluginName + ".jar"
+		pluginStatus.CurrentVersion = pluginStatus.ResolvedVersion
 		updatedCount++
 	}
 
@@ -898,14 +902,14 @@ func (r *UpdateReconciler) setUpdatingCondition(server *mcv1alpha1.PaperMCServer
 	meta.SetStatusCondition(&server.Status.Conditions, condition)
 }
 
-// getPluginsToDelete returns plugins marked for deletion that have an InstalledJARName.
+// getPluginsToDelete returns all plugins marked for deletion.
 func (r *UpdateReconciler) getPluginsToDelete(
 	server *mcv1alpha1.PaperMCServer,
 ) []mcv1alpha1.ServerPluginStatus {
 	var result []mcv1alpha1.ServerPluginStatus
 
 	for _, plugin := range server.Status.Plugins {
-		if plugin.PendingDeletion && plugin.InstalledJARName != "" {
+		if plugin.PendingDeletion {
 			result = append(result, plugin)
 		}
 	}
@@ -996,15 +1000,30 @@ func (r *UpdateReconciler) deleteMarkedPlugins(
 }
 
 // deletePluginJAR deletes a single plugin JAR from the server.
+// Handles three cases: plugin never installed (empty InstalledJARName),
+// plugin in plugins/ only, or plugin in both plugins/ and update/ folders.
 func (r *UpdateReconciler) deletePluginJAR(
 	ctx context.Context,
 	server *mcv1alpha1.PaperMCServer,
 	plugin mcv1alpha1.ServerPluginStatus,
 ) error {
+	if plugin.InstalledJARName == "" {
+		slog.InfoContext(ctx, "Plugin was never installed, marking as deleted",
+			"server", server.Name,
+			"plugin", plugin.PluginRef.Name)
+
+		return r.markJARAsDeleted(ctx,
+			plugin.PluginRef.Name, plugin.PluginRef.Namespace,
+			server.Name, server.Namespace)
+	}
+
 	podName := server.Name + "-0"
 	namespace := server.Namespace
 	container := containerNamePaperMC
-	rmCmd := fmt.Sprintf("rm -f /data/plugins/%s", plugin.InstalledJARName)
+
+	// Delete from both plugins/ and update/ directories
+	rmCmd := fmt.Sprintf("rm -f /data/plugins/%s /data/plugins/update/%s",
+		plugin.InstalledJARName, plugin.InstalledJARName)
 
 	slog.InfoContext(ctx, "Deleting plugin JAR",
 		"server", server.Name,
