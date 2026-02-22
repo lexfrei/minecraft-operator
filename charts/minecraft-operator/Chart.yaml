@@ -14,8 +14,3 @@ maintainers:
     email: f@lex.la
     url: https://github.com/lexfrei
 kubeVersion: ">=1.27.0-0"
-dependencies:
-  - name: minecraft-operator-crds
-    version: "0.0.0-dev"
-    repository: "file://../minecraft-operator-crds"
-    condition: crds.enabled

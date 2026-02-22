@@ -40,6 +40,7 @@ spec:
         - --health-probe-bind-address=:8081
         - --metrics-bind-address=:{{ .Values.metrics.port }}
         - --metrics-secure=true
+        - --manage-crds={{ .Values.crds.manage }}
         {{- if .Values.webui.enabled }}
         - --webui-enabled=true
         - --webui-bind-address=:{{ .Values.webui.port }}

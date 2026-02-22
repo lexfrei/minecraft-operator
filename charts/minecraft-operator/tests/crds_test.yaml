@@ -1,0 +1,18 @@
+# Contract: "CRD management flag is passed correctly to the operator"
+suite: crds management
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should pass --manage-crds=true by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--manage-crds=true"
+
+  - it: should pass --manage-crds=false when crds.manage is false
+    set:
+      crds.manage: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--manage-crds=false"

@@ -4,8 +4,9 @@
 
 # CRDs management
 crds:
-  # Install CRDs as part of this chart (via dependency)
-  enabled: true
+  # Operator applies embedded CRDs at startup via server-side apply.
+  # Set to false to disable CRD management (e.g. if CRDs are managed externally).
+  manage: true
 
 # Operator configuration
 replicaCount: 1
