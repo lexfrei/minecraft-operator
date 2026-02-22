@@ -311,8 +311,9 @@ spec:
                     matched by the selector.
                   properties:
                     compatible:
-                      description: Compatible indicates if the plugin is compatible
-                        with this server.
+                      description: |-
+                        Compatible indicates whether the plugin has a resolved version compatible with this server.
+                        This value is read from PaperMCServer.status.plugins during Plugin reconciliation.
                       type: boolean
                     name:
                       description: Name is the server name.

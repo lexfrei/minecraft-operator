@@ -1468,5 +1468,87 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(errors.IsNotFound(err)).To(BeTrue(),
 				"Plugin should be fully deleted when it was never installed on any server")
 		})
+
+		It("should immediately complete deletion when plugin is in server status but has empty InstalledJARName", func() {
+			// Regression: PaperMCServer controller adds ALL matched plugins to
+			// server.Status.Plugins, even incompatible ones with empty InstalledJARName.
+			// markPluginForDeletionOnServers finds the entry (found=true), sets
+			// PendingDeletion=true, and waits for update controller to delete the JAR.
+			// But update controller only runs during maintenance windows, so the plugin
+			// deletion is stuck until the 10-minute forceCompleteStaleDeletions timeout.
+			// When InstalledJARName is empty, no JAR exists — mark as deleted immediately.
+			pluginName := "test-empty-jar-plugin"
+			serverName := "test-empty-jar-server"
+
+			// Create server WITH the plugin in Status.Plugins but empty InstalledJARName
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+				Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "papermc"}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, server)
+			}()
+
+			// Set server status WITH this plugin entry but no InstalledJARName
+			server.Status.Plugins = []mck8slexlav1alpha1.ServerPluginStatus{
+				{
+					PluginRef: mck8slexlav1alpha1.PluginRef{
+						Name:      pluginName,
+						Namespace: namespace,
+					},
+					Compatible:       false,
+					InstalledJARName: "", // Never installed — no JAR to delete
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, server)).To(Succeed())
+
+			// Create plugin that matches the server
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:           mck8slexlav1alpha1.PluginSource{Type: "hangar", Project: "NonExistentPlugin"},
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{
+					// Empty selector matches everything
+				},
+			})
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// Reconcile to add finalizer
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Reconcile to sync metadata
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Delete plugin
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &plugin)).To(Succeed())
+
+			// First reconcile: initializes DeletionProgress + marks for deletion
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: should detect empty InstalledJARName and complete immediately
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Plugin should be fully deleted (finalizer removed)
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)
+			Expect(errors.IsNotFound(err)).To(BeTrue(),
+				"Plugin should be fully deleted when InstalledJARName is empty (no JAR to delete)")
+		})
 	})
 })
