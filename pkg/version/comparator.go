@@ -66,29 +66,6 @@ func FilterByUpdateDelay(versions []VersionInfo, delay time.Duration) []VersionI
 	return filtered
 }
 
-// IsCompatible checks if a plugin version is compatible with a Paper version.
-// This is a simple string equality check for now, but can be extended
-// to support version ranges and constraints.
-func IsCompatible(pluginVersion, paperVersion string) (bool, error) {
-	// For MVP, we rely on the plugin metadata providing specific compatible versions.
-	// This function will be extended by the solver with actual compatibility data.
-	pv, err := ParseVersion(pluginVersion)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to parse plugin version")
-	}
-
-	ppv, err := ParseVersion(paperVersion)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to parse Paper version")
-	}
-
-	// Basic compatibility: if versions can be parsed, delegate to caller
-	// who has the actual compatibility metadata from plugin repositories.
-	_ = pv
-	_ = ppv
-	return true, nil
-}
-
 // FindMaxVersion finds the maximum version from a list of version strings.
 // Returns empty string if the list is empty or all versions are invalid.
 func FindMaxVersion(versions []string) (string, error) {
