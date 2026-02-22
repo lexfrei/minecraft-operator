@@ -150,12 +150,6 @@ func (b *SSEBroker) Broadcast(message []byte) {
 	}
 }
 
-// BroadcastEvent sends a named SSE event to all clients.
-func (b *SSEBroker) BroadcastEvent(eventName string, data string) {
-	message := fmt.Sprintf("event: %s\ndata: %s\n\n", eventName, data)
-	b.Broadcast([]byte(message))
-}
-
 // ClientCount returns the number of connected clients.
 func (b *SSEBroker) ClientCount() int {
 	b.mu.RLock()
