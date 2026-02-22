@@ -159,6 +159,26 @@ func TestNewRCONClient_EmptyPassword(t *testing.T) {
 	assert.Contains(t, err.Error(), "password cannot be empty")
 }
 
+// --- Connect context tests ---
+
+func TestRCONClient_Connect_ShouldRespectCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	// BUG: Connect accepts ctx parameter but rcon.Dial() ignores it entirely.
+	// A cancelled context should prevent the dial attempt.
+	client, err := NewRCONClient("127.0.0.1", 19132, "testpass")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	err = client.Connect(ctx)
+	// Should return context.Canceled, not "connection refused"
+	require.ErrorIs(t, err, context.Canceled,
+		"Connect should respect cancelled context and return context.Canceled, "+
+			"but currently ignores ctx and tries to dial regardless")
+}
+
 // --- IsConnected tests ---
 
 func TestRCONClient_IsConnected_NotConnected(t *testing.T) {
@@ -244,6 +264,30 @@ func TestRCONClient_Close_Idempotent(t *testing.T) {
 	// Second close should also succeed
 	err = client.Close()
 	require.NoError(t, err)
+}
+
+// --- SendCommand context tests ---
+
+func TestRCONClient_SendCommand_ShouldRespectCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	// BUG: SendCommand accepts ctx parameter but conn.Execute() ignores it.
+	// A cancelled context should prevent the command from executing.
+	client, err := NewRCONClient("localhost", 25575, "secret")
+	require.NoError(t, err)
+
+	mock := newMockRCONConn()
+	mock.executeResults["list"] = "There are 0 players online"
+	client.conn = mock
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	_, err = client.SendCommand(ctx, "list")
+	// Should return context.Canceled, not execute the command
+	require.ErrorIs(t, err, context.Canceled,
+		"SendCommand should respect cancelled context and return context.Canceled, "+
+			"but currently ignores ctx and executes command regardless")
 }
 
 // --- SendCommand tests ---

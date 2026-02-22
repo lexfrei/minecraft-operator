@@ -2792,6 +2792,31 @@ var _ = Describe("UpdateController", func() {
 				"Should allow when maintenance window is disabled")
 		})
 
+		It("should include exact cron trigger time in maintenance window", func() {
+			// BUG: isInMaintenanceWindow uses now.After(lastTrigger) which is
+			// strictly greater-than. At exact cron trigger time, After returns false,
+			// so the first moment of the window is excluded. This means a reconciliation
+			// that happens at exactly the scheduled time misses the window.
+			sunday4AM := time.Date(2026, 2, 22, 4, 0, 0, 0, time.UTC)
+			reconciler := &UpdateReconciler{
+				nowFunc: func() time.Time { return sunday4AM },
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+				},
+			}
+
+			Expect(reconciler.isInMaintenanceWindow(context.Background(), server)).To(BeTrue(),
+				"Exact cron trigger time should be inside maintenance window, not excluded by strict After()")
+		})
+
 		It("should reject update when just past the 1-hour window", func() {
 			// Maintenance window: Sunday 4:00 AM
 			// Current time: Sunday 5:01 AM (just past 1-hour window)
