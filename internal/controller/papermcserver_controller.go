@@ -28,7 +28,6 @@ import (
 	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
-	"github.com/lexfrei/minecraft-operator/pkg/registry"
 	"github.com/lexfrei/minecraft-operator/pkg/selector"
 	"github.com/lexfrei/minecraft-operator/pkg/solver"
 	"github.com/lexfrei/minecraft-operator/pkg/version"
@@ -70,14 +69,27 @@ const (
 	defaultTerminationGracePeriod = int64(300)
 )
 
+// PaperAPI abstracts PaperMC API operations for testability.
+type PaperAPI interface {
+	GetPaperVersions(ctx context.Context) ([]string, error)
+	GetPaperBuild(ctx context.Context, version string) (*paper.BuildInfo, error)
+	GetBuilds(ctx context.Context, version string) ([]int, error)
+}
+
+// RegistryAPI abstracts Docker registry operations for testability.
+type RegistryAPI interface {
+	ListTags(ctx context.Context, repository string, pageSize int) ([]string, error)
+	ImageExists(ctx context.Context, repository, tag string) (bool, error)
+}
+
 // PaperMCServerReconciler reconciles a PaperMCServer object.
 type PaperMCServerReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
 	Config         *rest.Config
-	PaperClient    *paper.Client
+	PaperClient    PaperAPI
 	Solver         solver.Solver
-	RegistryClient *registry.Client
+	RegistryClient RegistryAPI
 }
 
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers,verbs=get;list;watch;create;update;patch;delete
