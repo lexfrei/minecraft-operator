@@ -3547,4 +3547,97 @@ var _ = Describe("UpdateController", func() {
 				"Image tag should use fully qualified docker.io/lexfrei/papermc: prefix")
 		})
 	})
+
+	Context("RCON.Enabled guard in update functions", func() {
+		// BUG: performPluginOnlyUpdate and performCombinedUpdate unconditionally
+		// call createRCONClient without checking server.Spec.RCON.Enabled.
+		// If RCON is disabled, updates fail because password secret name is empty.
+		// PaperMCServer controller correctly checks RCON.Enabled but update controller does not.
+
+		It("should check RCON.Enabled before calling createRCONClient in performPluginOnlyUpdate", func() {
+			fset := token.NewFileSet()
+			f, parseErr := parser.ParseFile(fset, updateControllerPath, nil, parser.AllErrors)
+			Expect(parseErr).NotTo(HaveOccurred())
+
+			var foundFunc bool
+			ast.Inspect(f, func(n ast.Node) bool {
+				fn, ok := n.(*ast.FuncDecl)
+				if !ok || fn.Name.Name != "performPluginOnlyUpdate" {
+					return true
+				}
+				foundFunc = true
+
+				hasRCONEnabledCheck := false
+				ast.Inspect(fn.Body, func(inner ast.Node) bool {
+					sel, ok := inner.(*ast.SelectorExpr)
+					if !ok || sel.Sel.Name != "Enabled" {
+						return true
+					}
+					hasRCON := false
+					ast.Inspect(sel.X, func(deep ast.Node) bool {
+						deepSel, ok := deep.(*ast.SelectorExpr)
+						if ok && deepSel.Sel.Name == "RCON" {
+							hasRCON = true
+							return false
+						}
+						return true
+					})
+					if hasRCON {
+						hasRCONEnabledCheck = true
+						return false
+					}
+					return true
+				})
+
+				Expect(hasRCONEnabledCheck).To(BeTrue(),
+					"performPluginOnlyUpdate must check server.Spec.RCON.Enabled before calling createRCONClient")
+
+				return false
+			})
+			Expect(foundFunc).To(BeTrue(), "performPluginOnlyUpdate function not found")
+		})
+
+		It("should check RCON.Enabled before calling createRCONClient in performCombinedUpdate", func() {
+			fset := token.NewFileSet()
+			f, parseErr := parser.ParseFile(fset, updateControllerPath, nil, parser.AllErrors)
+			Expect(parseErr).NotTo(HaveOccurred())
+
+			var foundFunc bool
+			ast.Inspect(f, func(n ast.Node) bool {
+				fn, ok := n.(*ast.FuncDecl)
+				if !ok || fn.Name.Name != "performCombinedUpdate" {
+					return true
+				}
+				foundFunc = true
+
+				hasRCONEnabledCheck := false
+				ast.Inspect(fn.Body, func(inner ast.Node) bool {
+					sel, ok := inner.(*ast.SelectorExpr)
+					if !ok || sel.Sel.Name != "Enabled" {
+						return true
+					}
+					hasRCON := false
+					ast.Inspect(sel.X, func(deep ast.Node) bool {
+						deepSel, ok := deep.(*ast.SelectorExpr)
+						if ok && deepSel.Sel.Name == "RCON" {
+							hasRCON = true
+							return false
+						}
+						return true
+					})
+					if hasRCON {
+						hasRCONEnabledCheck = true
+						return false
+					}
+					return true
+				})
+
+				Expect(hasRCONEnabledCheck).To(BeTrue(),
+					"performCombinedUpdate must check server.Spec.RCON.Enabled before calling createRCONClient")
+
+				return false
+			})
+			Expect(foundFunc).To(BeTrue(), "performCombinedUpdate function not found")
+		})
+	})
 })
