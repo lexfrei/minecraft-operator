@@ -1778,6 +1778,384 @@ var _ = Describe("UpdateController", func() {
 		})
 	})
 
+	Context("performCombinedUpdate operation order (Bug 13)", func() {
+		var ctx context.Context
+
+		BeforeEach(func() {
+			ctx = context.Background()
+		})
+
+		It("should download plugins BEFORE updating StatefulSet image", func() {
+			By("creating a tracking mock executor that records operation timestamps")
+			var operationOrder []string
+			trackingExecutor := &testutil.MockPodExecutor{
+				Output: []byte("ok"),
+			}
+
+			// We wrap to track what happens
+			reconciler := &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: trackingExecutor,
+			}
+
+			By("creating a StatefulSet that performCombinedUpdate will try to update")
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-combined-order",
+					Namespace: testNamespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: true,
+						PasswordSecret: mcv1alpha1.SecretKeyRef{
+							Name: "rcon-secret",
+							Key:  "password",
+						},
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:1.21.0-90",
+								},
+							},
+						},
+					},
+				},
+				Status: mcv1alpha1.PaperMCServerStatus{
+					CurrentVersion: "1.21.0",
+					CurrentBuild:   90,
+					DesiredVersion: "1.21.1",
+					DesiredBuild:   100,
+					Plugins: []mcv1alpha1.ServerPluginStatus{
+						{
+							PluginRef: mcv1alpha1.PluginRef{
+								Name:      "test-plugin-order",
+								Namespace: testNamespace,
+							},
+							ResolvedVersion: "2.0.0",
+							Compatible:      true,
+							Source:          "hangar",
+						},
+					},
+				},
+			}
+
+			_ = operationOrder
+			_ = reconciler
+			_ = server
+
+			// The key assertion: plugin downloads (PodExecutor.ExecInPod calls with curl)
+			// MUST happen BEFORE the StatefulSet image is updated.
+			// Currently performCombinedUpdate does:
+			//   1. deleteMarkedPlugins
+			//   2. updateStatefulSetImage ← triggers rolling update, kills pod!
+			//   3. applyPluginUpdates   ← tries to exec into dead/restarting pod
+			//   4. waitForPodReady
+			// Correct order should be:
+			//   1. deleteMarkedPlugins
+			//   2. applyPluginUpdates   ← downloads to running pod
+			//   3. RCON graceful shutdown
+			//   4. updateStatefulSetImage
+			//   5. waitForPodReady
+
+			// For this test we verify the logical contract:
+			// After performCombinedUpdate completes, all PodExecutor calls
+			// (plugin downloads) must have happened before StatefulSet was modified.
+
+			// Since we can't easily intercept StatefulSet updates vs exec calls in
+			// the same test, we verify the simpler contract: the function should
+			// call applyPluginUpdates successfully (which means the pod was alive).
+			// With the current buggy order, if we set up a StatefulSet + Pod,
+			// the image update would kill the pod, and exec calls would fail.
+
+			// Simplified assertion: just verify the method signature/structure
+			// expects downloads before image change.
+			// A minimal test: create a server without a StatefulSet.
+			// performCombinedUpdate will call updateStatefulSetImage first (bug),
+			// which will fail because no StatefulSet exists.
+			// If the order were correct, applyPluginUpdates would be called first
+			// (and also fail, but for a different reason — no plugin download URL).
+
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name, Namespace: server.Namespace,
+			}, server)).To(Succeed())
+			server.Status = mcv1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.0",
+				CurrentBuild:   90,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Plugins: []mcv1alpha1.ServerPluginStatus{
+					{
+						PluginRef: mcv1alpha1.PluginRef{
+							Name:      "test-plugin-order",
+							Namespace: testNamespace,
+						},
+						ResolvedVersion: "2.0.0",
+						Compatible:      true,
+						Source:          "hangar",
+					},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, server)).To(Succeed())
+
+			err := reconciler.performCombinedUpdate(ctx, server)
+			// The function will fail either way (no real infra), but we check
+			// that plugin download was ATTEMPTED (exec call recorded) before
+			// the StatefulSet update error.
+			// With the current buggy order: StatefulSet update fails first,
+			// so NO exec calls are made.
+			// With correct order: exec calls are made first (even if they fail).
+			Expect(err).To(HaveOccurred()) // Will fail regardless
+			Expect(trackingExecutor.Calls).NotTo(BeEmpty(),
+				"Bug 13: Plugin downloads (PodExecutor calls) should happen BEFORE "+
+					"StatefulSet image update. Currently updateStatefulSetImage is called "+
+					"first, which triggers pod restart before plugins are downloaded.")
+
+			_ = k8sClient.Delete(ctx, server)
+		})
+	})
+
+	Context("performCombinedUpdate RCON shutdown (Bug 14)", func() {
+		It("should perform RCON graceful shutdown during combined update", func() {
+			// performPluginOnlyUpdate does RCON shutdown (step 3-4):
+			//   - createRCONClient
+			//   - executeGracefulShutdownWithClient
+			//   - deletePod
+			//
+			// performCombinedUpdate does NOT:
+			//   - just updateStatefulSetImage (which triggers rolling update)
+			//   - no RCON shutdown
+			//   - no player warnings
+			//   - no explicit save-all
+			//
+			// This test verifies that performCombinedUpdate should include
+			// RCON graceful shutdown like performPluginOnlyUpdate does.
+
+			// We can't easily test the full flow without infrastructure,
+			// but we verify the contract by checking that combined update
+			// code path includes RCON operations.
+
+			// The simplest red test: check that the combined update function
+			// references RCON in some way. Since performCombinedUpdate currently
+			// has NO RCON code at all, any assertion about RCON behavior fails.
+
+			// Test approach: Create a server with RCON enabled and mock everything.
+			// The combined update should attempt RCON shutdown.
+			// With the bug: it won't.
+
+			mockExec := &testutil.MockPodExecutor{Output: []byte("ok")}
+			mockCron := testutil.NewMockCronScheduler()
+
+			reconciler := &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: mockExec,
+				cron:        mockCron,
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-combined-rcon",
+					Namespace: testNamespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					Version:        "1.21.1",
+					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+						CheckCron: "0 3 * * *",
+						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+							Cron:    "0 4 * * 0",
+							Enabled: true,
+						},
+					},
+					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+						Timeout: metav1.Duration{Duration: 300 * time.Second},
+					},
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: true,
+						Port:    25575,
+						PasswordSecret: mcv1alpha1.SecretKeyRef{
+							Name: "rcon-secret",
+							Key:  "password",
+						},
+					},
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "papermc",
+									Image: "lexfrei/papermc:1.21.0-90",
+								},
+							},
+						},
+					},
+				},
+				Status: mcv1alpha1.PaperMCServerStatus{
+					CurrentVersion: "1.21.0",
+					CurrentBuild:   90,
+					DesiredVersion: "1.21.1",
+					DesiredBuild:   100,
+				},
+			}
+
+			// performCombinedUpdate currently has NO RCON calls.
+			// performPluginOnlyUpdate has: createRCONClient + executeGracefulShutdownWithClient.
+			// Both paths restart the server, so both should warn players.
+
+			// This test documents the expectation:
+			// During a combined update, players should receive shutdown warnings.
+			// Currently they don't (Bug 14).
+
+			_ = reconciler
+			_ = server
+			Fail("Bug 14: performCombinedUpdate does not call RCON graceful shutdown. " +
+				"Players receive no warning before server restart during combined (Paper + plugins) updates. " +
+				"Only performPluginOnlyUpdate has RCON shutdown logic.")
+		})
+	})
+
+	Context("waitForPodReady context propagation (Bug 15)", func() {
+		var ctx context.Context
+
+		BeforeEach(func() {
+			ctx = context.Background()
+		})
+
+		It("should pass timeout context to API calls, not parent context", func() {
+			// waitForPodReady creates ctxTimeout with 10-minute deadline:
+			//   ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			// But then uses parent ctx for API calls:
+			//   r.Get(ctx, ...) ← BUG: should be ctxTimeout
+			//
+			// This means individual API calls are NOT bounded by the timeout.
+			// If the API server hangs, r.Get() will block indefinitely.
+			// The timeout only works via the select{} statement, but between
+			// ticker fires the Get() call could hang forever.
+
+			reconciler := &UpdateReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			// Create a context with a very short deadline
+			shortCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+			defer cancel()
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ctx-propagation",
+					Namespace: testNamespace,
+				},
+			}
+
+			// waitForPodReady should respect the timeout context for ALL operations.
+			// With the bug: it uses parent ctx for r.Get(), so even though
+			// we pass a short-timeout context, the function won't properly
+			// propagate that timeout to API calls.
+
+			// The function should return a context deadline exceeded error
+			// relatively quickly (within our 100ms + some buffer).
+			// With the bug: the internal 10-minute timeout is used instead.
+
+			err := reconciler.waitForPodReady(shortCtx, server)
+			Expect(err).To(HaveOccurred(), "Should return error when context expires")
+
+			// The key assertion: the error should be about our SHORT context expiring,
+			// not about the internal 10-minute timeout.
+			// With the bug: the 5-second ticker fires, r.Get(ctx) uses parent context
+			// (which has 100ms timeout), so the Get call itself may or may not respect it.
+			// The fundamental issue is that r.Get uses ctx not ctxTimeout.
+
+			// A definitive way to test: check that waitForPodReady's internal
+			// r.Get call uses the timeout-wrapped context.
+			// Since we can't easily inspect which context is passed to r.Get,
+			// we verify behavior: with a cancelled parent context,
+			// the function should stop quickly.
+
+			// Actually, the bug manifests when parent ctx has NO deadline:
+			// In that case, r.Get(ctx) has no timeout, and ctxTimeout is only
+			// checked in the select statement between Get calls.
+			// If r.Get hangs, the select never runs.
+
+			// For the red test, we assert that the implementation should use
+			// ctxTimeout consistently. Since we can't directly test the
+			// context variable used, we mark this as a known bug.
+			Fail("Bug 15: waitForPodReady uses parent ctx instead of ctxTimeout for r.Get() calls. " +
+				"Line 601: r.Get(ctx, ...) should be r.Get(ctxTimeout, ...). " +
+				"API calls are not bounded by the 10-minute timeout.")
+		})
+	})
+
+	Context("shouldApplyNow uses context.Background (Minor issue)", func() {
+		It("should accept a context parameter instead of using context.Background()", func() {
+			// shouldApplyNow currently has signature:
+			//   func (r *UpdateReconciler) shouldApplyNow(server *mcv1alpha1.PaperMCServer) bool
+			//
+			// It calls slog.WarnContext(context.Background(), ...) and
+			// slog.InfoContext(context.Background(), ...) at lines 1078 and 1090.
+			//
+			// Problems:
+			// 1. Loses trace/request context propagation (important for observability)
+			// 2. Inconsistent with every other method on UpdateReconciler which takes ctx
+			// 3. Makes it impossible to correlate logs with the reconciliation request
+			//
+			// The method should accept ctx context.Context and use it for logging.
+			// Since we can't easily detect context.Background() usage at runtime,
+			// we verify the structural issue: the function signature lacks ctx.
+
+			// A Go function that does not accept context but logs with it is a code smell.
+			// This red test documents that shouldApplyNow should accept context.
+			Fail("Minor: shouldApplyNow() uses context.Background() instead of accepting " +
+				"ctx parameter. Lines 1078 and 1090 in update_controller.go call " +
+				"slog.WarnContext(context.Background(), ...) and slog.InfoContext(context.Background(), ...). " +
+				"This breaks context propagation for tracing and log correlation.")
+		})
+	})
+
+	Context("CombineErrors message for single error (Minor issue)", func() {
+		It("should not produce 'and 0 more errors' message", func() {
+			// At update_controller.go:996:
+			//   return errors.CombineErrors(errs[0], errors.Newf("and %d more errors", len(errs)-1))
+			//
+			// When there is exactly 1 error (len(errs) == 1), this produces:
+			//   "original error; and 0 more errors"
+			//
+			// This is confusing and unprofessional in user-facing error messages.
+
+			err1 := errors.New("failed to delete plugin TestPlugin")
+			errs := []error{err1}
+
+			// Simulate the current behavior
+			var combined error
+			if len(errs) > 0 {
+				combined = errors.CombineErrors(errs[0], errors.Newf("and %d more errors", len(errs)-1))
+			}
+
+			// The error message should NOT contain "0 more errors"
+			Expect(combined).To(HaveOccurred())
+			Expect(combined.Error()).NotTo(ContainSubstring("0 more errors"),
+				"Minor: When there is exactly 1 error, CombineErrors at line 996 produces "+
+					"'and 0 more errors' suffix. The error handling should return the single error "+
+					"directly without wrapping, or use len(errs)-1 > 0 guard.")
+		})
+	})
+
 	Context("Immediate apply annotation", func() {
 		var (
 			ctx        context.Context
