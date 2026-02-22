@@ -192,7 +192,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 			Expect(compatible).To(BeFalse(), "Update should be blocked")
 			Expect(blockingPlugin).To(Equal("blocker-plugin"))
-			Expect(blockReason).To(ContainSubstring("incompatible"))
+			Expect(blockReason).To(ContainSubstring("incompatible with Paper"))
 		})
 
 		It("should allow update when all plugins have compatible versions", func() {
@@ -236,6 +236,60 @@ var _ = Describe("PaperMCServer Controller", func() {
 				ctx, "1.21.1", matchedPlugins)
 
 			Expect(compatible).To(BeTrue(), "Update should be allowed when all plugins compatible")
+			Expect(blockingPlugin).To(BeEmpty())
+			Expect(blockReason).To(BeEmpty())
+		})
+	})
+
+	Context("Plugin compatibility edge cases", func() {
+		It("should NOT block when plugin has no available versions but has compatibilityOverride", func() {
+			reconciler := &PaperMCServerReconciler{}
+			ctx := context.Background()
+
+			matchedPlugins := []mck8slexlav1alpha1.Plugin{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "override-only-plugin",
+						Namespace: "default",
+					},
+					Spec: mck8slexlav1alpha1.PluginSpec{
+						CompatibilityOverride: &mck8slexlav1alpha1.CompatibilityOverride{
+							Enabled:           true,
+							MinecraftVersions: []string{"1.21.x"},
+						},
+					},
+					// No AvailableVersions
+				},
+			}
+
+			compatible, blockingPlugin, blockReason := reconciler.checkPluginCompatibility(
+				ctx, "1.21.1", matchedPlugins)
+
+			Expect(compatible).To(BeTrue(),
+				"Plugin with override should not be blocked even without available versions")
+			Expect(blockingPlugin).To(BeEmpty())
+			Expect(blockReason).To(BeEmpty())
+		})
+
+		It("should assume compatible when plugin has no available versions and no override", func() {
+			reconciler := &PaperMCServerReconciler{}
+			ctx := context.Background()
+
+			matchedPlugins := []mck8slexlav1alpha1.Plugin{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "no-metadata-plugin",
+						Namespace: "default",
+					},
+					// No AvailableVersions, no override
+				},
+			}
+
+			compatible, blockingPlugin, blockReason := reconciler.checkPluginCompatibility(
+				ctx, "1.21.1", matchedPlugins)
+
+			Expect(compatible).To(BeTrue(),
+				"Plugin without metadata should be assumed compatible per DESIGN.md")
 			Expect(blockingPlugin).To(BeEmpty())
 			Expect(blockReason).To(BeEmpty())
 		})

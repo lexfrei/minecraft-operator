@@ -1427,32 +1427,25 @@ func (r *PaperMCServerReconciler) checkPluginCompatibility(
 		return true, "", "" // No plugins, no compatibility issues
 	}
 
-	// TODO: This function needs rework after moving version resolution to per-server.
-	// For now, we assume plugins are compatible (actual compatibility is checked during version resolution).
-	// This is a temporary simplification to make code compile.
-
 	for i := range matchedPlugins {
 		plugin := &matchedPlugins[i]
 
-		// Check if plugin has any available versions
-		if len(plugin.Status.AvailableVersions) == 0 {
-			reason := fmt.Sprintf("Plugin '%s' has no available versions",
-				plugin.Name)
-			return false, plugin.Name, reason
+		// Plugin without any version metadata and no override — assume compatible per DESIGN.md
+		if len(plugin.Status.AvailableVersions) == 0 &&
+			(plugin.Spec.CompatibilityOverride == nil || !plugin.Spec.CompatibilityOverride.Enabled) {
+			slog.WarnContext(ctx, "Plugin has no version metadata, assuming compatible",
+				"plugin", plugin.Name,
+				"paperVersion", candidateVersion)
+
+			continue
 		}
 
-		// Check if any plugin version is compatible with candidateVersion
-		isCompatible := r.isPluginCompatibleWithPaper(ctx, plugin, candidateVersion)
-		if !isCompatible {
-			// Use first available version for error message
-			pluginVersion := "unknown"
-			if len(plugin.Status.AvailableVersions) > 0 {
-				pluginVersion = plugin.Status.AvailableVersions[0].Version
-			}
-			reason := fmt.Sprintf("Plugin '%s' (version %s) may be incompatible with Paper %s",
+		// Check compatibility via override or available versions
+		if !r.isPluginCompatibleWithPaper(ctx, plugin, candidateVersion) {
+			reason := fmt.Sprintf("Plugin '%s' is incompatible with Paper %s",
 				plugin.Name,
-				pluginVersion,
 				candidateVersion)
+
 			return false, plugin.Name, reason
 		}
 	}
