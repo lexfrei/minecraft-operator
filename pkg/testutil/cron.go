@@ -22,15 +22,6 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// CronScheduler is an interface for cron scheduling (for mocking).
-type CronScheduler interface {
-	AddFunc(spec string, cmd func()) (cron.EntryID, error)
-	Remove(id cron.EntryID)
-	Start()
-	Stop()
-	Entries() []cron.Entry
-}
-
 // MockCronScheduler is a mock cron scheduler for testing.
 type MockCronScheduler struct {
 	mu sync.Mutex
@@ -172,27 +163,4 @@ func (m *MockCronScheduler) Reset() {
 	m.nextID = 1
 	m.AddFuncError = nil
 	m.Started = false
-}
-
-// RealCronScheduler wraps robfig/cron for production use.
-type RealCronScheduler struct {
-	*cron.Cron
-}
-
-// NewRealCronScheduler creates a production cron scheduler.
-func NewRealCronScheduler() *RealCronScheduler {
-	return &RealCronScheduler{
-		Cron: cron.New(),
-	}
-}
-
-// Start starts the cron scheduler.
-func (r *RealCronScheduler) Start() {
-	r.Cron.Start()
-}
-
-// Stop stops the cron scheduler.
-func (r *RealCronScheduler) Stop() {
-	ctx := r.Cron.Stop()
-	<-ctx.Done()
 }

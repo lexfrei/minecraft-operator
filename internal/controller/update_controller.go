@@ -33,7 +33,7 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/rcon"
-	"github.com/lexfrei/minecraft-operator/pkg/testutil"
+	mccron "github.com/lexfrei/minecraft-operator/pkg/cron"
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -60,7 +60,7 @@ type UpdateReconciler struct {
 	PaperClient  *paper.Client
 	PluginClient plugins.PluginClient
 	PodExecutor  PodExecutor
-	cron         testutil.CronScheduler
+	cron         mccron.Scheduler
 
 	// nowFunc returns current time; override in tests for deterministic behavior.
 	nowFunc func() time.Time
@@ -1155,7 +1155,7 @@ func (r *UpdateReconciler) deletePod(ctx context.Context, podName, namespace str
 }
 
 // SetCron sets the cron scheduler for the reconciler.
-func (r *UpdateReconciler) SetCron(scheduler testutil.CronScheduler) {
+func (r *UpdateReconciler) SetCron(scheduler mccron.Scheduler) {
 	r.cron = scheduler
 }
 

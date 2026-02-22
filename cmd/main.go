@@ -48,7 +48,7 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/registry"
 	"github.com/lexfrei/minecraft-operator/pkg/solver"
-	"github.com/lexfrei/minecraft-operator/pkg/testutil"
+	mccron "github.com/lexfrei/minecraft-operator/pkg/cron"
 	"github.com/lexfrei/minecraft-operator/pkg/webui"
 	// +kubebuilder:scaffold:imports
 )
@@ -248,7 +248,7 @@ func main() {
 	constraintSolver := solver.NewSimpleSolver()
 
 	// Initialize cron scheduler for update controller
-	cronScheduler := testutil.NewRealCronScheduler()
+	cronScheduler := mccron.NewRealScheduler()
 
 	// Setup Plugin controller
 	if err := (&controller.PluginReconciler{
