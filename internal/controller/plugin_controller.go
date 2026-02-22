@@ -350,11 +350,19 @@ func statusEqual(a, b *mcv1alpha1.PluginStatus) bool {
 		return false
 	}
 
-	for i := range a.MatchedInstances {
-		if a.MatchedInstances[i].Name != b.MatchedInstances[i].Name ||
-			a.MatchedInstances[i].Namespace != b.MatchedInstances[i].Namespace ||
-			a.MatchedInstances[i].Compatible != b.MatchedInstances[i].Compatible ||
-			a.MatchedInstances[i].Version != b.MatchedInstances[i].Version {
+	// Compare MatchedInstances order-independently, keyed by namespace/name
+	instanceMap := make(map[string]mcv1alpha1.MatchedInstance, len(a.MatchedInstances))
+	for _, mi := range a.MatchedInstances {
+		instanceMap[mi.Namespace+"/"+mi.Name] = mi
+	}
+
+	for _, mi := range b.MatchedInstances {
+		prev, ok := instanceMap[mi.Namespace+"/"+mi.Name]
+		if !ok {
+			return false
+		}
+
+		if prev.Compatible != mi.Compatible || prev.Version != mi.Version {
 			return false
 		}
 	}
