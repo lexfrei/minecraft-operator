@@ -2,6 +2,8 @@ package plugins
 
 import (
 	"context"
+	"net/url"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/lexfrei/go-hangar/pkg/hangar"
@@ -49,7 +51,7 @@ func (c *HangarClient) GetVersions(ctx context.Context, project string) ([]Plugi
 		if downloadInfo, ok := v.Downloads["PAPER"]; ok {
 			if downloadInfo.DownloadURL != "" {
 				downloadURL = downloadInfo.DownloadURL
-			} else if downloadInfo.ExternalURL != "" {
+			} else if downloadInfo.ExternalURL != "" && isDirectDownloadURL(downloadInfo.ExternalURL) {
 				downloadURL = downloadInfo.ExternalURL
 			}
 			if downloadInfo.FileInfo != nil {
@@ -115,4 +117,30 @@ func (c *HangarClient) GetCompatibility(
 		MinecraftVersions: minecraftVersions,
 		PaperVersions:     paperVersions,
 	}, nil
+}
+
+// isDirectDownloadURL checks if a URL points to a direct file download
+// rather than a web page (e.g., GitHub release page).
+func isDirectDownloadURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+
+	path := strings.ToLower(parsed.Path)
+
+	// Direct download file extensions
+	directExtensions := []string{".jar", ".zip", ".tar.gz", ".tgz"}
+	for _, ext := range directExtensions {
+		if strings.HasSuffix(path, ext) {
+			return true
+		}
+	}
+
+	// Common download path patterns
+	if strings.HasSuffix(path, "/download") || strings.Contains(path, "/download/") {
+		return true
+	}
+
+	return false
 }
