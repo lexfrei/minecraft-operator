@@ -24,7 +24,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +58,7 @@ type UpdateReconciler struct {
 	Scheme       *runtime.Scheme
 	PaperClient  *paper.Client
 	PluginClient plugins.PluginClient
+	PodExecutor  PodExecutor
 	cron         testutil.CronScheduler
 
 	// nowFunc returns current time; override in tests for deterministic behavior.
@@ -437,12 +437,11 @@ func (r *UpdateReconciler) downloadPluginToServer(
 	downloadURL string,
 	expectedHash string,
 ) error {
-	// Get pod for this server
 	podName := server.Name + "-0" // StatefulSet pod naming convention
 	namespace := server.Namespace
+	container := "papermc"
 
 	// Build curl command to download directly to /data/plugins/update/
-	// Using -L to follow redirects, -f to fail on HTTP errors
 	curlCmd := fmt.Sprintf(
 		"curl -fsSL -o /data/plugins/update/%s.jar '%s'",
 		pluginName,
@@ -454,14 +453,10 @@ func (r *UpdateReconciler) downloadPluginToServer(
 		"plugin", pluginName,
 		"url", downloadURL)
 
-	// Execute kubectl exec
-	cmd := exec.CommandContext(ctx,
-		"kubectl", "exec", "-n", namespace, podName,
-		"--", "sh", "-c", curlCmd)
-
-	output, err := cmd.CombinedOutput()
+	_, err := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
+		[]string{"sh", "-c", curlCmd})
 	if err != nil {
-		return errors.Wrapf(err, "failed to download plugin: %s", string(output))
+		return errors.Wrapf(err, "failed to download plugin %s", pluginName)
 	}
 
 	// Verify checksum if provided
@@ -471,13 +466,10 @@ func (r *UpdateReconciler) downloadPluginToServer(
 			pluginName,
 		)
 
-		cmd = exec.CommandContext(ctx,
-			"kubectl", "exec", "-n", namespace, podName,
-			"--", "sh", "-c", checksumCmd)
-
-		output, err = cmd.CombinedOutput()
-		if err != nil {
-			return errors.Wrapf(err, "failed to verify checksum: %s", string(output))
+		output, execErr := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
+			[]string{"sh", "-c", checksumCmd})
+		if execErr != nil {
+			return errors.Wrapf(execErr, "failed to verify checksum for plugin %s", pluginName)
 		}
 
 		actualHash := strings.TrimSpace(string(output))
@@ -1010,6 +1002,7 @@ func (r *UpdateReconciler) deletePluginJAR(
 ) error {
 	podName := server.Name + "-0"
 	namespace := server.Namespace
+	container := "papermc"
 	rmCmd := fmt.Sprintf("rm -f /data/plugins/%s", plugin.InstalledJARName)
 
 	slog.InfoContext(ctx, "Deleting plugin JAR",
@@ -1017,15 +1010,11 @@ func (r *UpdateReconciler) deletePluginJAR(
 		"plugin", plugin.PluginRef.Name,
 		"jar", plugin.InstalledJARName)
 
-	cmd := exec.CommandContext(ctx,
-		"kubectl", "exec", "-n", namespace, podName,
-		"--", "sh", "-c", rmCmd)
-
-	output, err := cmd.CombinedOutput()
+	_, err := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
+		[]string{"sh", "-c", rmCmd})
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to delete plugin JAR",
 			"error", err,
-			"output", string(output),
 			"plugin", plugin.PluginRef.Name)
 
 		return errors.Wrapf(err, "failed to delete JAR for plugin %s", plugin.PluginRef.Name)

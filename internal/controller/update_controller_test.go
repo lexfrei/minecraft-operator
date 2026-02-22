@@ -935,6 +935,70 @@ var _ = Describe("UpdateController", func() {
 		})
 	})
 
+	Context("PodExecutor-based plugin operations", func() {
+		It("should use PodExecutor for downloading plugins instead of kubectl", func() {
+			mockExec := &testutil.MockPodExecutor{}
+			reconciler := &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: mockExec,
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-exec-server",
+					Namespace: "default",
+				},
+			}
+
+			ctx := context.Background()
+			// Will fail because curl won't work, but we verify the call was made to PodExecutor
+			_ = reconciler.downloadPluginToServer(ctx, server, "test-plugin",
+				"https://example.com/plugin.jar", "")
+
+			Expect(mockExec.Calls).To(HaveLen(1))
+			Expect(mockExec.Calls[0].PodName).To(Equal("test-exec-server-0"))
+			Expect(mockExec.Calls[0].Namespace).To(Equal("default"))
+			Expect(mockExec.Calls[0].Container).To(Equal("papermc"))
+			Expect(mockExec.Calls[0].Command).To(ContainElement("sh"))
+		})
+
+		It("should use PodExecutor for deleting plugin JARs instead of kubectl", func() {
+			mockExec := &testutil.MockPodExecutor{}
+			reconciler := &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: mockExec,
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-exec-server",
+					Namespace: "default",
+				},
+			}
+
+			plugin := mcv1alpha1.ServerPluginStatus{
+				PluginRef: mcv1alpha1.PluginRef{
+					Name:      "test-plugin",
+					Namespace: "default",
+				},
+				InstalledJARName: "test-plugin-1.0.jar",
+			}
+
+			ctx := context.Background()
+			// deletePluginJAR will call PodExecutor then try markJARAsDeleted which may fail
+			// but we verify PodExecutor was called
+			_ = reconciler.deletePluginJAR(ctx, server, plugin)
+
+			Expect(mockExec.Calls).To(HaveLen(1))
+			Expect(mockExec.Calls[0].PodName).To(Equal("test-exec-server-0"))
+			Expect(mockExec.Calls[0].Container).To(Equal("papermc"))
+			// Verify the rm command is in the command args
+			Expect(mockExec.Calls[0].Command[2]).To(ContainSubstring("rm -f /data/plugins/test-plugin-1.0.jar"))
+		})
+	})
+
 	Context("RCON graceful shutdown", func() {
 		var (
 			ctx        context.Context

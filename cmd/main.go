@@ -274,12 +274,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create PodExecutor for executing commands inside pods
+	podExecutor, err := controller.NewK8sPodExecutor(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create pod executor")
+		os.Exit(1)
+	}
+
 	// Setup Update controller with real cron scheduler
 	updateReconciler := &controller.UpdateReconciler{
 		Client:       mgr.GetClient(),
 		Scheme:       mgr.GetScheme(),
 		PaperClient:  paperClient,
 		PluginClient: pluginClient,
+		PodExecutor:  podExecutor,
 	}
 	updateReconciler.SetCron(cronScheduler)
 	if err := updateReconciler.SetupWithManager(mgr); err != nil {
