@@ -9,8 +9,8 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 # CONTAINER_TOOL defines the container tool to be used for building images.
-# Use podman per global CLAUDE.md standards
-CONTAINER_TOOL ?= podman
+# Use nerdctl (Lima + containerd + BuildKit) per global CLAUDE.md standards
+CONTAINER_TOOL ?= nerdctl
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
