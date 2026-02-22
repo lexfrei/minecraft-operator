@@ -598,23 +598,23 @@ func (r *UpdateReconciler) waitForPodReady(
 
 		case <-ticker.C:
 			var pod corev1.Pod
-			if err := r.Get(ctx, client.ObjectKey{
+			if err := r.Get(ctxTimeout, client.ObjectKey{
 				Name:      podName,
 				Namespace: namespace,
 			}, &pod); err != nil {
-				slog.InfoContext(ctx, "Pod not found yet", "pod", podName)
+				slog.InfoContext(ctxTimeout, "Pod not found yet", "pod", podName)
 				continue
 			}
 
 			// Check if pod is ready
 			for _, condition := range pod.Status.Conditions {
 				if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
-					slog.InfoContext(ctx, "Pod is ready", "pod", podName)
+					slog.InfoContext(ctxTimeout, "Pod is ready", "pod", podName)
 					return nil
 				}
 			}
 
-			slog.InfoContext(ctx, "Pod not ready yet", "pod", podName, "phase", pod.Status.Phase)
+			slog.InfoContext(ctxTimeout, "Pod not ready yet", "pod", podName, "phase", pod.Status.Phase)
 		}
 	}
 }
