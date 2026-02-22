@@ -135,13 +135,7 @@ func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1alpha1.P
 		return result, err
 	}
 
-	// If no versions available (repo unavailable, no cache), return early
-	// with the result from syncPluginMetadata (e.g., RequeueAfter: 5m)
-	if len(allVersions) == 0 {
-		return result, nil
-	}
-
-	// Step 2: Find matched servers
+	// Step 2: Find matched servers (always, even when repo is unavailable)
 	matchedServers, err := r.findMatchedServers(ctx, plugin)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -149,8 +143,14 @@ func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1alpha1.P
 
 	slog.InfoContext(ctx, "Found matching servers", "count", len(matchedServers))
 
-	// Step 3: Update status (version resolution moved to PaperMCServer controller)
+	// Always update matched instances so the list stays current regardless of repo status
 	plugin.Status.MatchedInstances = buildMatchedInstances(matchedServers, plugin.Name, plugin.Namespace)
+
+	// If no versions available (repo unavailable, no cache), return early
+	// with the result from syncPluginMetadata (e.g., RequeueAfter: 5m)
+	if len(allVersions) == 0 {
+		return result, nil
+	}
 
 	// Update condition - metadata fetched successfully
 	r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,

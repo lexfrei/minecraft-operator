@@ -1062,6 +1062,72 @@ var _ = Describe("Plugin Controller", func() {
 			}
 		}
 
+		It("should update MatchedInstances even when repository is unavailable", func() {
+			pluginName := "test-repo-unavail-match"
+			selectorLabel := "match-unavail-repo"
+
+			// Create a PaperMCServer that matches the plugin selector
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "server-for-unavail-test",
+					Namespace: namespace,
+					Labels:    map[string]string{selectorLabel: "true"},
+				},
+				Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "papermc"}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, server)
+			}()
+
+			// Set mock to return error (simulating unavailable repository)
+			failingMock := &testutil.MockPluginClient{
+				VersionErr: fmt.Errorf("repository unavailable"),
+			}
+			failReconciler := &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: failingMock,
+				Solver:       solver.NewSimpleSolver(),
+			}
+
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:         mck8slexlav1alpha1.PluginSource{Type: "hangar", Project: "Nonexistent"},
+				UpdateStrategy: "latest",
+				InstanceSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{selectorLabel: "true"},
+				},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconcile — adds finalizer
+			_, err := failReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile — tries to fetch metadata (fails), should still update MatchedInstances
+			_, err = failReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// BUG: When repo is unavailable and no cache exists, doReconcile returns early
+			// at line 141 (len(allVersions) == 0) WITHOUT calling buildMatchedInstances.
+			// MatchedInstances should reflect current matching servers regardless of repo status.
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+			Expect(plugin.Status.MatchedInstances).NotTo(BeEmpty(),
+				"MatchedInstances should be updated even when repository is unavailable")
+			Expect(plugin.Status.MatchedInstances[0].Name).To(Equal("server-for-unavail-test"),
+				"MatchedInstances should contain the matching server")
+		})
+
 		It("should add finalizer on first reconcile", func() {
 			pluginName := "test-finalizer-add"
 			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
