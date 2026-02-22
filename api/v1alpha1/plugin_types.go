@@ -140,6 +140,11 @@ type DeletionProgressEntry struct {
 	// DeletedAt is when the JAR was actually deleted.
 	// +optional
 	DeletedAt *metav1.Time `json:"deletedAt,omitempty"`
+
+	// DeletionRequestedAt is when the JAR deletion was first requested.
+	// Used for timeout-based forced completion to prevent deadlocks.
+	// +optional
+	DeletionRequestedAt *metav1.Time `json:"deletionRequestedAt,omitempty"`
 }
 
 // PluginStatus defines the observed state of Plugin.

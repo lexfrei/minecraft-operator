@@ -362,7 +362,10 @@ func (r *PluginReconciler) reconcileDelete(
 		return ctrl.Result{}, errors.Wrap(err, "failed to mark plugin for deletion")
 	}
 
-	// Step 4: Check if all JARs have been deleted
+	// Step 4: Force-complete stale deletion entries to prevent deadlocks
+	r.forceCompleteStaleDeletions(plugin)
+
+	// Step 5: Check if all JARs have been deleted
 	if !r.allJARsDeleted(plugin) {
 		slog.InfoContext(ctx, "Waiting for JAR deletion on servers",
 			"plugin", plugin.Name,
@@ -370,7 +373,7 @@ func (r *PluginReconciler) reconcileDelete(
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Step 5: All JARs deleted, remove finalizer
+	// Step 6: All JARs deleted, remove finalizer
 	return r.removeFinalizer(ctx, plugin)
 }
 
@@ -389,12 +392,15 @@ func (r *PluginReconciler) initDeletionProgressIfNeeded(
 		return errors.Wrap(err, "failed to find matched servers")
 	}
 
+	now := metav1.Now()
 	plugin.Status.DeletionProgress = make([]mcv1alpha1.DeletionProgressEntry, len(matchedServers))
+
 	for i, server := range matchedServers {
 		plugin.Status.DeletionProgress[i] = mcv1alpha1.DeletionProgressEntry{
-			ServerName: server.Name,
-			Namespace:  server.Namespace,
-			JARDeleted: false,
+			ServerName:          server.Name,
+			Namespace:           server.Namespace,
+			JARDeleted:          false,
+			DeletionRequestedAt: &now,
 		}
 	}
 
@@ -407,6 +413,29 @@ func (r *PluginReconciler) initDeletionProgressIfNeeded(
 		"plugin", plugin.Name,
 		"servers", len(matchedServers))
 	return nil
+}
+
+// deletionTimeout is the maximum time to wait for JAR deletion before force-completing.
+const deletionTimeout = 10 * time.Minute
+
+// forceCompleteStaleDeletions force-marks stale deletion entries as completed
+// to prevent deadlocks when JAR deletion fails repeatedly.
+func (r *PluginReconciler) forceCompleteStaleDeletions(plugin *mcv1alpha1.Plugin) {
+	now := metav1.Now()
+
+	for i := range plugin.Status.DeletionProgress {
+		entry := &plugin.Status.DeletionProgress[i]
+		if !entry.JARDeleted && entry.DeletionRequestedAt != nil &&
+			time.Since(entry.DeletionRequestedAt.Time) > deletionTimeout {
+			slog.Warn("Force-completing stale deletion entry",
+				"plugin", plugin.Name,
+				"server", entry.ServerName,
+				"requestedAt", entry.DeletionRequestedAt.Time)
+
+			entry.JARDeleted = true
+			entry.DeletedAt = &now
+		}
+	}
 }
 
 // allJARsDeleted checks if all JARs have been deleted from servers.

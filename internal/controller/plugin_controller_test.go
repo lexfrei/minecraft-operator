@@ -527,4 +527,70 @@ var _ = Describe("Plugin Controller", func() {
 			// allowing finalizer removal. This test verifies preconditions.
 		})
 	})
+
+	Context("Deletion timeout to prevent deadlock", func() {
+		It("should force-complete deletion entries older than timeout", func() {
+			reconciler := &PluginReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			fifteenMinAgo := metav1.NewTime(time.Now().Add(-15 * time.Minute))
+			oneMinAgo := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+
+			plugin := &mck8slexlav1alpha1.Plugin{
+				Status: mck8slexlav1alpha1.PluginStatus{
+					DeletionProgress: []mck8slexlav1alpha1.DeletionProgressEntry{
+						{
+							ServerName:          "stale-server",
+							Namespace:           "default",
+							JARDeleted:          false,
+							DeletionRequestedAt: &fifteenMinAgo, // 15 min ago — should be force-completed
+						},
+						{
+							ServerName:          "recent-server",
+							Namespace:           "default",
+							JARDeleted:          false,
+							DeletionRequestedAt: &oneMinAgo, // 1 min ago — should NOT be force-completed
+						},
+					},
+				},
+			}
+
+			reconciler.forceCompleteStaleDeletions(plugin)
+
+			Expect(plugin.Status.DeletionProgress[0].JARDeleted).To(BeTrue(),
+				"Stale entry (15 min ago) should be force-completed")
+			Expect(plugin.Status.DeletionProgress[0].DeletedAt).NotTo(BeNil())
+
+			Expect(plugin.Status.DeletionProgress[1].JARDeleted).To(BeFalse(),
+				"Recent entry (1 min ago) should NOT be force-completed")
+			Expect(plugin.Status.DeletionProgress[1].DeletedAt).To(BeNil())
+		})
+
+		It("should not force-complete entries without DeletionRequestedAt", func() {
+			reconciler := &PluginReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			plugin := &mck8slexlav1alpha1.Plugin{
+				Status: mck8slexlav1alpha1.PluginStatus{
+					DeletionProgress: []mck8slexlav1alpha1.DeletionProgressEntry{
+						{
+							ServerName:          "no-timestamp-server",
+							Namespace:           "default",
+							JARDeleted:          false,
+							DeletionRequestedAt: nil,
+						},
+					},
+				},
+			}
+
+			reconciler.forceCompleteStaleDeletions(plugin)
+
+			Expect(plugin.Status.DeletionProgress[0].JARDeleted).To(BeFalse(),
+				"Entry without DeletionRequestedAt should not be force-completed")
+		})
+	})
 })
