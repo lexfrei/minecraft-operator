@@ -1618,6 +1618,57 @@ var _ = Describe("Plugin Controller", func() {
 		})
 	})
 
+	Context("statusEqual comparison gaps", func() {
+		It("should detect MinecraftVersions change in AvailableVersions", func() {
+			a := &mck8slexlav1alpha1.PluginStatus{
+				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+					{
+						Version:           "1.0.0",
+						DownloadURL:       "https://example.com/v1.jar",
+						Hash:              "abc123",
+						MinecraftVersions: []string{"1.20", "1.21"},
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+					{
+						Version:           "1.0.0",
+						DownloadURL:       "https://example.com/v1.jar",
+						Hash:              "abc123",
+						MinecraftVersions: []string{"1.20"}, // Removed 1.21
+					},
+				},
+			}
+			Expect(statusEqual(a, b)).To(BeFalse(),
+				"statusEqual should detect MinecraftVersions change")
+		})
+
+		It("should detect ReleasedAt change in AvailableVersions", func() {
+			now := metav1.Now()
+			later := metav1.NewTime(now.Add(24 * time.Hour))
+
+			a := &mck8slexlav1alpha1.PluginStatus{
+				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+					{
+						Version:    "1.0.0",
+						ReleasedAt: now,
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+					{
+						Version:    "1.0.0",
+						ReleasedAt: later,
+					},
+				},
+			}
+			Expect(statusEqual(a, b)).To(BeFalse(),
+				"statusEqual should detect ReleasedAt change")
+		})
+	})
+
 	Context("Reconcile must not return both non-zero Result and error", func() {
 		It("should never return result and error simultaneously in plugin controller", func() {
 			fset := token.NewFileSet()

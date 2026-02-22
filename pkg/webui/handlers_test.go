@@ -453,6 +453,38 @@ func TestHandleApplyNowSetsAnnotation(t *testing.T) {
 	}
 }
 
+func TestHandleApplyNowFromPluginRouteReturnsError(t *testing.T) {
+	t.Parallel()
+
+	server := &mck8slexlav1alpha1.PaperMCServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-server",
+			Namespace: "default",
+		},
+		Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+			UpdateStrategy: "auto",
+		},
+	}
+
+	srv := newTestServer(server)
+
+	// Simulate calling apply-now from plugin route path
+	// handlePluginRoutes routes /ui/plugin/{name}/apply-now to handleApplyNow
+	// but handleApplyNow uses parseResourcePathAction with "/ui/server/" prefix
+	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/some-plugin/apply-now?namespace=default", nil)
+	w := httptest.NewRecorder()
+
+	// This should NOT return 400 — apply-now from plugin route should work or be explicitly unsupported
+	srv.handlePluginRoutes(w, req)
+
+	// The bug: handleApplyNow uses parseResourcePathAction with "/ui/server/" prefix,
+	// so it fails to parse plugin path and returns 400
+	if w.Code == http.StatusBadRequest {
+		t.Error("handleApplyNow called from plugin route returned 400 due to wrong path prefix parsing — " +
+			"either fix the routing or remove apply-now from plugin routes")
+	}
+}
+
 func TestHandleServerDeleteRemovesServer(t *testing.T) {
 	t.Parallel()
 

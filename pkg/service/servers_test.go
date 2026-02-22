@@ -796,6 +796,53 @@ func TestFetchPluginDetails_PluginNotFound(t *testing.T) {
 	assert.Empty(t, result.Plugins[0].SourceType)
 }
 
+func TestFetchPluginDetailsUsesPluginRefNamespace(t *testing.T) {
+	t.Parallel()
+
+	// Plugin is in "plugins-ns" namespace, but server is in "default"
+	pluginInOtherNS := &mck8slexlav1alpha1.Plugin{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cross-ns-plugin",
+			Namespace: "plugins-ns",
+		},
+		Spec: mck8slexlav1alpha1.PluginSpec{
+			Source: mck8slexlav1alpha1.PluginSource{
+				Type:    "hangar",
+				Project: "TestProject",
+			},
+			UpdateStrategy: "latest",
+		},
+	}
+
+	server := makeTestServer("test-server", "default")
+	server.Status.Plugins = []mck8slexlav1alpha1.ServerPluginStatus{
+		{
+			PluginRef: mck8slexlav1alpha1.PluginRef{
+				Name:      "cross-ns-plugin",
+				Namespace: "plugins-ns", // Plugin is in different namespace
+			},
+			ResolvedVersion: "2.0.0",
+			Compatible:      true,
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(newTestSchemeWithAppsV1()).
+		WithObjects(server, pluginInOtherNS).
+		Build()
+
+	svc := NewServerService(fakeClient)
+	result, err := svc.GetServer(context.Background(), "default", "test-server")
+
+	require.NoError(t, err)
+	require.Len(t, result.Plugins, 1)
+
+	// Should find the plugin using PluginRef.Namespace ("plugins-ns"),
+	// not the server's namespace ("default")
+	assert.Equal(t, "hangar", result.Plugins[0].SourceType,
+		"fetchPluginDetails should use PluginRef.Namespace to find the plugin")
+}
+
 // --- Constructor test ---
 
 func TestNewServerService(t *testing.T) {
