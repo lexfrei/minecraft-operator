@@ -274,16 +274,271 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
+	})
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput, err := getMetricsOutput()
-		// Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+	Context("PaperMCServer lifecycle", func() {
+		const serverName = "e2e-test-server"
+
+		AfterEach(func() {
+			// Clean up CR and associated resources
+			cmd := exec.Command("kubectl", "delete", "papermcserver", serverName,
+				"-n", namespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			cmd = exec.Command("kubectl", "delete", "secret", serverName+"-rcon",
+				"-n", namespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			// Wait for cleanup to complete
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
+					"-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred(), "StatefulSet should be deleted")
+			}, 60*time.Second).Should(Succeed())
+		})
+
+		It("should create StatefulSet and Service when PaperMCServer is created", func() {
+			By("creating RCON secret")
+			cmd := exec.Command("kubectl", "create", "secret", "generic",
+				serverName+"-rcon",
+				"--from-literal=password=test-pass",
+				"-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating a PaperMCServer CR")
+			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1alpha1
+kind: PaperMCServer
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  updateStrategy: "latest"
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+  gracefulShutdown:
+    timeout: 60s
+  rcon:
+    enabled: true
+    port: 25575
+    passwordSecret:
+      name: %s-rcon
+      key: password
+  podTemplate:
+    spec:
+      containers:
+      - name: minecraft
+        image: docker.io/lexfrei/papermc:1.21.1-91
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        env:
+        - name: EULA
+          value: "TRUE"`, serverName, namespace, serverName)
+
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(serverYAML)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying StatefulSet is created")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
+					"-n", namespace, "-o", "jsonpath={.metadata.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal(serverName))
+			}, 60*time.Second).Should(Succeed())
+
+			By("verifying Service is created")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "service", serverName,
+					"-n", namespace, "-o", "jsonpath={.metadata.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal(serverName))
+			}, 30*time.Second).Should(Succeed())
+
+			By("verifying StatefulSet has correct image (not :latest)")
+			cmd = exec.Command("kubectl", "get", "statefulset", serverName,
+				"-n", namespace,
+				"-o", "jsonpath={.spec.template.spec.containers[0].image}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).NotTo(ContainSubstring(":latest"),
+				"StatefulSet image must never use :latest tag")
+			Expect(output).To(ContainSubstring("lexfrei/papermc:"),
+				"StatefulSet image should reference papermc")
+		})
+
+		It("should clean up StatefulSet and Service when PaperMCServer is deleted", func() {
+			By("creating RCON secret")
+			cmd := exec.Command("kubectl", "create", "secret", "generic",
+				serverName+"-rcon",
+				"--from-literal=password=test-pass",
+				"-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating a PaperMCServer CR")
+			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1alpha1
+kind: PaperMCServer
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  updateStrategy: "latest"
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+  gracefulShutdown:
+    timeout: 60s
+  rcon:
+    enabled: true
+    port: 25575
+    passwordSecret:
+      name: %s-rcon
+      key: password
+  podTemplate:
+    spec:
+      containers:
+      - name: minecraft
+        image: docker.io/lexfrei/papermc:1.21.1-91
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+        env:
+        - name: EULA
+          value: "TRUE"`, serverName, namespace, serverName)
+
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(serverYAML)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for StatefulSet to appear")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
+					"-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}, 60*time.Second).Should(Succeed())
+
+			By("deleting the PaperMCServer CR")
+			cmd = exec.Command("kubectl", "delete", "papermcserver", serverName,
+				"-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying StatefulSet is removed via owner reference cascade")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
+					"-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred(), "StatefulSet should be deleted")
+			}, 60*time.Second).Should(Succeed())
+
+			By("verifying Service is removed")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "service", serverName,
+					"-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred(), "Service should be deleted")
+			}, 30*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("Operator handles misconfiguration gracefully", func() {
+		const badCronServer = "e2e-bad-cron"
+
+		AfterEach(func() {
+			cmd := exec.Command("kubectl", "delete", "papermcserver", badCronServer,
+				"-n", namespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			cmd = exec.Command("kubectl", "delete", "secret", badCronServer+"-rcon",
+				"-n", namespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should set CronScheduleValid=False for invalid cron and continue operating", func() {
+			By("creating RCON secret")
+			cmd := exec.Command("kubectl", "create", "secret", "generic",
+				badCronServer+"-rcon",
+				"--from-literal=password=test-pass",
+				"-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating PaperMCServer with invalid cron expression")
+			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1alpha1
+kind: PaperMCServer
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  updateStrategy: "latest"
+  updateSchedule:
+    checkCron: "not-a-valid-cron"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+  gracefulShutdown:
+    timeout: 60s
+  rcon:
+    enabled: true
+    port: 25575
+    passwordSecret:
+      name: %s-rcon
+      key: password
+  podTemplate:
+    spec:
+      containers:
+      - name: minecraft
+        image: docker.io/lexfrei/papermc:1.21.1-91
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+        env:
+        - name: EULA
+          value: "TRUE"`, badCronServer, namespace, badCronServer)
+
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(serverYAML)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying CronScheduleValid condition is set to False")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "papermcserver", badCronServer,
+					"-n", namespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='CronScheduleValid')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("False"),
+					"CronScheduleValid should be False for invalid cron")
+			}, 60*time.Second).Should(Succeed())
+
+			By("verifying operator pod is still running (not crash-looping)")
+			cmd = exec.Command("kubectl", "get", "pods", "-l", "control-plane=controller-manager",
+				"-n", namespace, "-o", "jsonpath={.items[0].status.phase}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("Running"),
+				"Operator should continue running despite invalid cron")
+		})
 	})
 })
 
