@@ -2106,4 +2106,34 @@ var _ = Describe("UpdateController", func() {
 				"Should reject update just after the 1-hour maintenance window")
 		})
 	})
+
+	Context("Plugin deletion with empty InstalledJARName", func() {
+		It("should immediately mark JAR as deleted when InstalledJARName is empty", func() {
+			// Bug 8: When a plugin was never installed (InstalledJARName empty),
+			// the update controller should immediately mark the JAR as deleted
+			// instead of waiting for a 10-minute timeout.
+			server := &mcv1alpha1.PaperMCServer{
+				Status: mcv1alpha1.PaperMCServerStatus{
+					Plugins: []mcv1alpha1.ServerPluginStatus{
+						{
+							PluginRef: mcv1alpha1.PluginRef{
+								Name:      "never-installed-plugin",
+								Namespace: "default",
+							},
+							PendingDeletion: true,
+							InstalledJARName: "", // never installed
+						},
+					},
+				},
+			}
+
+			// getPluginsToDelete should NOT skip plugins with empty InstalledJARName
+			// when PendingDeletion is true — they should be returned for immediate cleanup
+			result := (&UpdateReconciler{}).getPluginsToDelete(server)
+
+			// Currently this returns 0 (the bug), should return 1 (the fix)
+			Expect(result).To(HaveLen(1),
+				"Should include plugins with empty InstalledJARName for immediate deletion completion")
+		})
+	})
 })

@@ -425,3 +425,55 @@ func TestNewHangarClient_CreatesClient(t *testing.T) {
 	assert.NotNil(t, client)
 	assert.NotNil(t, client.client)
 }
+
+// --- External URL validation test ---
+
+func TestHangarClient_GetVersions_ExternalURL_GitHubReleasePage(t *testing.T) {
+	t.Parallel()
+
+	// Bug 12: ExternalURL pointing to GitHub release PAGE (not JAR)
+	// should either be resolved to an actual JAR download URL
+	// or marked as non-downloadable.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/projects/github-plugin":
+			project := makeTestProject("github-plugin")
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(project)
+		case "/projects/TestOwner/github-plugin/versions":
+			version := hangar.Version{
+				ID:           1,
+				Name:         "2.21.2",
+				GameVersions: []string{"1.21.8"},
+				Downloads: map[string]hangar.DownloadInfo{
+					"PAPER": {
+						// This is a release PAGE, not a direct JAR download!
+						ExternalURL: "https://github.com/EssentialsX/Essentials/releases/tags/2.21.2",
+					},
+				},
+				CreatedAt: time.Date(2025, 8, 3, 0, 0, 0, 0, time.UTC),
+			}
+			versions := makeVersionsList(version)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(versions)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestHangarClient(server.URL, server.Client())
+	versions, err := client.GetVersions(context.Background(), "github-plugin")
+
+	require.NoError(t, err)
+	require.Len(t, versions, 1)
+
+	// The download URL should either:
+	// a) be empty (not downloadable via simple curl), or
+	// b) be resolved to an actual JAR asset URL
+	// Currently it returns the release page URL, which is wrong.
+	assert.NotEqual(t,
+		"https://github.com/EssentialsX/Essentials/releases/tags/2.21.2",
+		versions[0].DownloadURL,
+		"ExternalURL pointing to GitHub release page should NOT be used as DownloadURL")
+}

@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	"github.com/lexfrei/minecraft-operator/pkg/solver"
 )
 
 var _ = Describe("PaperMCServer Controller", func() {
@@ -568,6 +569,177 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 			Expect(equal).To(BeFalse(),
 				"serverStatusEqual should detect LastUpdate changes")
+		})
+	})
+
+	Context("buildPluginStatus preserves existing data", func() {
+		It("should preserve InstalledJARName from previous status", func() {
+			// Bug 11: buildPluginStatus overwrites entire status,
+			// losing InstalledJARName set by update controller
+			reconciler := &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Solver: solver.NewSimpleSolver(),
+			}
+
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-preserve",
+					Namespace: "default",
+				},
+				Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+					Version: "1.21.4",
+				},
+				Status: mck8slexlav1alpha1.PaperMCServerStatus{
+					CurrentVersion: "1.21.4",
+					Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+						{
+							PluginRef: mck8slexlav1alpha1.PluginRef{
+								Name:      "my-plugin",
+								Namespace: "default",
+							},
+							InstalledJARName: "my-plugin.jar",
+							CurrentVersion:   "2.0.0",
+						},
+					},
+				},
+			}
+
+			matchedPlugins := []mck8slexlav1alpha1.Plugin{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-plugin",
+						Namespace: "default",
+					},
+					Spec: mck8slexlav1alpha1.PluginSpec{
+						Source: mck8slexlav1alpha1.PluginSource{
+							Type: "hangar",
+						},
+					},
+					Status: mck8slexlav1alpha1.PluginStatus{
+						AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+							{
+								Version:           "2.1.0",
+								MinecraftVersions: []string{"1.21.4"},
+							},
+						},
+					},
+				},
+			}
+
+			result := reconciler.buildPluginStatus(context.Background(), server, matchedPlugins)
+
+			Expect(result).To(HaveLen(1))
+			Expect(result[0].InstalledJARName).To(Equal("my-plugin.jar"),
+				"buildPluginStatus must preserve InstalledJARName from previous status")
+			Expect(result[0].CurrentVersion).To(Equal("2.0.0"),
+				"buildPluginStatus must preserve CurrentVersion from previous status")
+		})
+
+		It("should preserve PendingDeletion from previous status", func() {
+			reconciler := &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Solver: solver.NewSimpleSolver(),
+			}
+
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-preserve-pending",
+					Namespace: "default",
+				},
+				Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+					Version: "1.21.4",
+				},
+				Status: mck8slexlav1alpha1.PaperMCServerStatus{
+					CurrentVersion: "1.21.4",
+					Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+						{
+							PluginRef: mck8slexlav1alpha1.PluginRef{
+								Name:      "deleting-plugin",
+								Namespace: "default",
+							},
+							PendingDeletion: true,
+						},
+					},
+				},
+			}
+
+			matchedPlugins := []mck8slexlav1alpha1.Plugin{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "deleting-plugin",
+						Namespace: "default",
+					},
+					Spec: mck8slexlav1alpha1.PluginSpec{
+						Source: mck8slexlav1alpha1.PluginSource{
+							Type: "hangar",
+						},
+					},
+					Status: mck8slexlav1alpha1.PluginStatus{
+						AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+							{
+								Version:           "1.0.0",
+								MinecraftVersions: []string{"1.21.4"},
+							},
+						},
+					},
+				},
+			}
+
+			result := reconciler.buildPluginStatus(context.Background(), server, matchedPlugins)
+
+			Expect(result).To(HaveLen(1))
+			Expect(result[0].PendingDeletion).To(BeTrue(),
+				"buildPluginStatus must preserve PendingDeletion from previous status")
+		})
+	})
+
+	Context("resolvePluginVersionForServer with empty versions", func() {
+		It("should not return error when plugin has no available versions yet", func() {
+			// Bug 9: Race condition - Plugin controller hasn't fetched metadata yet.
+			// This should not be logged as ERROR; it's a transient state.
+			reconciler := &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Solver: solver.NewSimpleSolver(),
+			}
+
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-empty-versions",
+					Namespace: "default",
+				},
+				Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+					Version: "1.21.4",
+				},
+				Status: mck8slexlav1alpha1.PaperMCServerStatus{
+					CurrentVersion: "1.21.4",
+				},
+			}
+
+			plugin := &mck8slexlav1alpha1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "new-plugin",
+					Namespace: "default",
+				},
+				Spec: mck8slexlav1alpha1.PluginSpec{
+					Source: mck8slexlav1alpha1.PluginSource{
+						Type: "hangar",
+					},
+				},
+				Status: mck8slexlav1alpha1.PluginStatus{
+					AvailableVersions: nil, // Not fetched yet
+				},
+			}
+
+			version, err := reconciler.resolvePluginVersionForServer(
+				context.Background(), server, plugin)
+
+			// Should return empty string without error (transient state)
+			Expect(err).NotTo(HaveOccurred(),
+				"Empty available versions is transient, not an error")
+			Expect(version).To(BeEmpty())
 		})
 	})
 })
