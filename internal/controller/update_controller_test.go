@@ -199,7 +199,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(mockCron.Jobs).To(BeEmpty())
 		})
 
-		It("should return error for invalid cron expression", func() {
+		It("should not return error for invalid cron expression but set condition", func() {
 			server := &mcv1alpha1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
@@ -247,8 +247,22 @@ var _ = Describe("UpdateController", func() {
 				},
 			}
 
+			// Bug 29: Invalid cron should NOT return error (permanent error causes infinite retry loop).
+			// Instead, it should set a CronScheduleValid condition to False and continue.
 			_, err := reconciler.Reconcile(ctx, req)
-			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify condition was set on the server status
+			var updatedServer mcv1alpha1.PaperMCServer
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      serverName,
+				Namespace: namespace,
+			}, &updatedServer)).To(Succeed())
+
+			cronCondition := meta.FindStatusCondition(updatedServer.Status.Conditions, "CronScheduleValid")
+			Expect(cronCondition).NotTo(BeNil(), "CronScheduleValid condition should be set")
+			Expect(cronCondition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cronCondition.Message).To(ContainSubstring("invalid"))
 		})
 
 		It("should remove cron job when PaperMCServer deleted", func() {
