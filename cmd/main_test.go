@@ -27,12 +27,11 @@ import (
 
 const mainGoPath = "main.go"
 
-func TestLogLevel_ShouldWarnOnInvalidValue(t *testing.T) {
+func TestLogLevel_ShouldWarnOnInvalidValue(t *testing.T) { //nolint:funlen // AST test requires verbose traversal
 	t.Parallel()
 
 	// BUG: The logLevel switch in main.go has a default case that silently
 	// sets slog.LevelInfo for invalid input like --log-level=verbose.
-	// The user gets no feedback that their requested level was ignored.
 	// The default case should log a warning or return an error.
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, mainGoPath, nil, parser.AllErrors)
@@ -43,13 +42,11 @@ func TestLogLevel_ShouldWarnOnInvalidValue(t *testing.T) {
 	var foundSwitch bool
 
 	ast.Inspect(f, func(n ast.Node) bool {
-		// Find switch statement on logLevel
 		switchStmt, ok := n.(*ast.SwitchStmt)
 		if !ok {
 			return true
 		}
 
-		// Check if this switch is on logLevel
 		tag, ok := switchStmt.Tag.(*ast.Ident)
 		if !ok || tag.Name != "logLevel" {
 			return true
@@ -57,51 +54,53 @@ func TestLogLevel_ShouldWarnOnInvalidValue(t *testing.T) {
 
 		foundSwitch = true
 
-		// Find the default case
 		for _, clause := range switchStmt.Body.List {
 			cc, ok := clause.(*ast.CaseClause)
-			if !ok || cc.List != nil { // non-nil List = not default
+			if !ok || cc.List != nil {
 				continue
 			}
 
-			// This is the default case. It should contain a warning/error/fatal call,
-			// not just a silent assignment.
-			hasWarning := false
-
-			for _, stmt := range cc.Body {
-				ast.Inspect(stmt, func(inner ast.Node) bool {
-					call, ok := inner.(*ast.CallExpr)
-					if !ok {
-						return true
-					}
-
-					sel, ok := call.Fun.(*ast.SelectorExpr)
-					if !ok {
-						return true
-					}
-
-					// Accept: slog.Warn*, log.Fatal*, fmt.Fprint* (to stderr), os.Exit
-					name := sel.Sel.Name
-					if name == "WarnContext" || name == "Warn" ||
-						name == "Fatalf" || name == "Fatal" ||
-						name == "Fprintf" || name == "Exit" {
-						hasWarning = true
-						return false
-					}
-
-					return true
-				})
-			}
-
+			hasWarning := defaultCaseHasWarning(cc)
 			assert.True(t, hasWarning,
 				"logLevel switch default case should warn about invalid value, "+
-					"not silently default to info. User gets no feedback for --log-level=verbose")
+					"not silently default to info")
 		}
 
 		return false
 	})
 
 	assert.True(t, foundSwitch, "logLevel switch statement not found in main.go")
+}
+
+// defaultCaseHasWarning checks if a switch default case contains a warning/error call.
+func defaultCaseHasWarning(cc *ast.CaseClause) bool {
+	hasWarning := false
+
+	for _, stmt := range cc.Body {
+		ast.Inspect(stmt, func(inner ast.Node) bool {
+			call, ok := inner.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+
+			name := sel.Sel.Name
+			if name == "WarnContext" || name == "Warn" ||
+				name == "Fatalf" || name == "Fatal" ||
+				name == "Fprintf" || name == "Exit" {
+				hasWarning = true
+				return false
+			}
+
+			return true
+		})
+	}
+
+	return hasWarning
 }
 
 func TestLogFormat_ShouldValidateExplicitly(t *testing.T) {

@@ -1919,6 +1919,44 @@ var _ = Describe("PaperMCServerController helpers", func() {
 		})
 	})
 
+	Context("buildPluginVersionPairs handles empty AvailableVersions", func() {
+		It("should not panic when plugin has empty AvailableVersions", func() {
+			// PROOF: Suspected nil dereference at line 1438 accessing [0] on empty
+			// AvailableVersions. Bounds check at line 1406 prevents this.
+			reconciler := &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Solver: solver.NewSimpleSolver(),
+			}
+
+			pluginWithNoVersions := mck8slexlav1alpha1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "empty-versions-plugin",
+					Namespace: "default",
+				},
+				Spec: mck8slexlav1alpha1.PluginSpec{
+					Source: mck8slexlav1alpha1.PluginSource{
+						Type:    "hangar",
+						Project: "test",
+					},
+				},
+				Status: mck8slexlav1alpha1.PluginStatus{
+					AvailableVersions: nil, // Empty!
+				},
+			}
+
+			// Should not panic — bounds check skips plugins with no versions
+			pairs := reconciler.buildPluginVersionPairs(
+				context.Background(),
+				"1.21.4",
+				[]mck8slexlav1alpha1.Plugin{pluginWithNoVersions},
+			)
+
+			Expect(pairs).To(BeEmpty(),
+				"buildPluginVersionPairs should return empty for plugins with no available versions")
+		})
+	})
+
 	Context("updateHistoryEqual", func() {
 		It("should detect different AppliedAt timestamps as not equal", func() {
 			// BUG: updateHistoryEqual only compares Successful and PreviousVersion,

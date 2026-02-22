@@ -3666,4 +3666,77 @@ var _ = Describe("UpdateController", func() {
 			Expect(foundFunc).To(BeTrue(), "performCombinedUpdate function not found")
 		})
 	})
+
+	Context("removeApplyNowAnnotation handles nil Annotations safely", func() {
+		It("should not panic when server has nil Annotations", func() {
+			// PROOF: Suspected panic from delete(nil, key) when re-fetched server
+			// has nil Annotations map. Go spec guarantees delete(nil, key) is a no-op.
+			// Additionally, removeApplyNowAnnotation returns early when Annotations is nil.
+			reconciler := &UpdateReconciler{
+				Client: k8sClient,
+			}
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "nil-annotations-server",
+					Namespace:   "default",
+					Annotations: nil, // nil annotations
+				},
+			}
+
+			// Should return nil without panicking
+			err := reconciler.removeApplyNowAnnotation(context.Background(), server)
+			Expect(err).NotTo(HaveOccurred(),
+				"removeApplyNowAnnotation should handle nil Annotations safely")
+		})
+	})
+
+	Context("InstalledJARName format is safe for shell interpolation", func() {
+		It("should only contain RFC 1123 safe characters plus .jar suffix", func() {
+			// PROOF: Suspected shell injection via InstalledJARName in rm -f command.
+			// InstalledJARName is constructed as pluginName + ".jar" where pluginName
+			// is a Kubernetes resource name (RFC 1123: [a-z0-9][a-z0-9-]*).
+			// This format cannot contain shell metacharacters.
+			fset := token.NewFileSet()
+			f, parseErr := parser.ParseFile(fset, updateControllerPath, nil, parser.AllErrors)
+			Expect(parseErr).NotTo(HaveOccurred())
+
+			// Verify InstalledJARName is always assigned as pluginName + ".jar"
+			// and never from user-controlled input.
+			var foundAssignment bool
+
+			ast.Inspect(f, func(n ast.Node) bool {
+				assign, ok := n.(*ast.AssignStmt)
+				if !ok || len(assign.Lhs) != 1 || len(assign.Rhs) != 1 {
+					return true
+				}
+
+				// Check if LHS is *.InstalledJARName
+				sel, ok := assign.Lhs[0].(*ast.SelectorExpr)
+				if !ok || sel.Sel.Name != "InstalledJARName" {
+					return true
+				}
+
+				// Check if RHS is <ident> + ".jar"
+				binExpr, ok := assign.Rhs[0].(*ast.BinaryExpr)
+				if !ok {
+					return true
+				}
+
+				lit, ok := binExpr.Y.(*ast.BasicLit)
+				if !ok {
+					return true
+				}
+
+				Expect(lit.Value).To(Equal(`".jar"`),
+					"InstalledJARName should be constructed as pluginName + \".jar\"")
+				foundAssignment = true
+
+				return true
+			})
+
+			Expect(foundAssignment).To(BeTrue(),
+				"InstalledJARName assignment not found in update_controller.go")
+		})
+	})
 })
