@@ -318,16 +318,35 @@ func (r *PluginReconciler) setCondition(
 
 // statusEqual compares two Plugin statuses for equality.
 func statusEqual(a, b *mcv1alpha1.PluginStatus) bool {
-	// ResolvedVersion removed - version resolution moved to PaperMCServer controller
 	if a.RepositoryStatus != b.RepositoryStatus {
 		return false
 	}
+
 	if len(a.MatchedInstances) != len(b.MatchedInstances) {
 		return false
 	}
+
+	for i := range a.MatchedInstances {
+		if a.MatchedInstances[i].Name != b.MatchedInstances[i].Name ||
+			a.MatchedInstances[i].Namespace != b.MatchedInstances[i].Namespace ||
+			a.MatchedInstances[i].Compatible != b.MatchedInstances[i].Compatible ||
+			a.MatchedInstances[i].Version != b.MatchedInstances[i].Version {
+			return false
+		}
+	}
+
 	if len(a.AvailableVersions) != len(b.AvailableVersions) {
 		return false
 	}
+
+	for i := range a.AvailableVersions {
+		if a.AvailableVersions[i].Version != b.AvailableVersions[i].Version ||
+			a.AvailableVersions[i].DownloadURL != b.AvailableVersions[i].DownloadURL ||
+			a.AvailableVersions[i].Hash != b.AvailableVersions[i].Hash {
+			return false
+		}
+	}
+
 	return true
 }
 

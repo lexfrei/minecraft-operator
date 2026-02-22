@@ -593,4 +593,97 @@ var _ = Describe("Plugin Controller", func() {
 				"Entry without DeletionRequestedAt should not be force-completed")
 		})
 	})
+
+	Context("statusEqual", func() {
+		now := metav1.Now()
+
+		It("should detect DownloadURL change in AvailableVersions", func() {
+			// Bug: statusEqual only compares len(AvailableVersions), not content.
+			// When downloadURL changes (e.g., from GitHub page URL to empty after Bug 12 fix),
+			// status update is skipped because len stays the same.
+			a := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+					{
+						Version:     "2.21.2",
+						DownloadURL: "https://github.com/EssentialsX/Essentials/releases/tags/2.21.2",
+						CachedAt:    now,
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+					{
+						Version:     "2.21.2",
+						DownloadURL: "", // Empty after Bug 12 fix
+						CachedAt:    now,
+					},
+				},
+			}
+
+			Expect(statusEqual(a, b)).To(BeFalse(),
+				"statusEqual should detect DownloadURL change in AvailableVersions")
+		})
+
+		It("should detect version change in AvailableVersions", func() {
+			a := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+					{Version: "1.0.0", CachedAt: now},
+				},
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+					{Version: "2.0.0", CachedAt: now},
+				},
+			}
+
+			Expect(statusEqual(a, b)).To(BeFalse(),
+				"statusEqual should detect version change in AvailableVersions")
+		})
+
+		It("should detect MatchedInstances content change", func() {
+			a := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				MatchedInstances: []mck8slexlav1alpha1.MatchedInstance{
+					{Name: "server-a", Compatible: true},
+				},
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				MatchedInstances: []mck8slexlav1alpha1.MatchedInstance{
+					{Name: "server-b", Compatible: true},
+				},
+			}
+
+			Expect(statusEqual(a, b)).To(BeFalse(),
+				"statusEqual should detect MatchedInstances content change")
+		})
+
+		It("should return true for truly equal statuses", func() {
+			a := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+					{Version: "1.0.0", DownloadURL: "https://example.com/v1.jar", CachedAt: now},
+				},
+				MatchedInstances: []mck8slexlav1alpha1.MatchedInstance{
+					{Name: "server-a", Compatible: true},
+				},
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				RepositoryStatus: "available",
+				AvailableVersions: []mck8slexlav1alpha1.PluginVersionInfo{
+					{Version: "1.0.0", DownloadURL: "https://example.com/v1.jar", CachedAt: now},
+				},
+				MatchedInstances: []mck8slexlav1alpha1.MatchedInstance{
+					{Name: "server-a", Compatible: true},
+				},
+			}
+
+			Expect(statusEqual(a, b)).To(BeTrue(),
+				"statusEqual should return true for identical statuses")
+		})
+	})
 })
