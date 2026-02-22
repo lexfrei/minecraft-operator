@@ -185,13 +185,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${ARM64_DIGEST}
 
   lint-chart:
-    name: Lint Charts
+    name: Lint Chart
     runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        chart:
-          - minecraft-operator-crds
-          - minecraft-operator
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -241,34 +236,31 @@ jobs:
           npm install --global markdownlint-cli
 
       - name: Run Helm Lint
-        run: helm lint charts/${{ matrix.chart }}
+        run: helm lint charts/minecraft-operator
 
       - name: Run Helm Unittest
         run: |
-          CHART_DIR="charts/${{ matrix.chart }}"
-          if [ -d "$CHART_DIR/tests" ]; then
-            helm unittest $CHART_DIR --color --with-subchart=false
+          if [ -d "charts/minecraft-operator/tests" ]; then
+            helm unittest charts/minecraft-operator --color --with-subchart=false
           fi
 
       - name: Run chart-testing lint
-        run: ct lint --charts charts/${{ matrix.chart }}
+        run: ct lint --charts charts/minecraft-operator
 
       - name: Run Artifact Hub Lint
-        run: ah lint --kind helm --path charts/${{ matrix.chart }}
+        run: ah lint --kind helm --path charts/minecraft-operator
 
       - name: Validate JSON Schema
         run: |
-          CHART_DIR="charts/${{ matrix.chart }}"
-          if [ -f "$CHART_DIR/values.schema.json" ]; then
-            check-jsonschema --schemafile "$CHART_DIR/values.schema.json" "$CHART_DIR/values.yaml"
+          if [ -f "charts/minecraft-operator/values.schema.json" ]; then
+            check-jsonschema --schemafile "charts/minecraft-operator/values.schema.json" "charts/minecraft-operator/values.yaml"
           fi
 
       - name: Check README Documentation
         run: |
-          CHART_DIR="charts/${{ matrix.chart }}"
-          if [ -f "$CHART_DIR/README.md.gotmpl" ]; then
+          if [ -f "charts/minecraft-operator/README.md.gotmpl" ]; then
             helm-docs --chart-search-root=charts
-            if ! git diff --exit-code "$CHART_DIR/README.md"; then
+            if ! git diff --exit-code "charts/minecraft-operator/README.md"; then
               echo "README.md is out of date. Please run 'helm-docs' locally and commit the changes."
               exit 1
             fi
@@ -276,25 +268,23 @@ jobs:
 
       - name: Run Markdownlint
         run: |
-          CHART_DIR="charts/${{ matrix.chart }}"
-          if [ -f "$CHART_DIR/README.md" ]; then
-            if [ -f "$CHART_DIR/.markdownlint.yaml" ]; then
-              markdownlint "$CHART_DIR/README.md" --config "$CHART_DIR/.markdownlint.yaml"
+          if [ -f "charts/minecraft-operator/README.md" ]; then
+            if [ -f "charts/minecraft-operator/.markdownlint.yaml" ]; then
+              markdownlint "charts/minecraft-operator/README.md" --config "charts/minecraft-operator/.markdownlint.yaml"
             else
-              markdownlint "$CHART_DIR/README.md"
+              markdownlint "charts/minecraft-operator/README.md"
             fi
           fi
 
       - name: Template Chart
         run: |
-          CHART_DIR="charts/${{ matrix.chart }}"
-          if grep -q "^dependencies:" "$CHART_DIR/Chart.yaml"; then
-            helm dependency update "$CHART_DIR"
+          if grep -q "^dependencies:" "charts/minecraft-operator/Chart.yaml"; then
+            helm dependency update "charts/minecraft-operator"
           fi
-          helm template test-release "$CHART_DIR"
+          helm template test-release "charts/minecraft-operator"
 
   build-chart:
-    name: Build Charts
+    name: Build Chart
     runs-on: ubuntu-24.04
     needs:
       - security
@@ -323,30 +313,25 @@ jobs:
         run: |
           PR_VERSION="0.0.0-pr.${{ github.event.pull_request.number }}"
 
-          # Update CRD chart
-          yq eval ".version = \"${PR_VERSION}\"" --inplace charts/minecraft-operator-crds/Chart.yaml
-          yq eval ".appVersion = \"${PR_VERSION}\"" --inplace charts/minecraft-operator-crds/Chart.yaml
-
           # Update operator chart
           yq eval ".version = \"${PR_VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
           yq eval ".appVersion = \"${PR_VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
-          yq eval ".dependencies[0].version = \"${PR_VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
 
           # Update image reference
           yq eval ".image.repository = \"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\"" --inplace charts/minecraft-operator/values.yaml
           yq eval ".image.tag = \"latest\"" --inplace charts/minecraft-operator/values.yaml
 
-      - name: Package charts
+      - name: Package chart
         run: |
-          helm package charts/minecraft-operator-crds
-          helm dependency update charts/minecraft-operator
+          if grep -q "^dependencies:" "charts/minecraft-operator/Chart.yaml"; then
+            helm dependency update charts/minecraft-operator
+          fi
           helm package charts/minecraft-operator
 
-      - name: Push charts to ttl.sh
+      - name: Push chart to ttl.sh
         run: |
           PR_VERSION="0.0.0-pr.${{ github.event.pull_request.number }}"
 
-          helm push minecraft-operator-crds-${PR_VERSION}.tgz oci://${{ env.REGISTRY }}
           helm push minecraft-operator-${PR_VERSION}.tgz oci://${{ env.REGISTRY }}
 
   notify:
@@ -388,9 +373,9 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-              body: `## Container and Helm Charts Available
+              body: `## Container and Helm Chart Available
 
-            Multi-architecture container image and Helm charts are available for testing (expires in 24 hours).
+            Multi-architecture container image and Helm chart are available for testing (expires in 24 hours).
 
             ### Pull Commands
 
@@ -399,14 +384,9 @@ jobs:
             docker pull ${registry}/${imageName}:latest
             \`\`\`
 
-            **Helm Charts:**
+            **Helm Chart:**
             \`\`\`bash
-            # Install CRDs
-            helm install minecraft-operator-crds \\
-              oci://${registry}/minecraft-operator-crds \\
-              --version ${chartVersion}
-
-            # Install operator
+            # Install operator (CRDs are applied automatically at startup)
             helm install minecraft-operator \\
               oci://${registry}/minecraft-operator \\
               --version ${chartVersion}

@@ -136,16 +136,17 @@ infrastructure:
   helm:
     api_version: "v2"
     charts:
-      - name: "minecraft-operator-crds"
-        path: "charts/minecraft-operator-crds"
-        lifecycle: "independent"
-        purpose: "CRD definitions (separate lifecycle from operator)"
-
       - name: "minecraft-operator"
         path: "charts/minecraft-operator"
-        depends_on: "minecraft-operator-crds"
-        condition: "crds.enabled"
-        purpose: "Operator deployment with optional CRD installation"
+        purpose: "Operator deployment (CRDs are embedded in the binary and applied at startup via server-side apply)"
+
+    crd_management:
+      approach: "embedded"
+      description: "CRDs are compiled into the operator binary via Go embed.FS and applied at startup using server-side apply"
+      generation_path: "internal/crdmanager/crds/"
+      helm_value: "crds.manage"
+      operator_flag: "--manage-crds"
+      rationale: "PaperMCServer CRD is ~600KB, exceeding the 262KB annotation limit for client-side apply. Embedding eliminates the need for a separate CRD chart."
 
     min_k8s_version: "1.27"
     default_resources:
@@ -210,9 +211,11 @@ structure:
       - "pkg/webui/templates/server.templ - Server details view"
       - "pkg/webui/static/ - Static assets (CSS, embedded HTMX)"
 
+    crdmanager:
+      - "internal/crdmanager/ - CRD lifecycle management"
+      - "internal/crdmanager/crds/ - Generated CRD YAML (controller-gen output, embedded via Go embed.FS)"
+
     charts:
-      - "charts/minecraft-operator-crds/ - CRD Helm chart (independent lifecycle)"
-      - "charts/minecraft-operator-crds/crds/ - Generated CRD YAML (controller-gen output)"
       - "charts/minecraft-operator/ - Operator Helm chart"
       - "charts/minecraft-operator/templates/ - K8s resources (Deployment, RBAC, Service)"
       - "charts/minecraft-operator/templates/rbac/ - Generated RBAC manifests"
@@ -517,7 +520,8 @@ decisions:
 
   - id: ADR-005
     date: 2025-10-31
-    status: accepted
+    status: superseded
+    superseded_by: "ADR-030"
     decision: "Helm-only deployment with separate CRD chart (no Kustomize)"
     reasoning: "CRDs have different upgrade/delete implications than operator, follows Helm best practices. Helm-only simplifies deployment methods and avoids maintaining dual infrastructure."
     alternatives:
@@ -1152,6 +1156,24 @@ decisions:
           - "Unified field naming across CRDs"
           - "Breaking changes from v1.4.0"
 
+  - id: ADR-030
+    date: 2026-02-23
+    status: accepted
+    supersedes: "ADR-005"
+    decision: "Embed CRDs in operator binary and apply at startup via server-side apply (remove separate CRD chart)"
+    reasoning: "PaperMCServer CRD is ~600KB, exceeding the 262KB annotation limit for client-side apply. Embedding CRDs eliminates the need for a separate CRD chart, simplifies deployment to a single helm install, and ensures CRDs are always in sync with the operator version. Server-side apply bypasses the annotation limit."
+    alternatives:
+      - "Keep separate CRD chart: Two-step install, version drift risk between CRDs and operator"
+      - "kubectl apply --server-side in CI: Requires separate step, not self-contained"
+      - "Helm crds/ directory: Helm does not auto-upgrade CRDs, limited control"
+    impact: "Removed charts/minecraft-operator-crds/, CRDs now in internal/crdmanager/crds/ (embedded via Go embed.FS), single helm install, Helm value crds.manage replaces crds.enabled, operator flag --manage-crds (default: true), RBAC for CRD management added when crds.manage=true"
+    components:
+      crd_generation: "make manifests outputs to internal/crdmanager/crds/"
+      embedding: "Go embed.FS in internal/crdmanager/"
+      startup_apply: "Server-side apply before controllers start"
+      helm_value: "crds.manage (default: true)"
+      operator_flag: "--manage-crds (default: true)"
+
 phases:
   phase_1_mvp:
     description: "Minimum viable product"
@@ -1165,7 +1187,7 @@ phases:
       - "RCON graceful shutdown"
       - "Cron-based maintenance windows"
       - "Persistent cache in status"
-      - "Separate CRD Helm chart"
+      - "Embedded CRDs applied at startup via server-side apply"
 
   phase_2_enhanced:
     description: "Additional plugin sources and optimizations"
@@ -1304,7 +1326,7 @@ development:
 makefile_targets:
   core:
     - target: "manifests"
-      command: "controller-gen crd paths=./api/... output:crd:dir=charts/minecraft-operator-crds/crds output:rbac:dir=charts/minecraft-operator/templates/rbac"
+      command: "controller-gen crd paths=./api/... output:crd:dir=internal/crdmanager/crds output:rbac:dir=charts/minecraft-operator/templates/rbac"
       description: "Generate CRD and RBAC YAML from Go types"
 
     - target: "generate"
@@ -1348,24 +1370,20 @@ makefile_targets:
       description: "Push container image to registry"
 
     - target: "helm-lint"
-      command: "helm lint charts/minecraft-operator-crds && helm lint charts/minecraft-operator"
-      description: "Lint Helm charts"
-
-    - target: "helm-install-crds"
-      command: "helm install minecraft-operator-crds charts/minecraft-operator-crds --create-namespace --namespace minecraft-operator-system"
-      description: "Install CRD chart into cluster"
+      command: "helm lint charts/minecraft-operator"
+      description: "Lint Helm chart"
 
     - target: "helm-install"
-      command: "helm install minecraft-operator charts/minecraft-operator --namespace minecraft-operator-system"
-      description: "Install operator chart into cluster (auto-installs CRDs)"
+      command: "helm install minecraft-operator charts/minecraft-operator --create-namespace --namespace minecraft-operator-system"
+      description: "Install operator chart into cluster (CRDs are embedded and applied at startup)"
 
     - target: "helm-upgrade"
       command: "helm upgrade minecraft-operator charts/minecraft-operator --namespace minecraft-operator-system"
       description: "Upgrade operator in cluster"
 
     - target: "helm-uninstall"
-      command: "helm uninstall minecraft-operator && helm uninstall minecraft-operator-crds --namespace minecraft-operator-system"
-      description: "Remove operator and CRDs from cluster"
+      command: "helm uninstall minecraft-operator --namespace minecraft-operator-system"
+      description: "Remove operator from cluster (CRDs are NOT auto-removed)"
 
 quick_reference:
   scaffold_project: |
@@ -1376,8 +1394,8 @@ quick_reference:
     kubebuilder create api --group mc.k8s.lex.la --version v1alpha1 --kind Plugin --resource --controller
     kubebuilder create api --group mc.k8s.lex.la --version v1alpha1 --kind PaperMCServer --resource --controller
 
-    # Configure controller-gen for CRD chart output
-    # Edit Makefile to set: output:crd:dir=./charts/minecraft-operator-crds/crds
+    # Configure controller-gen for CRD output
+    # Edit Makefile to set: output:crd:dir=./internal/crdmanager/crds
 
   development_workflow: |
     1. Make changes to api/v1alpha1/*.go or pkg/webui/templates/*.templ
@@ -1392,32 +1410,29 @@ quick_reference:
   deployment_workflow: |
     1. Build image: make container-build IMG=ghcr.io/lexfrei/minecraft-operator:v1.0.0
     2. Push image: make container-push IMG=ghcr.io/lexfrei/minecraft-operator:v1.0.0
-    3. Update chart versions in Chart.yaml files
-    4. Lint charts: make helm-lint
-    5. Install CRDs: make helm-install-crds
-    6. Deploy operator: make helm-install
-    7. Verify: kubectl get pods -n minecraft-operator-system
+    3. Update chart version in Chart.yaml
+    4. Lint chart: make helm-lint
+    5. Deploy operator: make helm-install (CRDs are embedded and applied at startup)
+    6. Verify: kubectl get pods -n minecraft-operator-system
 
   helm_workflow: |
     # Development
-    make helm-install-crds  # Install CRDs
-    make helm-install       # Install operator
+    make helm-install       # Install operator (CRDs applied at startup)
 
     # Updates
-    make manifests          # Regenerate CRDs after API changes
-    make helm-upgrade       # Upgrade operator deployment
-    kubectl apply -f charts/minecraft-operator-crds/crds/  # Manually upgrade CRDs
+    make manifests          # Regenerate CRDs to internal/crdmanager/crds/
+    make helm-upgrade       # Upgrade operator (CRDs updated at startup)
 
     # Cleanup
-    make helm-uninstall     # Remove everything
+    make helm-uninstall     # Remove operator (CRDs are NOT auto-removed)
 
 important_notes:
   - "This is NOT a high-availability system - 5-10 min downtime during updates is acceptable"
   - "NEVER uses :latest Docker tag - all strategies resolve to concrete version-build (ADR-029)"
   - "Four update strategies: latest/auto/pin/build-pin for different use cases (ADR-029)"
   - "Breaking API changes in v1.5.0: paperVersion→version, paperBuild→build, versionPolicy→updateStrategy (ADR-029)"
-  - "Helm-only deployment (NO Kustomize) - CRDs in separate chart with independent lifecycle"
-  - "CRDs generated to charts/minecraft-operator-crds/crds/ via make manifests"
+  - "Helm-only deployment (NO Kustomize) - CRDs embedded in operator binary and applied at startup via server-side apply"
+  - "CRDs generated to internal/crdmanager/crds/ via make manifests"
   - "RBAC generated to charts/minecraft-operator/templates/rbac/ via make manifests"
   - "Templ templates generated to .go files via make templ (run before build)"
   - "Main entrypoint is cmd/main.go (NOT root main.go)"

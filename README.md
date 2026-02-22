@@ -21,13 +21,11 @@ A Kubernetes operator for managing PaperMC servers with automatic version manage
 ### Installation
 
 ```bash
-# Add the Helm repository
-helm install minecraft-operator-crds oci://ghcr.io/lexfrei/minecraft-operator-crds \
-  --create-namespace --namespace minecraft-operator-system
-
 helm install minecraft-operator oci://ghcr.io/lexfrei/minecraft-operator \
-  --namespace minecraft-operator-system
+  --create-namespace --namespace minecraft-operator-system
 ```
+
+CRDs are embedded in the operator binary and applied automatically at startup via server-side apply.
 
 ### Create a Minecraft Server
 

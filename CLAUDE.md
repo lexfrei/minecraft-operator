@@ -158,30 +158,29 @@ Three main controllers work together:
 
 ### Project Structure
 
-This project uses **Helm-only approach** with separate CRD chart. CRDs have independent lifecycle from the operator.
+This project uses **Helm-only approach** with embedded CRDs. CRDs are compiled into the operator binary and applied at startup via server-side apply.
 
 ```text
 minecraft-operator/
 ├── api/v1alpha1/                    # Go type definitions
-├── internal/controller/             # Reconciliation loops
+├── internal/
+│   ├── controller/                  # Reconciliation loops
+│   └── crdmanager/                  # CRD lifecycle management
+│       └── crds/                    # Generated CRDs (controller-gen output, embedded via Go embed.FS)
 ├── pkg/                             # solver/, plugins/, rcon/, etc.
 ├── cmd/
 │   └── main.go                      # Operator entrypoint
 ├── charts/
-│   ├── minecraft-operator-crds/     # CRD Helm chart (independent lifecycle)
-│   │   ├── crds/                    # Generated CRDs (controller-gen output)
-│   │   ├── Chart.yaml
-│   │   └── values.yaml
 │   └── minecraft-operator/          # Operator Helm chart
 │       ├── templates/               # Deployment, RBAC, Service
-│       ├── Chart.yaml               # Can depend on CRD chart via dependency
-│       └── values.yaml              # crds.enabled: true (default)
+│       ├── Chart.yaml
+│       └── values.yaml              # crds.manage: true (default)
 ├── examples/                        # Example CRs for testing
 ├── .architecture.yaml               # Single source of truth for technical decisions (ADRs)
 └── Makefile                         # Build automation
 ```
 
-**Note**: CRDs are generated directly to `charts/minecraft-operator-crds/crds/` via `make manifests`.
+**Note**: CRDs are generated to `internal/crdmanager/crds/` via `make manifests` and embedded into the operator binary. The operator applies them at startup using server-side apply (essential for PaperMCServer CRD which is ~600KB, exceeding the 262KB annotation limit). The `--manage-crds` flag (default: true) controls this behavior.
 
 ### Quick Start for Developers
 
@@ -206,18 +205,14 @@ make run
 # Build container image
 make container-build IMG=ghcr.io/lexfrei/minecraft-operator:dev
 
-# Deploy to cluster via Helm
-helm install minecraft-operator-crds ./charts/minecraft-operator-crds \
-  --create-namespace --namespace minecraft-operator-system
-
+# Deploy to cluster via Helm (single step — CRDs are embedded and applied at startup)
 helm install minecraft-operator ./charts/minecraft-operator \
-  --namespace minecraft-operator-system \
+  --create-namespace --namespace minecraft-operator-system \
   --set image.repository=ghcr.io/lexfrei/minecraft-operator \
   --set image.tag=dev
 
 # Clean up
 helm uninstall minecraft-operator --namespace minecraft-operator-system
-helm uninstall minecraft-operator-crds --namespace minecraft-operator-system
 ```
 
 ### Common Makefile Commands
@@ -225,7 +220,7 @@ helm uninstall minecraft-operator-crds --namespace minecraft-operator-system
 **Code generation:**
 
 ```bash
-make manifests  # Generate CRDs to charts/minecraft-operator-crds/crds/
+make manifests  # Generate CRDs to internal/crdmanager/crds/
 make generate   # Generate deepcopy methods for API types
 make fmt        # Run go fmt
 make vet        # Run go vet
@@ -266,16 +261,7 @@ make container-buildx       # Multi-arch build and push
 **Install (fresh deployment):**
 
 ```bash
-# Install CRDs chart (independent lifecycle)
-helm install minecraft-operator-crds ./charts/minecraft-operator-crds \
-  --create-namespace --namespace minecraft-operator-system
-
-# Install operator chart
-helm install minecraft-operator ./charts/minecraft-operator \
-  --namespace minecraft-operator-system
-
-# OR: Install operator with embedded CRDs (if crds.enabled=true in values.yaml)
-helm dependency update ./charts/minecraft-operator
+# Single step — CRDs are embedded in the operator and applied at startup via server-side apply
 helm install minecraft-operator ./charts/minecraft-operator \
   --create-namespace --namespace minecraft-operator-system
 ```
@@ -283,25 +269,19 @@ helm install minecraft-operator ./charts/minecraft-operator \
 **Upgrade:**
 
 ```bash
-# Upgrade operator (CRDs are NOT auto-upgraded by Helm best practice)
+# Upgrade operator (CRDs are automatically updated at startup)
 helm upgrade minecraft-operator ./charts/minecraft-operator \
-  --namespace minecraft-operator-system
-
-# Manually upgrade CRDs when needed
-kubectl apply --filename ./charts/minecraft-operator-crds/crds/
-# OR
-helm upgrade minecraft-operator-crds ./charts/minecraft-operator-crds \
   --namespace minecraft-operator-system
 ```
 
 **Uninstall:**
 
 ```bash
-# Remove operator first
 helm uninstall minecraft-operator --namespace minecraft-operator-system
 
-# Remove CRDs (WARNING: deletes all Plugin and PaperMCServer custom resources!)
-helm uninstall minecraft-operator-crds --namespace minecraft-operator-system
+# CRDs are NOT automatically removed (Kubernetes safety).
+# To remove CRDs manually (WARNING: deletes all Plugin and PaperMCServer custom resources!):
+# kubectl delete crd papermcservers.mc.k8s.lex.la plugins.mc.k8s.lex.la
 ```
 
 **Useful Helm commands:**
@@ -311,8 +291,7 @@ helm uninstall minecraft-operator-crds --namespace minecraft-operator-system
 helm install minecraft-operator ./charts/minecraft-operator \
   --dry-run --debug --namespace minecraft-operator-system
 
-# Lint charts
-helm lint ./charts/minecraft-operator-crds
+# Lint chart
 helm lint ./charts/minecraft-operator
 
 # List installed releases
@@ -492,7 +471,7 @@ tests:
 
 - **Markdown**: markdownlint with `.markdownlint.yaml` config
 
-- **Helm**: `helm lint charts/minecraft-operator-crds && helm lint charts/minecraft-operator`
+- **Helm**: `helm lint charts/minecraft-operator`
 
 **Building and Deploying:**
 
@@ -507,12 +486,9 @@ make container-build IMG=ghcr.io/lexfrei/minecraft-operator:v1.0.0
 # Push to registry
 make container-push IMG=ghcr.io/lexfrei/minecraft-operator:v1.0.0
 
-# Deploy to cluster via Helm
-helm install minecraft-operator-crds ./charts/minecraft-operator-crds \
-  --create-namespace --namespace minecraft-operator-system
-
+# Deploy to cluster via Helm (single step — CRDs are embedded and applied at startup)
 helm install minecraft-operator ./charts/minecraft-operator \
-  --namespace minecraft-operator-system \
+  --create-namespace --namespace minecraft-operator-system \
   --set image.repository=ghcr.io/lexfrei/minecraft-operator \
   --set image.tag=v1.0.0
 ```
@@ -531,7 +507,7 @@ All architectural decisions are documented as ADRs in `.architecture.yaml` (sing
 - **Container runtime**: Podman (per global CLAUDE.md)
 - **Container base**: distroless/static-debian12:nonroot for security (ADR-006)
 - **Error handling**: cockroachdb/errors for stack traces (ADR-007)
-- **Deployment**: Helm-only approach with separate CRD chart (ADR-005)
+- **Deployment**: Helm-only approach with embedded CRDs applied at startup via server-side apply (ADR-005)
 - **Datapack support**: Out of scope (no compatibility versions)
 - **Paid plugins**: Nice-to-have, not in MVP (would need auth via Secret)
 - **Manual approval**: Not implemented (fully automated updates with updateDelay)
@@ -552,7 +528,7 @@ See `.architecture.yaml` for complete ADR history and technical stack details.
 - **API domain**: `mc.k8s.lex.la` (NOT `paperstack.io`)
 - **License**: BSD-3-Clause
 - **Main entrypoint**: `cmd/main.go` (not root `main.go`)
-- **CRD generation**: Outputs to `charts/minecraft-operator-crds/crds/` via `make manifests`
+- **CRD generation**: Outputs to `internal/crdmanager/crds/` via `make manifests`
 - **Deployment method**: Helm-only (no Kustomize)
 - **Testing framework**: Ginkgo/Gomega (BDD style, controller-runtime standard)
 - **E2E tests**: Auto-create/destroy Kind cluster named `minecraft-operator-test-e2e`

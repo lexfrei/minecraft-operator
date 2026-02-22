@@ -28,10 +28,6 @@ Kubernetes operator for managing PaperMC Minecraft servers
 
 Kubernetes: `>=1.27.0-0`
 
-| Repository | Name | Version |
-|------------|------|---------|
-| file://../minecraft-operator-crds | minecraft-operator-crds | 0.4.0 |
-
 ## Prerequisites
 
 - Kubernetes 1.27+
@@ -39,24 +35,14 @@ Kubernetes: `>=1.27.0-0`
 
 ## Installation
 
-### Install CRDs
-
-CRDs are installed separately for independent lifecycle management:
-
-```bash
-helm install minecraft-operator-crds \
-  oci://ghcr.io/lexfrei/minecraft-operator-crds \
-  --namespace minecraft-operator-system \
-  --create-namespace
-```
-
-### Install Operator
+CRDs are embedded in the operator binary and applied automatically at startup via server-side apply. A single Helm install deploys a fully working operator.
 
 ```bash
 helm install minecraft-operator \
   oci://ghcr.io/lexfrei/minecraft-operator \
   --version 0.4.3 \
-  --namespace minecraft-operator-system
+  --namespace minecraft-operator-system \
+  --create-namespace
 ```
 
 ### Verify Chart Signature
@@ -159,7 +145,7 @@ Open http://localhost:8082/ui
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
-| crds.enabled | bool | `true` |  |
+| crds.manage | bool | `true` | Operator manages CRDs at startup via server-side apply |
 | fullnameOverride | string | `""` |  |
 | health.port | int | `8081` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |

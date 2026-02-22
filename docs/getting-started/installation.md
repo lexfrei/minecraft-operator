@@ -1,37 +1,24 @@
 # Installation
 
-Install Minecraft Operator using Helm charts from the GitHub Container Registry.
-
-## Install CRDs
-
-The operator uses two Custom Resource Definitions (CRDs):
-
-- **PaperMCServer** — Defines a Minecraft server instance
-- **Plugin** — Defines a plugin to be installed on matched servers
-
-Install the CRD chart first:
-
-```bash
-helm install minecraft-operator-crds \
-  oci://ghcr.io/lexfrei/minecraft-operator-crds \
-  --namespace minecraft-operator-system \
-  --create-namespace
-```
-
-!!! info "Separate CRD Lifecycle"
-
-    CRDs are installed separately to allow independent upgrades.
-    Helm does not automatically upgrade CRDs, so they have their own chart.
+Install Minecraft Operator using the Helm chart from the GitHub Container Registry.
 
 ## Install Operator
 
-Install the operator chart:
+A single Helm install deploys a fully working operator. CRDs are embedded in the operator binary and applied automatically at startup via server-side apply.
 
 ```bash
 helm install minecraft-operator \
   oci://ghcr.io/lexfrei/minecraft-operator \
-  --namespace minecraft-operator-system
+  --namespace minecraft-operator-system \
+  --create-namespace
 ```
+
+!!! info "Embedded CRDs"
+
+    CRDs (PaperMCServer, Plugin) are embedded in the operator binary and applied at startup
+    using server-side apply. This is required because the PaperMCServer CRD exceeds the
+    262KB annotation limit for client-side apply. The Helm value `crds.manage` (default: `true`)
+    controls whether the operator manages CRDs.
 
 ### Verify Installation
 
@@ -99,32 +86,31 @@ helm install minecraft-operator \
 Upgrade the operator to a new version:
 
 ```bash
-# Upgrade operator
 helm upgrade minecraft-operator \
   oci://ghcr.io/lexfrei/minecraft-operator \
   --namespace minecraft-operator-system
-
-# Upgrade CRDs manually (Helm doesn't auto-upgrade CRDs)
-helm upgrade minecraft-operator-crds \
-  oci://ghcr.io/lexfrei/minecraft-operator-crds \
-  --namespace minecraft-operator-system
 ```
+
+CRDs are automatically updated at operator startup via server-side apply.
 
 ## Uninstall
 
-Remove the operator and CRDs:
+Remove the operator:
 
 ```bash
-# Remove operator first
 helm uninstall minecraft-operator --namespace minecraft-operator-system
+```
 
-# Remove CRDs (WARNING: deletes all PaperMCServer and Plugin resources!)
-helm uninstall minecraft-operator-crds --namespace minecraft-operator-system
+CRDs are NOT automatically removed (Kubernetes safety). To remove them manually:
+
+```bash
+# WARNING: deletes all PaperMCServer and Plugin custom resources!
+kubectl delete crd papermcservers.mc.k8s.lex.la plugins.mc.k8s.lex.la
 ```
 
 !!! danger "Data Loss Warning"
 
-    Uninstalling CRDs will delete all custom resources (PaperMCServer, Plugin).
+    Deleting CRDs will delete all custom resources (PaperMCServer, Plugin).
     Minecraft world data on PVCs is NOT deleted automatically.
 
 ## Next Steps

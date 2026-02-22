@@ -5,16 +5,11 @@ Reference for Minecraft Operator Helm chart values.
 ## Installation
 
 ```bash
-# Install CRDs
-helm install minecraft-operator-crds \
-  oci://ghcr.io/lexfrei/minecraft-operator-crds \
-  --namespace minecraft-operator-system \
-  --create-namespace
-
-# Install operator
+# Single step — CRDs are embedded and applied at startup via server-side apply
 helm install minecraft-operator \
   oci://ghcr.io/lexfrei/minecraft-operator \
-  --namespace minecraft-operator-system
+  --namespace minecraft-operator-system \
+  --create-namespace
 ```
 
 ## Values
@@ -23,7 +18,7 @@ helm install minecraft-operator \
 
 | Value | Description | Default |
 |-------|-------------|---------|
-| `crds.enabled` | Install CRDs via dependency | `true` |
+| `crds.manage` | Operator manages CRDs at startup via server-side apply | `true` |
 
 ### Image
 
@@ -180,29 +175,18 @@ webui:
       external-dns.alpha.kubernetes.io/hostname: minecraft-operator.example.com
 ```
 
-### Disable CRD Dependency
+### Disable CRD Management
 
 ```yaml
 # values.yaml
 crds:
-  enabled: false  # Install CRDs separately
+  manage: false  # Operator will NOT apply CRDs at startup (manage them externally)
 ```
 
-## CRD Chart
-
-The CRD chart (`minecraft-operator-crds`) contains only Custom Resource Definitions:
-
-- `papermcservers.mc.k8s.lex.la`
-- `plugins.mc.k8s.lex.la`
-
-It has no configurable values.
+When `crds.manage` is `false`, you must apply CRDs manually before starting the operator:
 
 ```bash
-# Install CRDs only
-helm install minecraft-operator-crds \
-  oci://ghcr.io/lexfrei/minecraft-operator-crds \
-  --namespace minecraft-operator-system \
-  --create-namespace
+kubectl apply --server-side --filename internal/crdmanager/crds/
 ```
 
 ## See Also

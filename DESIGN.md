@@ -844,11 +844,13 @@ minecraft-operator/
 ├── cmd/
 │   └── main.go                       # Operator entrypoint
 ├── internal/
-│   └── controller/
-│       ├── constants.go              # Shared constants (strategies, finalizers, annotations)
-│       ├── plugin_controller.go      # Reconciliation for Plugin
-│       ├── papermcserver_controller.go # Reconciliation for PaperMCServer
-│       └── update_controller.go      # Maintenance window updates
+│   ├── controller/
+│   │   ├── constants.go              # Shared constants (strategies, finalizers, annotations)
+│   │   ├── plugin_controller.go      # Reconciliation for Plugin
+│   │   ├── papermcserver_controller.go # Reconciliation for PaperMCServer
+│   │   └── update_controller.go      # Maintenance window updates
+│   └── crdmanager/                   # CRD lifecycle management
+│       └── crds/                     # Generated CRDs (controller-gen output, embedded via Go embed.FS)
 ├── pkg/
 │   ├── api/                          # API utilities
 │   ├── cron/                         # Cron scheduler abstraction
@@ -869,18 +871,14 @@ minecraft-operator/
 │   ├── version/                      # Minecraft version comparison
 │   └── webui/                        # Web UI for server status
 ├── charts/
-│   ├── minecraft-operator-crds/      # CRD chart (separate lifecycle)
-│   │   ├── crds/                     # Generated CRDs (controller-gen output)
-│   │   ├── Chart.yaml
-│   │   └── values.yaml
 │   └── minecraft-operator/           # Operator chart
 │       ├── templates/                # Helm templates (Deployment, RBAC, etc.)
-│       ├── Chart.yaml                # With dependency on CRD chart
-│       └── values.yaml               # crds.enabled: true (default)
+│       ├── Chart.yaml
+│       └── values.yaml               # crds.manage: true (default)
 └── examples/                         # Example CRs for testing
 ```
 
-**Note**: CRDs are in a separate chart with independent lifecycle. Operator chart depends on CRD chart via `Chart.yaml` dependencies with `condition: crds.enabled` for optional installation.
+**Note**: CRDs are embedded into the operator binary via Go `embed.FS` and applied at startup using server-side apply. This is essential because the PaperMCServer CRD is ~600KB, exceeding the 262KB annotation limit for client-side apply. The `--manage-crds` flag (default: true) controls this behavior, and the Helm value `crds.manage` configures it.
 
 ### Libraries
 

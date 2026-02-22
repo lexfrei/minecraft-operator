@@ -60,19 +60,13 @@ lexfrei/papermc:1.21.4-125
 
 Format: `lexfrei/papermc:{version}-{build}`
 
-## Helm Charts
-
-### Operator Chart
+## Helm Chart
 
 ```text
 oci://ghcr.io/lexfrei/minecraft-operator
 ```
 
-### CRD Chart
-
-```text
-oci://ghcr.io/lexfrei/minecraft-operator-crds
-```
+CRDs are embedded in the operator binary and applied at startup via server-side apply. There is no separate CRD chart.
 
 ## External Links
 

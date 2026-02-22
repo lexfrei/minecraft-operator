@@ -35,24 +35,14 @@
 
 ## Installation
 
-### Install CRDs
-
-CRDs are installed separately for independent lifecycle management:
-
-```bash
-helm install minecraft-operator-crds \
-  oci://ghcr.io/lexfrei/minecraft-operator-crds \
-  --namespace minecraft-operator-system \
-  --create-namespace
-```
-
-### Install Operator
+CRDs are embedded in the operator binary and applied automatically at startup via server-side apply. A single Helm install deploys a fully working operator.
 
 ```bash
 helm install minecraft-operator \
   oci://ghcr.io/lexfrei/minecraft-operator \
   --version {{ template "chart.version" . }} \
-  --namespace minecraft-operator-system
+  --namespace minecraft-operator-system \
+  --create-namespace
 ```
 
 ### Verify Chart Signature

@@ -58,7 +58,9 @@ make run
 ```text
 minecraft-operator/
 ├── api/v1alpha1/           # CRD type definitions
-├── internal/controller/    # Controller implementations
+├── internal/
+│   ├── controller/         # Controller implementations
+│   └── crdmanager/crds/    # Embedded CRDs (controller-gen output)
 ├── pkg/                    # Shared packages
 │   ├── solver/             # Constraint solver
 │   ├── plugins/            # Plugin API clients
@@ -66,9 +68,8 @@ minecraft-operator/
 │   ├── registry/           # Docker Hub client
 │   ├── testutil/           # Test mocks and helpers
 │   └── webui/              # Web UI
-├── charts/                 # Helm charts
-│   ├── minecraft-operator-crds/
-│   └── minecraft-operator/
+├── charts/
+│   └── minecraft-operator/ # Helm chart
 ├── cmd/main.go             # Entrypoint
 └── Makefile                # Build automation
 ```

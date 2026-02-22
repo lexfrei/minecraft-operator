@@ -361,12 +361,11 @@ kubectl logs deployment/minecraft-operator \
     no matches for kind "PaperMCServer" in version "mc.k8s.lex.la/v1alpha1"
     ```
 
-    **Solution**: Install CRD chart:
+    **Solution**: CRDs are embedded in the operator and applied at startup. Check that
+    `crds.manage` is `true` in Helm values (default), or apply CRDs manually:
 
     ```bash
-    helm install minecraft-operator-crds \
-      oci://ghcr.io/lexfrei/minecraft-operator-crds \
-      --namespace minecraft-operator-system
+    kubectl apply --server-side --filename internal/crdmanager/crds/
     ```
 
 ## Getting Help

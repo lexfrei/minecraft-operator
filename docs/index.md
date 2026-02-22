@@ -19,16 +19,11 @@ Kubernetes operator for managing PaperMC servers with automatic version manageme
 ## Quick Start
 
 ```bash
-# Install CRDs
-helm install minecraft-operator-crds \
-  oci://ghcr.io/lexfrei/minecraft-operator-crds \
-  --namespace minecraft-operator-system \
-  --create-namespace
-
-# Install operator
+# Single step — CRDs are embedded and applied at startup via server-side apply
 helm install minecraft-operator \
   oci://ghcr.io/lexfrei/minecraft-operator \
-  --namespace minecraft-operator-system
+  --namespace minecraft-operator-system \
+  --create-namespace
 ```
 
 See [Getting Started](getting-started/index.md) for detailed setup instructions.

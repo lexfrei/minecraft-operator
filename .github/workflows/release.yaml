@@ -16,13 +16,8 @@ env:
 
 jobs:
   lint-chart:
-    name: Lint Charts
+    name: Lint Chart
     runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        chart:
-          - minecraft-operator-crds
-          - minecraft-operator
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -59,20 +54,19 @@ jobs:
           sudo mv ah /usr/local/bin/ah
 
       - name: Run Helm Lint
-        run: helm lint charts/${{ matrix.chart }}
+        run: helm lint charts/minecraft-operator
 
       - name: Run Helm Unittest
         run: |
-          CHART_DIR="charts/${{ matrix.chart }}"
-          if [ -d "$CHART_DIR/tests" ]; then
-            helm unittest $CHART_DIR --color --with-subchart=false
+          if [ -d "charts/minecraft-operator/tests" ]; then
+            helm unittest charts/minecraft-operator --color --with-subchart=false
           fi
 
       - name: Run chart-testing lint
-        run: ct lint --charts charts/${{ matrix.chart }}
+        run: ct lint --charts charts/minecraft-operator
 
       - name: Run Artifact Hub Lint
-        run: ah lint --kind helm --path charts/${{ matrix.chart }}
+        run: ah lint --kind helm --path charts/minecraft-operator
 
   build-and-push:
     name: Build (${{ matrix.arch }})
@@ -217,7 +211,7 @@ jobs:
           COSIGN_EXPERIMENTAL: "1"
 
   publish-chart:
-    name: Publish Charts
+    name: Publish Chart
     runs-on: ubuntu-24.04
     needs:
       - merge-manifests
@@ -291,14 +285,9 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
 
-          # Update CRD chart
-          yq eval ".version = \"${VERSION}\"" --inplace charts/minecraft-operator-crds/Chart.yaml
-          yq eval ".appVersion = \"${VERSION}\"" --inplace charts/minecraft-operator-crds/Chart.yaml
-
           # Update operator chart
           yq eval ".version = \"${VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
           yq eval ".appVersion = \"${VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
-          yq eval ".dependencies[0].version = \"${VERSION}\"" --inplace charts/minecraft-operator/Chart.yaml
 
           # Add changelog annotation
           if [ -n "$CHANGELOG" ]; then
@@ -315,25 +304,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Package and push CRD chart
-        id: push-crds
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
-          helm package charts/minecraft-operator-crds
-
-          helm push minecraft-operator-crds-${VERSION}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}
-
-          # Get digest for signing
-          DIGEST=$(oras manifest fetch ${{ env.REGISTRY }}/${{ github.repository_owner }}/minecraft-operator-crds:${VERSION} --descriptor | jq -r '.digest')
-          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
-
       - name: Package and push operator chart
         id: push-operator
         run: |
           VERSION="${{ steps.version.outputs.version }}"
 
-          helm dependency update charts/minecraft-operator
+          if grep -q "^dependencies:" "charts/minecraft-operator/Chart.yaml"; then
+            helm dependency update charts/minecraft-operator
+          fi
           helm package charts/minecraft-operator
 
           helm push minecraft-operator-${VERSION}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}
@@ -344,24 +322,15 @@ jobs:
 
       - name: Publish Artifact Hub metadata
         run: |
-          for chart in minecraft-operator-crds minecraft-operator; do
-            CHART_PATH="charts/${chart}"
-            if [ -f "${CHART_PATH}/artifacthub-repo.yml" ]; then
-              oras push \
-                ${{ env.REGISTRY }}/${{ github.repository_owner }}/${chart}:artifacthub.io \
-                --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
-                ${CHART_PATH}/artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
-            fi
-          done
+          if [ -f "charts/minecraft-operator/artifacthub-repo.yml" ]; then
+            oras push \
+              ${{ env.REGISTRY }}/${{ github.repository_owner }}/minecraft-operator:artifacthub.io \
+              --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
+              charts/minecraft-operator/artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
+          fi
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
-
-      - name: Sign CRD chart
-        run: |
-          cosign sign --yes ${{ env.REGISTRY }}/${{ github.repository_owner }}/minecraft-operator-crds@${{ steps.push-crds.outputs.digest }}
-        env:
-          COSIGN_EXPERIMENTAL: "1"
 
       - name: Sign operator chart
         run: |
@@ -440,21 +409,15 @@ jobs:
             --certificate-oidc-issuer=https://token.actions.githubusercontent.com
           \`\`\`
 
-          ### Helm Charts
+          ### Helm Chart
 
           \`\`\`bash
-          # Install CRDs
-          helm install minecraft-operator-crds \\
-            oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/minecraft-operator-crds \\
-            --version ${VERSION} \\
-            --namespace minecraft-operator-system \\
-            --create-namespace
-
-          # Install operator
+          # Install operator (CRDs are applied automatically at startup)
           helm install minecraft-operator \\
             oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/minecraft-operator \\
             --version ${VERSION} \\
-            --namespace minecraft-operator-system
+            --namespace minecraft-operator-system \\
+            --create-namespace
           \`\`\`
 
           EOF
@@ -497,11 +460,10 @@ jobs:
           echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Container Image | ${{ needs.merge-manifests.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Helm Charts | ${{ needs.publish-chart.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Helm Chart | ${{ needs.publish-chart.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| GitHub Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- Container: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- CRD Chart: \`oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/minecraft-operator-crds:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Operator Chart: \`oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/minecraft-operator:${VERSION}\`" >> $GITHUB_STEP_SUMMARY

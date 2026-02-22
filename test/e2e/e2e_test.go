@@ -50,8 +50,8 @@ var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
 
 	// Before running the tests, set up the environment by creating the namespace,
-	// enforce the restricted security policy to the namespace, installing CRDs,
-	// and deploying the controller.
+	// enforce the restricted security policy to the namespace,
+	// and deploying the controller (CRDs are applied automatically by the operator at startup).
 	BeforeAll(func() {
 		By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
@@ -64,14 +64,7 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
-		By("installing CRDs")
-		cmd = exec.Command("helm", "install", "minecraft-operator-crds",
-			"./charts/minecraft-operator-crds",
-			"--namespace", namespace)
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
-
-		By("deploying the controller-manager")
+		By("deploying the controller-manager (CRDs are applied automatically at startup)")
 		imageRepo, imageTag := parseImage(projectImage)
 		cmd = exec.Command("helm", "install", "minecraft-operator",
 			"./charts/minecraft-operator",
@@ -82,7 +75,7 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 	})
 
-	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
+	// After all tests have been executed, clean up by undeploying the controller
 	// and deleting the namespace.
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
@@ -91,11 +84,6 @@ var _ = Describe("Manager", Ordered, func() {
 
 		By("undeploying the controller-manager")
 		cmd = exec.Command("helm", "uninstall", "minecraft-operator",
-			"--namespace", namespace)
-		_, _ = utils.Run(cmd)
-
-		By("uninstalling CRDs")
-		cmd = exec.Command("helm", "uninstall", "minecraft-operator-crds",
 			"--namespace", namespace)
 		_, _ = utils.Run(cmd)
 

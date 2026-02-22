@@ -155,10 +155,7 @@ Create a local Kubernetes cluster:
 # Create cluster
 kind create cluster --name minecraft-dev
 
-# Install CRDs
-kubectl apply --filename charts/minecraft-operator-crds/crds/
-
-# Run operator locally
+# Run operator locally (CRDs are applied automatically at startup)
 make run
 ```
 
@@ -174,7 +171,6 @@ helm unittest charts/minecraft-operator
 ### Lint Charts
 
 ```bash
-helm lint charts/minecraft-operator-crds
 helm lint charts/minecraft-operator
 ```
 
@@ -190,16 +186,12 @@ helm template minecraft-operator charts/minecraft-operator \
   --set replicaCount=2
 ```
 
-### Install Charts
+### Install Chart
 
 ```bash
-# Install CRDs
-helm install minecraft-operator-crds charts/minecraft-operator-crds \
-  --create-namespace --namespace minecraft-operator-system
-
-# Install operator (local image)
+# Install operator (CRDs are embedded and applied at startup)
 helm install minecraft-operator charts/minecraft-operator \
-  --namespace minecraft-operator-system \
+  --create-namespace --namespace minecraft-operator-system \
   --set image.repository=ghcr.io/lexfrei/minecraft-operator \
   --set image.tag=dev
 ```
@@ -235,7 +227,7 @@ Enable:
 
 | Target | Description |
 |--------|-------------|
-| `make manifests` | Generate CRDs to charts/minecraft-operator-crds/crds/ |
+| `make manifests` | Generate CRDs to internal/crdmanager/crds/ |
 | `make generate` | Generate DeepCopy methods |
 | `make fmt` | Run go fmt |
 | `make vet` | Run go vet |

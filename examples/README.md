@@ -4,19 +4,14 @@ This directory contains example Custom Resources for the Minecraft Operator.
 
 ## Quick Start
 
-### 1. Install CRDs and Operator
+### 1. Install Operator
 
 ```bash
-# Install CRD chart
-helm install minecraft-operator-crds \
-  ./charts/minecraft-operator-crds \
-  --namespace minecraft-operator-system \
-  --create-namespace
-
-# Install operator chart
+# Single step — CRDs are embedded and applied at startup via server-side apply
 helm install minecraft-operator \
   ./charts/minecraft-operator \
-  --namespace minecraft-operator-system
+  --namespace minecraft-operator-system \
+  --create-namespace
 ```
 
 ### 2. Deploy a Simple Minecraft Server
@@ -98,7 +93,6 @@ kubectl delete secret test-server-rcon
 
 # Uninstall operator
 helm uninstall minecraft-operator -n minecraft-operator-system
-helm uninstall minecraft-operator-crds -n minecraft-operator-system
 ```
 
 ## Customization
