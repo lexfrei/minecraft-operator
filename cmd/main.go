@@ -138,6 +138,9 @@ func main() {
 		slogHandler = slog.NewJSONHandler(os.Stderr, handlerOpts)
 	}
 
+	// Set default slog logger so all direct slog calls use configured handler
+	slog.SetDefault(slog.New(slogHandler))
+
 	// Set controller-runtime logger using slog bridge
 	ctrl.SetLogger(logr.FromSlogHandler(slogHandler))
 
