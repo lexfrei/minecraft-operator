@@ -38,7 +38,7 @@ Three main controllers work together:
 
 ## CRD Design
 
-### Plugin CRD (`mc.k8s.lex.la/v1alpha1`)
+### Plugin CRD (`mc.k8s.lex.la/v1beta1`)
 
 **Spec:**
 
@@ -56,7 +56,7 @@ Three main controllers work together:
 - `matchedInstances`: List of servers this plugin applies to with compatibility status
 - `repositoryStatus`: `available`/`unavailable`/`orphaned`
 
-### PaperMCServer CRD (`mc.k8s.lex.la/v1alpha1`)
+### PaperMCServer CRD (`mc.k8s.lex.la/v1beta1`)
 
 **Spec:**
 
@@ -162,7 +162,7 @@ This project uses **Helm-only approach** with embedded CRDs. CRDs are compiled i
 
 ```text
 minecraft-operator/
-├── api/v1alpha1/                    # Go type definitions
+├── api/v1beta1/                    # Go type definitions
 ├── internal/
 │   ├── controller/                  # Reconciliation loops
 │   └── crdmanager/                  # CRD lifecycle management
@@ -436,7 +436,7 @@ tests:
 **Typical development iteration (TDD-based):**
 
 1. **Write failing test** for new feature/fix
-2. **Modify API types** in `api/v1alpha1/*.go` (if needed)
+2. **Modify API types** in `api/v1beta1/*.go` (if needed)
 3. **Regenerate code**: `make manifests generate`
 4. **Implement minimal code** to make test pass
 5. **Run tests**: `make test` — must pass

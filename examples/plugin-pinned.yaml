@@ -1,4 +1,4 @@
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: vault-pinned

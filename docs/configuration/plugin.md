@@ -5,7 +5,7 @@ The `Plugin` CRD defines a Minecraft plugin to be installed on matched servers.
 ## Overview
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: essentialsx
@@ -230,7 +230,7 @@ Standard Kubernetes conditions.
 ## Complete Example
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: bluemap
@@ -252,7 +252,7 @@ spec:
   port: 8100
 
 ---
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: essentialsx
@@ -270,7 +270,7 @@ spec:
       environment: production
 
 ---
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: worldedit

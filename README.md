@@ -46,7 +46,7 @@ kubectl create secret generic my-server-rcon \
 Then apply the server manifest:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: my-server
@@ -80,7 +80,7 @@ spec:
 ### Add a Plugin
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: essentialsx

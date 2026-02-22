@@ -5,7 +5,7 @@ The `PaperMCServer` CRD defines a Minecraft server instance managed by the opera
 ## Overview
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: my-server
@@ -295,7 +295,7 @@ Standard Kubernetes conditions.
 ## Complete Example
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: survival

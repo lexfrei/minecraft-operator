@@ -121,7 +121,7 @@ Updates are applied safely:
 | Language | Go 1.26+ |
 | Container | distroless/static-debian12:nonroot |
 | Charts | Helm 3.14+ |
-| API Group | `mc.k8s.lex.la/v1alpha1` |
+| API Group | `mc.k8s.lex.la/v1beta1` |
 
 ## Next Steps
 

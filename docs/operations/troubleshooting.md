@@ -358,7 +358,7 @@ kubectl logs deployment/minecraft-operator \
 === "CRD Not Found"
 
     ```
-    no matches for kind "PaperMCServer" in version "mc.k8s.lex.la/v1alpha1"
+    no matches for kind "PaperMCServer" in version "mc.k8s.lex.la/v1beta1"
     ```
 
     **Solution**: CRDs are embedded in the operator and applied at startup. Check that

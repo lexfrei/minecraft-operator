@@ -77,7 +77,7 @@ The `PaperMCServer` resource supports four update strategies via the `updateStra
 **Example**:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: test-server
@@ -130,7 +130,7 @@ spec:
 **Example**:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: production-server
@@ -200,7 +200,7 @@ status:
 **Example**:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: stable-server
@@ -257,7 +257,7 @@ The operator will then resolve the latest build for 1.21.2 during the next maint
 **Example**:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: certified-server
@@ -320,7 +320,7 @@ The `Plugin` resource uses the same `updateStrategy` field as `PaperMCServer`, p
 **Example**:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: bluemap
@@ -369,7 +369,7 @@ spec:
 **Example**:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: worldedit
@@ -426,7 +426,7 @@ spec:
 **Example**:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: essentialsx
@@ -482,7 +482,7 @@ kubectl patch plugin essentialsx --type=merge \
 **Example**:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: luckperms
@@ -538,7 +538,7 @@ kubectl patch plugin luckperms --type=merge \
 **Goal**: Run a production server that stays on a stable Paper version but gets the latest compatible plugins.
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: prod-server
@@ -549,7 +549,7 @@ spec:
   version: "1.21.1"
   updateDelay: 168h
 ---
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: plugin-a
@@ -568,7 +568,7 @@ spec:
 **Goal**: Development server that always runs the latest compatible versions of everything.
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: dev-server
@@ -578,7 +578,7 @@ spec:
   updateStrategy: "auto"
   updateDelay: 24h  # Short delay for dev
 ---
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: plugin-b
@@ -597,7 +597,7 @@ spec:
 **Goal**: Production server with zero automatic updates - full manual control.
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: critical-server
@@ -609,7 +609,7 @@ spec:
   version: "1.21.1"
   build: 91
 ---
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: plugin-c
@@ -629,7 +629,7 @@ spec:
 **Goal**: Keep server version stable but allow some plugins to update automatically.
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: mixed-server
@@ -640,7 +640,7 @@ spec:
   version: "1.21.1"
 ---
 # Critical plugin - pinned
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: essential-plugin
@@ -652,7 +652,7 @@ spec:
       type: mixed
 ---
 # Non-critical plugin - latest
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: cosmetic-plugin

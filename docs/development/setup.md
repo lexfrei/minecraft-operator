@@ -50,7 +50,7 @@ cd minecraft-operator
 
 ## Generate Code
 
-After modifying CRD types in `api/v1alpha1/`, regenerate code:
+After modifying CRD types in `api/v1beta1/`, regenerate code:
 
 ```bash
 # Generate CRDs and DeepCopy methods

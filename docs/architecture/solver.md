@@ -189,16 +189,16 @@ type Solver interface {
     // FindBestPluginVersion finds the maximum plugin version compatible with ALL matched servers.
     FindBestPluginVersion(
         ctx context.Context,
-        plugin *mcv1alpha1.Plugin,
-        servers []mcv1alpha1.PaperMCServer,
+        plugin *mcv1beta1.Plugin,
+        servers []mcv1beta1.PaperMCServer,
         allVersions []plugins.PluginVersion,
     ) (string, error)
 
     // FindBestPaperVersion finds the maximum Paper version compatible with ALL matched plugins.
     FindBestPaperVersion(
         ctx context.Context,
-        server *mcv1alpha1.PaperMCServer,
-        matchedPlugins []mcv1alpha1.Plugin,
+        server *mcv1beta1.PaperMCServer,
+        matchedPlugins []mcv1beta1.Plugin,
         paperVersions []string,
     ) (string, error)
 }

@@ -24,7 +24,7 @@ technical_stack:
 
   kubernetes:
     api_group: "mc.k8s.lex.la"
-    api_version: "v1alpha1"
+    api_version: "v1beta1"
     min_k8s_version: "1.27"
     target_k8s_version: "1.34"
     scope: "namespace"  # All CRDs are namespace-scoped
@@ -174,7 +174,7 @@ structure:
   deployment_method: "helm-only"
   organization:
     api:
-      - "api/v1alpha1/ - CRD type definitions"
+      - "api/v1beta1/ - CRD type definitions"
       - "plugin_types.go - Plugin CRD"
       - "papermcserver_types.go - PaperMCServer CRD"
       - "zz_generated.deepcopy.go - Generated code"
@@ -232,7 +232,7 @@ structure:
 custom_resources:
   plugin:
     group: "mc.k8s.lex.la"
-    version: "v1alpha1"
+    version: "v1beta1"
     kind: "Plugin"
     scope: "Namespaced"
     description: "Plugin definition with source and versioning policy"
@@ -252,7 +252,7 @@ custom_resources:
 
   papermcserver:
     group: "mc.k8s.lex.la"
-    version: "v1alpha1"
+    version: "v1beta1"
     kind: "PaperMCServer"
     scope: "Namespaced"
     description: "Minecraft server instance with automatic updates"
@@ -560,7 +560,7 @@ decisions:
     alternatives:
       - "Cluster-scoped: Global visibility, harder multi-tenancy"
       - "Configurable scope: Unnecessary complexity"
-    impact: "api/v1alpha1/, RBAC, Helm charts"
+    impact: "api/v1beta1/, RBAC, Helm charts"
 
   - id: ADR-009
     date: 2025-10-31
@@ -766,7 +766,7 @@ decisions:
       - "Use Paper API only without image verification: May reference non-existent images"
       - "Skip compatibility checks: Risk breaking plugins and server functionality"
       - "Allow downgrades: Data corruption risk, unexpected behavior, violates user expectations"
-    impact: "api/v1alpha1/papermcserver_types.go (status fields including UpdateBlocked), internal/controller/papermcserver_controller.go (version resolution with compatibility filtering), pkg/registry/ (new package), pkg/paper/client.go (build listing), pkg/solver/ (constraint enforcement)"
+    impact: "api/v1beta1/papermcserver_types.go (status fields including UpdateBlocked), internal/controller/papermcserver_controller.go (version resolution with compatibility filtering), pkg/registry/ (new package), pkg/paper/client.go (build listing), pkg/solver/ (constraint enforcement)"
     components:
       docker_hub_client:
         package: "pkg/registry/"
@@ -1391,14 +1391,14 @@ quick_reference:
     kubebuilder init --domain mc.k8s.lex.la --repo github.com/lexfrei/minecraft-operator
 
     # Create APIs
-    kubebuilder create api --group mc.k8s.lex.la --version v1alpha1 --kind Plugin --resource --controller
-    kubebuilder create api --group mc.k8s.lex.la --version v1alpha1 --kind PaperMCServer --resource --controller
+    kubebuilder create api --group mc.k8s.lex.la --version v1beta1 --kind Plugin --resource --controller
+    kubebuilder create api --group mc.k8s.lex.la --version v1beta1 --kind PaperMCServer --resource --controller
 
     # Configure controller-gen for CRD output
     # Edit Makefile to set: output:crd:dir=./internal/crdmanager/crds
 
   development_workflow: |
-    1. Make changes to api/v1alpha1/*.go or pkg/webui/templates/*.templ
+    1. Make changes to api/v1beta1/*.go or pkg/webui/templates/*.templ
     2. Run 'make manifests generate templ' to update CRDs, generated code, and templates
     3. Run 'make test' to verify tests pass
     4. Run 'make lint' to check code quality (ALL errors must be fixed)

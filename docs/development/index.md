@@ -57,7 +57,7 @@ make run
 
 ```text
 minecraft-operator/
-├── api/v1alpha1/           # CRD type definitions
+├── api/v1beta1/           # CRD type definitions
 ├── internal/
 │   ├── controller/         # Controller implementations
 │   └── crdmanager/crds/    # Embedded CRDs (controller-gen output)
@@ -78,7 +78,7 @@ minecraft-operator/
 
 | File | Purpose |
 |------|---------|
-| `api/v1alpha1/*_types.go` | CRD definitions |
+| `api/v1beta1/*_types.go` | CRD definitions |
 | `internal/controller/*_controller.go` | Reconciliation logic |
 | `.architecture.yaml` | Technical decisions (ADRs) |
 | `CLAUDE.md` | Development standards |

@@ -109,7 +109,7 @@ PaperMCServer --[manages]--> StatefulSet/Pod (one-to-one)
 Plugin is a plugin definition with source and versioning policy. The plugin selects which servers to apply to via `instanceSelector`.
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: essentialsx
@@ -207,7 +207,7 @@ status:
 PaperMCServer is a Minecraft server instance. Plugins are applied to it automatically through selectors in Plugin resources.
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: survival-server
@@ -369,7 +369,7 @@ status:
 **Plugin for all survival servers:**
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: essentialsx-survival
@@ -386,7 +386,7 @@ spec:
 **Plugin for specific server only:**
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: custom-example-plugin
@@ -405,7 +405,7 @@ spec:
 
 ```yaml
 # New version for production
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: dynmap-prod
@@ -421,7 +421,7 @@ spec:
 
 ---
 # Old pinned version for testing
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: dynmap-staging
@@ -610,16 +610,16 @@ type Solver interface {
     // FindBestPluginVersion finds the maximum plugin version compatible with ALL matched servers.
     FindBestPluginVersion(
         ctx context.Context,
-        plugin *mcv1alpha1.Plugin,
-        servers []mcv1alpha1.PaperMCServer,
+        plugin *mcv1beta1.Plugin,
+        servers []mcv1beta1.PaperMCServer,
         allVersions []plugins.PluginVersion,
     ) (string, error)
 
     // FindBestPaperVersion finds the maximum Paper version compatible with ALL matched plugins.
     FindBestPaperVersion(
         ctx context.Context,
-        server *mcv1alpha1.PaperMCServer,
-        matchedPlugins []mcv1alpha1.Plugin,
+        server *mcv1beta1.PaperMCServer,
+        matchedPlugins []mcv1beta1.Plugin,
         paperVersions []string,
     ) (string, error)
 }
@@ -837,7 +837,7 @@ Currently implemented as simple linear search (`SimpleSolver`). SAT solver plann
 ```text
 minecraft-operator/
 ├── api/
-│   └── v1alpha1/
+│   └── v1beta1/
 │       ├── plugin_types.go           # Plugin CRD types
 │       ├── papermcserver_types.go    # PaperMCServer CRD types
 │       └── zz_generated.deepcopy.go

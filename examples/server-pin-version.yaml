@@ -1,6 +1,6 @@
 # Example PaperMCServer with pinned version (auto-update builds)
 # Stays on specified version but auto-updates to latest builds
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: pin-server

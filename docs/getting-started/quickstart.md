@@ -25,7 +25,7 @@ kubectl create secret generic my-server-rcon \
 Create a file `my-server.yaml`:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: my-server
@@ -103,7 +103,7 @@ kubectl get svc my-server --namespace minecraft
 Create a file `essentials-plugin.yaml`:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: essentialsx

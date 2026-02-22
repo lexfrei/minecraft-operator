@@ -60,7 +60,7 @@ cosign verify ghcr.io/lexfrei/minecraft-operator:{{ template "chart.version" . }
 After installation, create a Minecraft server:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: my-server
@@ -95,7 +95,7 @@ spec:
 Add a plugin:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: essentialsx

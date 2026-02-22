@@ -134,7 +134,7 @@ The operator supports four version management modes:
 Create additional Plugin resources with different `instanceSelector` to target specific servers:
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: worldedit

@@ -296,7 +296,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating a PaperMCServer CR")
-			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1alpha1
+			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: %s
@@ -377,7 +377,7 @@ spec:
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating a PaperMCServer CR")
-			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1alpha1
+			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: %s
@@ -470,7 +470,7 @@ spec:
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating PaperMCServer with invalid cron expression")
-			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1alpha1
+			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: %s

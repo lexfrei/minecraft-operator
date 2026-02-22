@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING**: API version graduated from `v1alpha1` to `v1beta1`. All manifests must
+  change `apiVersion: mc.k8s.lex.la/v1alpha1` to `mc.k8s.lex.la/v1beta1`. The `v1alpha1`
+  version is removed entirely — re-apply resources with the new apiVersion after upgrading
 - **BREAKING**: CRD field renames in PaperMCServer: `paperVersion` → `version`,
   `paperBuild` → `build`
 - **BREAKING**: CRD field renames in Plugin: `versionPolicy` → `updateStrategy`,

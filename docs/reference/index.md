@@ -21,7 +21,7 @@ Reference documentation for Minecraft Operator.
 ### API Group
 
 ```text
-mc.k8s.lex.la/v1alpha1
+mc.k8s.lex.la/v1beta1
 ```
 
 ### Resources
@@ -35,7 +35,8 @@ mc.k8s.lex.la/v1alpha1
 
 | Version | Status |
 |---------|--------|
-| v1alpha1 | Current |
+| v1beta1 | Current |
+| v1alpha1 | Removed |
 
 ## Container Images
 

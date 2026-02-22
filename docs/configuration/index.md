@@ -8,8 +8,8 @@ The operator defines two main CRDs:
 
 | Resource | API Group | Description |
 |----------|-----------|-------------|
-| **PaperMCServer** | `mc.k8s.lex.la/v1alpha1` | Defines a Minecraft server instance |
-| **Plugin** | `mc.k8s.lex.la/v1alpha1` | Defines a plugin for matched servers |
+| **PaperMCServer** | `mc.k8s.lex.la/v1beta1` | Defines a Minecraft server instance |
+| **Plugin** | `mc.k8s.lex.la/v1beta1` | Defines a plugin for matched servers |
 
 ## Resource Relationship
 
@@ -83,7 +83,7 @@ Plugins are matched to servers via label selectors. The constraint solver ensure
 ### Production Server with Plugins
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: production
@@ -97,7 +97,7 @@ spec:
       enabled: true
       cron: "0 4 * * 0"
 ---
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: Plugin
 metadata:
   name: essentialsx
@@ -114,7 +114,7 @@ spec:
 ### Pinned Version for Stability
 
 ```yaml
-apiVersion: mc.k8s.lex.la/v1alpha1
+apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: stable
