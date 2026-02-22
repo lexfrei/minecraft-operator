@@ -20,6 +20,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -40,10 +41,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
 	"github.com/lexfrei/minecraft-operator/internal/controller"
+	"github.com/lexfrei/minecraft-operator/internal/crdmanager"
 	"github.com/lexfrei/minecraft-operator/pkg/api"
 	mccron "github.com/lexfrei/minecraft-operator/pkg/cron"
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
@@ -83,6 +86,7 @@ func main() {
 	var webuiAddr string
 	var webuiNamespace string
 	var webuiEnabled bool
+	var manageCRDs bool
 	var logLevel string
 	var logFormat string
 	var tlsOpts []func(*tls.Config)
@@ -107,6 +111,8 @@ func main() {
 	flag.StringVar(&webuiNamespace, "webui-namespace", "",
 		"The namespace to display in Web UI. If empty, uses the operator's namespace.")
 	flag.BoolVar(&webuiEnabled, "webui-enabled", true, "Enable the Web UI server.")
+	flag.BoolVar(&manageCRDs, "manage-crds", true,
+		"Apply CRDs at startup using server-side apply. Disable if the operator should not manage CRDs.")
 	flag.StringVar(&logLevel, "log-level", "info",
 		"Log level (debug, info, warn, error). Default: info")
 	flag.StringVar(&logFormat, "log-format", "json",
@@ -241,6 +247,30 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
+	}
+
+	// Apply embedded CRDs at startup if enabled
+	if manageCRDs {
+		setupLog.Info("applying embedded CRDs via server-side apply")
+
+		directClient, clientErr := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
+		if clientErr != nil {
+			setupLog.Error(clientErr, "unable to create direct client for CRD management")
+			os.Exit(1)
+		}
+
+		crdCtx, crdCancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+		crdMgr := crdmanager.NewCRDManager(directClient)
+		if crdErr := crdMgr.EnsureCRDs(crdCtx); crdErr != nil {
+			crdCancel()
+			setupLog.Error(crdErr, "failed to ensure CRDs")
+			os.Exit(1)
+		}
+
+		crdCancel()
+
+		setupLog.Info("CRDs applied and established")
 	}
 
 	// Initialize plugin client with caching

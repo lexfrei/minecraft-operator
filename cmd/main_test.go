@@ -160,3 +160,49 @@ func TestLogFormat_ShouldValidateExplicitly(t *testing.T) {
 			"not treat everything that isn't \"text\" as JSON. "+
 			"Invalid values like --log-format=yaml silently become JSON with no warning")
 }
+
+func TestManageCRDsFlagExists(t *testing.T) {
+	t.Parallel()
+
+	// Verify that main.go has a --manage-crds flag registered via flag.BoolVar
+	// defaulting to true, so the operator self-manages CRDs at startup.
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, mainGoPath, nil, parser.AllErrors)
+	if err != nil {
+		t.Fatalf("Failed to parse %s: %v", mainGoPath, err)
+	}
+
+	var hasManageCRDsFlag bool
+
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+
+		// Look for flag.BoolVar(&manageCRDs, "manage-crds", ...)
+		if sel.Sel.Name != "BoolVar" {
+			return true
+		}
+
+		if len(call.Args) < 2 {
+			return true
+		}
+
+		lit, ok := call.Args[1].(*ast.BasicLit)
+		if ok && lit.Value == `"manage-crds"` {
+			hasManageCRDsFlag = true
+			return false
+		}
+
+		return true
+	})
+
+	assert.True(t, hasManageCRDsFlag,
+		"main.go should register a --manage-crds flag via flag.BoolVar")
+}
