@@ -31,6 +31,7 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/testutil"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -2856,6 +2857,470 @@ var _ = Describe("UpdateController", func() {
 			// Instead, it should pass the URL as a separate argument to avoid shell injection.
 			Expect(srcStr).NotTo(ContainSubstring(`"curl -fsSL -o /data/plugins/update/%s.jar '%s'"`),
 				"downloadURL should not be interpolated into shell string via fmt.Sprintf; use separate args to avoid injection")
+		})
+	})
+
+	Context("Reconcile flow with mocked dependencies", func() {
+		var (
+			reconciler *UpdateReconciler
+			mockCron   *testutil.MockCronScheduler
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			namespace = "default"
+			mockCron = testutil.NewMockCronScheduler()
+			reconciler = &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PaperClient: &testutil.MockPaperAPI{},
+				PodExecutor: &testutil.MockPodExecutor{},
+				cron:        mockCron,
+				nowFunc:     time.Now,
+			}
+		})
+
+		createUpdateServer := func(name string, spec mcv1alpha1.PaperMCServerSpec, status mcv1alpha1.PaperMCServerStatus) {
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: namespace,
+				},
+				Spec: spec,
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+			// Set status separately
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, server)).To(Succeed())
+			server.Status = status
+			Expect(k8sClient.Status().Update(ctx, server)).To(Succeed())
+		}
+
+		deleteUpdateServer := func(name string) {
+			server := &mcv1alpha1.PaperMCServer{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, server)
+			if err == nil {
+				_ = k8sClient.Delete(ctx, server)
+			}
+		}
+
+		It("should return no-op when no AvailableUpdate exists", func() {
+			serverName := "test-no-update"
+			createUpdateServer(serverName, mcv1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "latest",
+				UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					CheckCron: "0 3 * * *",
+					MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						Cron:    "0 4 * * 0",
+						Enabled: false,
+					},
+				},
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			}, mcv1alpha1.PaperMCServerStatus{
+				CurrentVersion:  "1.21.4",
+				CurrentBuild:    100,
+				DesiredVersion:  "1.21.4",
+				DesiredBuild:    100,
+				AvailableUpdate: nil, // No update available
+			})
+			defer deleteUpdateServer(serverName)
+
+			req := reconcile.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(reconcile.Result{}),
+				"No-op when AvailableUpdate is nil")
+		})
+
+		It("should defer update when outside maintenance window", func() {
+			serverName := "test-outside-window"
+			// Set nowFunc to a time outside the maintenance window (Monday 10am)
+			reconciler.nowFunc = func() time.Time {
+				return time.Date(2025, 6, 2, 10, 0, 0, 0, time.UTC) // Monday 10:00
+			}
+
+			now := metav1.Now()
+			createUpdateServer(serverName, mcv1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "latest",
+				UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					CheckCron: "0 3 * * *",
+					MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						Cron:    "0 4 * * 0", // Sunday 4am
+						Enabled: true,
+					},
+				},
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			}, mcv1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.3",
+				CurrentBuild:   80,
+				DesiredVersion: "1.21.4",
+				DesiredBuild:   100,
+				AvailableUpdate: &mcv1alpha1.AvailableUpdate{
+					Version:    "1.21.4",
+					Build:      100,
+					ReleasedAt: now,
+					FoundAt:    now,
+					Plugins:    []mcv1alpha1.PluginVersionPair{},
+				},
+			})
+			defer deleteUpdateServer(serverName)
+
+			req := reconcile.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(5 * time.Minute),
+				"Should requeue after 5 minutes when outside maintenance window")
+		})
+
+		It("should return empty result for deleted server", func() {
+			req := reconcile.Request{NamespacedName: types.NamespacedName{
+				Name: "nonexistent-update-server", Namespace: namespace,
+			}}
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(reconcile.Result{}))
+		})
+
+		It("should stop reconciliation and set condition for invalid cron", func() {
+			serverName := "test-invalid-cron-reconcile"
+			now := metav1.Now()
+			createUpdateServer(serverName, mcv1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "latest",
+				UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					CheckCron: "invalid cron",
+					MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						Cron:    "also invalid",
+						Enabled: true,
+					},
+				},
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			}, mcv1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.3",
+				CurrentBuild:   80,
+				DesiredVersion: "1.21.4",
+				DesiredBuild:   100,
+				AvailableUpdate: &mcv1alpha1.AvailableUpdate{
+					Version:    "1.21.4",
+					Build:      100,
+					ReleasedAt: now,
+					FoundAt:    now,
+					Plugins:    []mcv1alpha1.PluginVersionPair{},
+				},
+			})
+			defer deleteUpdateServer(serverName)
+
+			req := reconcile.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred(),
+				"Invalid cron should NOT return error (permanent user error)")
+			Expect(result).To(Equal(reconcile.Result{}),
+				"Should return empty result, not requeue")
+
+			var server mcv1alpha1.PaperMCServer
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: serverName, Namespace: namespace}, &server)).To(Succeed())
+
+			cronCond := meta.FindStatusCondition(server.Status.Conditions, conditionTypeCronScheduleValid)
+			Expect(cronCond).NotTo(BeNil(), "CronScheduleValid condition should be set")
+			Expect(cronCond.Status).To(Equal(metav1.ConditionFalse))
+		})
+	})
+
+	Context("updateStatefulSetImage", func() {
+		var (
+			reconciler *UpdateReconciler
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			namespace = "default"
+			reconciler = &UpdateReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+		})
+
+		It("should find papermc container and update image", func() {
+			stsName := "test-update-image"
+			// Create a StatefulSet with papermc container
+			sts := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      stsName,
+					Namespace: namespace,
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"app": stsName},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{"app": stsName},
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: "papermc", Image: "docker.io/lexfrei/papermc:1.21.3-80"},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, sts)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, sts)
+			}()
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      stsName,
+					Namespace: namespace,
+				},
+			}
+
+			err := reconciler.updateStatefulSetImage(ctx, server, "docker.io/lexfrei/papermc:1.21.4-100")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify image was updated
+			var updatedSts appsv1.StatefulSet
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: stsName, Namespace: namespace}, &updatedSts)).To(Succeed())
+			Expect(updatedSts.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/lexfrei/papermc:1.21.4-100"))
+		})
+
+		It("should return error when papermc container not found", func() {
+			stsName := "test-update-no-container"
+			sts := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      stsName,
+					Namespace: namespace,
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"app": stsName},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{"app": stsName},
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: "wrong-name", Image: "some-image"},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, sts)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, sts)
+			}()
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      stsName,
+					Namespace: namespace,
+				},
+			}
+
+			err := reconciler.updateStatefulSetImage(ctx, server, "docker.io/lexfrei/papermc:1.21.4-100")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("papermc container not found"))
+		})
+
+		It("should return error when StatefulSet does not exist", func() {
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nonexistent-sts",
+					Namespace: namespace,
+				},
+			}
+
+			err := reconciler.updateStatefulSetImage(ctx, server, "docker.io/lexfrei/papermc:1.21.4-100")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to get StatefulSet"))
+		})
+	})
+
+	Context("createRCONClient", func() {
+		var (
+			reconciler *UpdateReconciler
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			namespace = "default"
+			reconciler = &UpdateReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+		})
+
+		It("should return error when Pod does not exist", func() {
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "no-pod-server",
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: true,
+						Port:    25575,
+						PasswordSecret: mcv1alpha1.SecretKeyRef{
+							Name: "rcon-secret",
+							Key:  "password",
+						},
+					},
+				},
+			}
+
+			_, err := reconciler.createRCONClient(ctx, server)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to get pod"))
+		})
+
+		It("should return error when Pod has no IP", func() {
+			podName := "no-ip-server-0"
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      podName,
+					Namespace: namespace,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "papermc", Image: "test"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, pod)
+			}()
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "no-ip-server",
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: true,
+						Port:    25575,
+						PasswordSecret: mcv1alpha1.SecretKeyRef{
+							Name: "rcon-secret",
+							Key:  "password",
+						},
+					},
+				},
+			}
+
+			_, err := reconciler.createRCONClient(ctx, server)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("pod IP not available"))
+		})
+
+		It("should return error when Secret does not exist", func() {
+			podName := "no-secret-server-0"
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      podName,
+					Namespace: namespace,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "papermc", Image: "test"}},
+				},
+				Status: corev1.PodStatus{
+					PodIP: "10.0.0.1",
+				},
+			}
+			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+			// Set pod status (envtest might not accept status on create)
+			pod.Status.PodIP = "10.0.0.1"
+			Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, pod)
+			}()
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "no-secret-server",
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: true,
+						Port:    25575,
+						PasswordSecret: mcv1alpha1.SecretKeyRef{
+							Name: "nonexistent-secret",
+							Key:  "password",
+						},
+					},
+				},
+			}
+
+			_, err := reconciler.createRCONClient(ctx, server)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to get RCON password secret"))
+		})
+
+		It("should return error when Secret key does not exist", func() {
+			podName := "bad-key-server-0"
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      podName,
+					Namespace: namespace,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "papermc", Image: "test"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+			pod.Status.PodIP = "10.0.0.2"
+			Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, pod)
+			}()
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "rcon-bad-key-secret",
+					Namespace: namespace,
+				},
+				Data: map[string][]byte{
+					"wrong-key": []byte("password123"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, secret)
+			}()
+
+			server := &mcv1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "bad-key-server",
+					Namespace: namespace,
+				},
+				Spec: mcv1alpha1.PaperMCServerSpec{
+					RCON: mcv1alpha1.RCONConfig{
+						Enabled: true,
+						Port:    25575,
+						PasswordSecret: mcv1alpha1.SecretKeyRef{
+							Name: "rcon-bad-key-secret",
+							Key:  "password",
+						},
+					},
+				},
+			}
+
+			_, err := reconciler.createRCONClient(ctx, server)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("key password not found in secret"))
 		})
 	})
 
