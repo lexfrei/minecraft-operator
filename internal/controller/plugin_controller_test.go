@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -28,12 +29,15 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	"github.com/lexfrei/minecraft-operator/pkg/plugins"
+	"github.com/lexfrei/minecraft-operator/pkg/solver"
+	"github.com/lexfrei/minecraft-operator/pkg/testutil"
 )
 
 var _ = Describe("Plugin Controller", func() {
@@ -836,6 +840,408 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(srcStr).NotTo(ContainSubstring("_, result, err := r.syncPluginMetadata"),
 				"doReconcile should NOT discard allVersions from syncPluginMetadata; "+
 					"it must check for nil versions and return early when repository is unavailable")
+		})
+	})
+
+	Context("Reconcile flow with mocked dependencies", func() {
+		var (
+			reconciler  *PluginReconciler
+			mockPlugin  *testutil.MockPluginClient
+			namespace   string
+		)
+
+		BeforeEach(func() {
+			namespace = "default"
+			mockPlugin = &testutil.MockPluginClient{
+				Versions: []plugins.PluginVersion{
+					{
+						Version:           "2.21.0",
+						ReleaseDate:       time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC),
+						MinecraftVersions: []string{"1.20.4", "1.21.0", "1.21.1"},
+						DownloadURL:       "https://example.com/plugin-2.21.0.jar",
+						Hash:              "abc123",
+					},
+					{
+						Version:           "2.21.2",
+						ReleaseDate:       time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+						MinecraftVersions: []string{"1.21.0", "1.21.1", "1.21.4"},
+						DownloadURL:       "https://example.com/plugin-2.21.2.jar",
+						Hash:              "def456",
+					},
+				},
+			}
+			reconciler = &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: mockPlugin,
+				Solver:       solver.NewSimpleSolver(),
+			}
+		})
+
+		createPlugin := func(name string, spec mck8slexlav1alpha1.PluginSpec) {
+			plugin := &mck8slexlav1alpha1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: namespace,
+				},
+				Spec: spec,
+			}
+			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
+		}
+
+		deletePlugin := func(name string) {
+			plugin := &mck8slexlav1alpha1.Plugin{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, plugin)
+			if err != nil {
+				return
+			}
+			if controllerutil.ContainsFinalizer(plugin, PluginFinalizer) {
+				controllerutil.RemoveFinalizer(plugin, PluginFinalizer)
+				if updateErr := k8sClient.Update(ctx, plugin); updateErr != nil {
+					return
+				}
+			}
+			if plugin.DeletionTimestamp.IsZero() {
+				_ = k8sClient.Delete(ctx, plugin)
+			}
+		}
+
+		It("should add finalizer on first reconcile", func() {
+			pluginName := "test-finalizer-add"
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:         mck8slexlav1alpha1.PluginSource{Type: "hangar", Project: "TestPlugin"},
+				UpdateStrategy: "latest",
+				InstanceSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"test-finalizer": "true"},
+				},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(Equal(ctrl.Result{}), "Should requeue after adding finalizer")
+
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+			Expect(controllerutil.ContainsFinalizer(&plugin, PluginFinalizer)).To(BeTrue(),
+				"Plugin should have finalizer after first reconcile")
+		})
+
+		It("should fetch metadata and set RepositoryAvailable condition", func() {
+			pluginName := "test-metadata-fetch"
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:         mck8slexlav1alpha1.PluginSource{Type: "hangar", Project: "EssentialsX"},
+				UpdateStrategy: "latest",
+				InstanceSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"test-metadata": "true"},
+				},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconcile adds finalizer
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile fetches metadata
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			// Verify RepositoryAvailable condition
+			cond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
+			Expect(cond).NotTo(BeNil(), "RepositoryAvailable condition should be set")
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+
+			// Verify metadata cached in status
+			Expect(plugin.Status.RepositoryStatus).To(Equal("available"))
+			Expect(plugin.Status.AvailableVersions).To(HaveLen(2))
+			Expect(plugin.Status.LastFetched).NotTo(BeNil())
+
+			// Verify PluginClient was called with correct project
+			Expect(mockPlugin.GetVersionsCalls).To(Equal(1))
+			Expect(mockPlugin.GetVersionsProjects).To(ContainElement("EssentialsX"))
+		})
+
+		It("should set Ready=True and VersionResolved=True on successful reconcile", func() {
+			pluginName := "test-ready-true"
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:         mck8slexlav1alpha1.PluginSource{Type: "hangar", Project: "TestPlugin"},
+				UpdateStrategy: "latest",
+				InstanceSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"test-ready": "true"},
+				},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconcile: finalizer
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: metadata + conditions
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			readyCond := findCondition(plugin.Status.Conditions, conditionTypeReady)
+			Expect(readyCond).NotTo(BeNil(), "Ready condition should be set")
+			Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+
+			versionCond := findCondition(plugin.Status.Conditions, conditionTypeVersionResolved)
+			Expect(versionCond).NotTo(BeNil(), "VersionResolved condition should be set")
+			Expect(versionCond.Status).To(Equal(metav1.ConditionTrue))
+		})
+
+		It("should set unavailable status when repository fails and no cache exists", func() {
+			pluginName := "test-repo-unavailable"
+			mockPlugin.VersionErr = fmt.Errorf("internal server error")
+			mockPlugin.Versions = nil
+
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:         mck8slexlav1alpha1.PluginSource{Type: "hangar", Project: "BrokenPlugin"},
+				UpdateStrategy: "latest",
+				InstanceSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"test-unavail": "true"},
+				},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconcile: finalizer
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: metadata fetch fails
+			result, err := reconciler.Reconcile(ctx, req)
+			// err is nil because handleRepositoryError returns nil error with RequeueAfter
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(5 * time.Minute),
+				"Should requeue after 5 minutes when repository unavailable")
+
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.RepositoryStatus).To(Equal("unavailable"))
+
+			repoCond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
+			Expect(repoCond).NotTo(BeNil())
+			Expect(repoCond.Status).To(Equal(metav1.ConditionFalse))
+		})
+
+		It("should use cached data (orphaned status) when repository fails but cache exists", func() {
+			pluginName := "test-repo-orphaned"
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:         mck8slexlav1alpha1.PluginSource{Type: "hangar", Project: "CachedPlugin"},
+				UpdateStrategy: "latest",
+				InstanceSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"test-orphaned": "true"},
+				},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconcile: finalizer
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: successful metadata fetch (populates cache)
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify cache is populated
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+			Expect(plugin.Status.AvailableVersions).To(HaveLen(2))
+
+			// Now make repository fail
+			mockPlugin.VersionErr = fmt.Errorf("internal server error")
+			mockPlugin.Versions = nil
+
+			// Third reconcile: uses cached data
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(15 * time.Minute),
+				"Should continue normal requeue when cache is used")
+
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+			Expect(plugin.Status.RepositoryStatus).To(Equal("orphaned"))
+			Expect(plugin.Status.AvailableVersions).To(HaveLen(2),
+				"Cached versions should be preserved")
+		})
+
+		It("should build MatchedInstances from label selector", func() {
+			pluginName := "test-match-selector"
+			matchLabel := "test-match-plugin"
+
+			// Create a PaperMCServer that matches the selector
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "match-target-server",
+					Namespace: namespace,
+					Labels: map[string]string{
+						matchLabel: "true",
+					},
+				},
+				Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "papermc"}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, server)
+			}()
+
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:         mck8slexlav1alpha1.PluginSource{Type: "hangar", Project: "MatchPlugin"},
+				UpdateStrategy: "latest",
+				InstanceSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{matchLabel: "true"},
+				},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconcile: finalizer
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: metadata + matching
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.MatchedInstances).To(HaveLen(1))
+			Expect(plugin.Status.MatchedInstances[0].Name).To(Equal("match-target-server"))
+			Expect(plugin.Status.MatchedInstances[0].Namespace).To(Equal(namespace))
+			Expect(plugin.Status.MatchedInstances[0].Compatible).To(BeTrue())
+		})
+
+		It("should set RepositoryAvailable=False when source type is unsupported", func() {
+			// Unsupported source type is treated as repository fetch error,
+			// not as a reconcile error. The plugin is "ready" but repo unavailable.
+			pluginName := "test-unsupported-source"
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:         mck8slexlav1alpha1.PluginSource{Type: "modrinth", Project: "SomePlugin"},
+				UpdateStrategy: "latest",
+				InstanceSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"test-unsupported": "true"},
+				},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconcile: finalizer
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: unsupported source type → handled as repo unavailable
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred(),
+				"Unsupported source type is handled gracefully, not returned as error")
+			Expect(result.RequeueAfter).To(Equal(5 * time.Minute),
+				"Should requeue after 5 minutes like any unavailable repo")
+
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.RepositoryStatus).To(Equal("unavailable"))
+
+			repoCond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
+			Expect(repoCond).NotTo(BeNil())
+			Expect(repoCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(repoCond.Message).To(ContainSubstring("unsupported source type"))
+		})
+
+		It("should return empty result for non-existent plugin", func() {
+			req := ctrl.Request{NamespacedName: types.NamespacedName{
+				Name: "nonexistent-plugin", Namespace: namespace,
+			}}
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+		})
+
+		It("should build empty MatchedInstances when no servers match selector", func() {
+			pluginName := "test-no-match"
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:         mck8slexlav1alpha1.PluginSource{Type: "hangar", Project: "LonelyPlugin"},
+				UpdateStrategy: "latest",
+				InstanceSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"nonexistent-label": "true"},
+				},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconcile: finalizer
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: no servers match
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.MatchedInstances).To(BeEmpty(),
+				"MatchedInstances should be empty when no servers match")
+
+			// Should still be Ready=True (no matching servers is not an error)
+			readyCond := findCondition(plugin.Status.Conditions, conditionTypeReady)
+			Expect(readyCond).NotTo(BeNil())
+			Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+		})
+
+		It("should cache versions in AvailableVersions status field", func() {
+			pluginName := "test-cache-versions"
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:         mck8slexlav1alpha1.PluginSource{Type: "hangar", Project: "CacheTest"},
+				UpdateStrategy: "latest",
+				InstanceSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"test-cache": "true"},
+				},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconcile: finalizer
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: metadata fetch
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.AvailableVersions).To(HaveLen(2))
+			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("2.21.0"))
+			Expect(plugin.Status.AvailableVersions[0].DownloadURL).To(Equal("https://example.com/plugin-2.21.0.jar"))
+			Expect(plugin.Status.AvailableVersions[0].Hash).To(Equal("abc123"))
+			Expect(plugin.Status.AvailableVersions[1].Version).To(Equal("2.21.2"))
 		})
 	})
 })
