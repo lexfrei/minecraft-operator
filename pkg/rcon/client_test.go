@@ -515,15 +515,13 @@ func TestRCONClient_SendCommand_Concurrent(t *testing.T) {
 	var waitGroup sync.WaitGroup
 	numGoroutines := 10
 
-	for i := 0; i < numGoroutines; i++ {
-		waitGroup.Add(1)
+	for range numGoroutines {
 
-		go func() {
-			defer waitGroup.Done()
+		waitGroup.Go(func() {
 
 			_, err := client.SendCommand(context.Background(), "list")
 			assert.NoError(t, err)
-		}()
+		})
 	}
 
 	waitGroup.Wait()

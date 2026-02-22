@@ -338,4 +338,3 @@ func isPluginCompatibleWithServer(
 	return version.ContainsVersion(pv.MinecraftVersions, paperVersion) ||
 		version.ContainsVersion(pv.PaperVersions, paperVersion)
 }
-

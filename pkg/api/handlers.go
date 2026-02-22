@@ -45,7 +45,7 @@ func (s *Server) GetVersion(
 	resp := generated.VersionResponse{
 		Version:    s.versionInfo.Version,
 		ApiVersion: "v1",
-		GoVersion:  ptr(runtime.Version()),
+		GoVersion:  new(runtime.Version()),
 	}
 
 	if s.versionInfo.GitCommit != "" {
@@ -558,8 +558,10 @@ func (s *Server) ResolvePlugin(
 }
 
 // ptr is a helper to get a pointer to a value.
+//
+//go:fix inline
 func ptr[T any](v T) *T {
-	return &v
+	return new(v)
 }
 
 // isNotFoundError checks if an error is a "not found" error.
@@ -772,7 +774,7 @@ func pluginDataToDetail(data service.PluginData) generated.PluginDetail {
 		detail.MatchedServers = &data.MatchedServers
 	}
 	if data.RepositoryStatus != "" {
-		detail.RepositoryStatus = ptr(generated.RepositoryStatus(data.RepositoryStatus))
+		detail.RepositoryStatus = new(generated.RepositoryStatus(data.RepositoryStatus))
 	}
 
 	// Convert matched instances
@@ -855,7 +857,7 @@ func serverUpdateRequestToData(namespace, name string, req generated.ServerUpdat
 	}
 
 	if req.UpdateStrategy != nil {
-		data.UpdateStrategy = ptr(string(*req.UpdateStrategy))
+		data.UpdateStrategy = new(string(*req.UpdateStrategy))
 	}
 	if req.Version != nil {
 		data.Version = req.Version
@@ -926,7 +928,7 @@ func pluginUpdateRequestToData(namespace, name string, req generated.PluginUpdat
 	}
 
 	if req.UpdateStrategy != nil {
-		data.UpdateStrategy = ptr(string(*req.UpdateStrategy))
+		data.UpdateStrategy = new(string(*req.UpdateStrategy))
 	}
 	if req.Version != nil {
 		data.Version = req.Version

@@ -50,6 +50,7 @@ const (
 	conditionTypeUpdating  = "Updating"
 	reasonUpdateInProgress = "UpdateInProgress"
 	reasonUpdateComplete   = "UpdateComplete"
+	containerNamePaperMC   = "papermc"
 )
 
 // UpdateReconciler reconciles PaperMCServer resources for scheduled updates.
@@ -439,7 +440,7 @@ func (r *UpdateReconciler) downloadPluginToServer(
 ) error {
 	podName := server.Name + "-0" // StatefulSet pod naming convention
 	namespace := server.Namespace
-	container := "papermc"
+	container := containerNamePaperMC
 
 	// Build curl command to download directly to /data/plugins/update/
 	curlCmd := fmt.Sprintf(
@@ -737,7 +738,7 @@ func (r *UpdateReconciler) updateStatefulSetImage(
 	// Update container image
 	updated := false
 	for i := range sts.Spec.Template.Spec.Containers {
-		if sts.Spec.Template.Spec.Containers[i].Name == "papermc" {
+		if sts.Spec.Template.Spec.Containers[i].Name == containerNamePaperMC {
 			sts.Spec.Template.Spec.Containers[i].Image = newImage
 			updated = true
 			break
@@ -1002,7 +1003,7 @@ func (r *UpdateReconciler) deletePluginJAR(
 ) error {
 	podName := server.Name + "-0"
 	namespace := server.Namespace
-	container := "papermc"
+	container := containerNamePaperMC
 	rmCmd := fmt.Sprintf("rm -f /data/plugins/%s", plugin.InstalledJARName)
 
 	slog.InfoContext(ctx, "Deleting plugin JAR",

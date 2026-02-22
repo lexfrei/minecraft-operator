@@ -15,7 +15,7 @@ import (
 )
 
 // Test fixtures.
-func makePlugin(strategy, version string) *mcv1alpha1.Plugin {
+func makePlugin(strategy, ver string) *mcv1alpha1.Plugin {
 	return &mcv1alpha1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-plugin",
@@ -23,7 +23,7 @@ func makePlugin(strategy, version string) *mcv1alpha1.Plugin {
 		},
 		Spec: mcv1alpha1.PluginSpec{
 			UpdateStrategy: strategy,
-			Version:        version,
+			Version:        ver,
 		},
 	}
 }
@@ -43,9 +43,9 @@ func makeServer(name, currentVersion, specVersion string) mcv1alpha1.PaperMCServ
 	}
 }
 
-func makePluginVersion(version string, mcVersions []string, releaseDate time.Time) plugins.PluginVersion {
+func makePluginVersion(ver string, mcVersions []string, releaseDate time.Time) plugins.PluginVersion {
 	return plugins.PluginVersion{
-		Version:           version,
+		Version:           ver,
 		MinecraftVersions: mcVersions,
 		ReleaseDate:       releaseDate,
 	}

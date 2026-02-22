@@ -389,7 +389,7 @@ func TestCachedPluginClient_Concurrency_Safe(t *testing.T) {
 	var successCount atomic.Int32
 
 	// Run concurrent operations
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(3)
 
 		go func() {

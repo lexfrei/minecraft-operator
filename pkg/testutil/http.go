@@ -73,7 +73,7 @@ func (m *MockHTTPServer) handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Default: return fake JAR data
-	fakeData := []byte(fmt.Sprintf("fake-jar-data-for-%s", path))
+	fakeData := fmt.Appendf(nil, "fake-jar-data-for-%s", path)
 	w.Header().Set("Content-Type", "application/java-archive")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(fakeData)
