@@ -1720,6 +1720,30 @@ var _ = Describe("Plugin Controller", func() {
 })
 
 var _ = Describe("PluginController helpers", func() {
+	Context("statusEqual MatchedInstances comparison", func() {
+		It("should treat matched instances with same content but different order as equal", func() {
+			// BUG: statusEqual compares MatchedInstances by index, so the same
+			// instances in different order are incorrectly treated as not equal.
+			// K8s API does not guarantee list order, so buildMatchedInstances
+			// can produce different orderings across reconciliations.
+			a := &mck8slexlav1alpha1.PluginStatus{
+				MatchedInstances: []mck8slexlav1alpha1.MatchedInstance{
+					{Name: "server-a", Namespace: "ns1", Version: "1.21.1", Compatible: true},
+					{Name: "server-b", Namespace: "ns2", Version: "1.21.0", Compatible: false},
+				},
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				MatchedInstances: []mck8slexlav1alpha1.MatchedInstance{
+					{Name: "server-b", Namespace: "ns2", Version: "1.21.0", Compatible: false},
+					{Name: "server-a", Namespace: "ns1", Version: "1.21.1", Compatible: true},
+				},
+			}
+
+			Expect(statusEqual(a, b)).To(BeTrue(),
+				"statusEqual must compare MatchedInstances order-independently")
+		})
+	})
+
 	Context("statusEqual conditions comparison", func() {
 		It("should treat conditions with same content but different order as equal", func() {
 			// BUG: statusEqual compares conditions by index, so the same
