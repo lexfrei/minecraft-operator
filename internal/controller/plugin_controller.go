@@ -126,9 +126,15 @@ func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 // doReconcile performs the actual reconciliation logic.
 func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1alpha1.Plugin) (ctrl.Result, error) {
 	// Step 1: Fetch and cache plugin metadata
-	_, result, err := r.syncPluginMetadata(ctx, plugin)
+	allVersions, result, err := r.syncPluginMetadata(ctx, plugin)
 	if err != nil {
 		return result, err
+	}
+
+	// If no versions available (repo unavailable, no cache), return early
+	// with the result from syncPluginMetadata (e.g., RequeueAfter: 5m)
+	if len(allVersions) == 0 {
+		return result, nil
 	}
 
 	// Step 2: Find matched servers
