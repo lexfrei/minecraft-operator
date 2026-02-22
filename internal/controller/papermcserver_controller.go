@@ -596,10 +596,11 @@ func buildServicePorts(server *mcv1alpha1.PaperMCServer, matchedPlugins []mcv1al
 
 	// Add RCON port if enabled
 	if server.Spec.RCON.Enabled {
+		rconPort := server.Spec.RCON.Port
 		ports = append(ports, corev1.ServicePort{
 			Name:       "rcon",
-			Port:       25575,
-			TargetPort: intstr.FromInt(25575),
+			Port:       rconPort,
+			TargetPort: intstr.FromInt(int(rconPort)),
 			Protocol:   corev1.ProtocolTCP,
 		})
 	}
@@ -608,7 +609,7 @@ func buildServicePorts(server *mcv1alpha1.PaperMCServer, matchedPlugins []mcv1al
 	seenPorts := make(map[int32]bool)
 	seenPorts[25565] = true // minecraft
 	if server.Spec.RCON.Enabled {
-		seenPorts[25575] = true // rcon
+		seenPorts[server.Spec.RCON.Port] = true // rcon
 	}
 
 	for _, plugin := range matchedPlugins {

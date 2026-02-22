@@ -1375,6 +1375,49 @@ var _ = Describe("PaperMCServer Controller", func() {
 			Expect(hasRCON).To(BeTrue(), "Service should have RCON port when RCON is enabled")
 		})
 
+		It("should use custom RCON port in Service when configured", func() {
+			serverName := "custom-rcon-port-server"
+			customRCONPort := int32(25576)
+
+			createServer(serverName, mck8slexlav1alpha1.PaperMCServerSpec{
+				UpdateStrategy: "latest",
+				RCON: mck8slexlav1alpha1.RCONConfig{
+					Enabled: true,
+					Port:    customRCONPort,
+					PasswordSecret: mck8slexlav1alpha1.SecretKeyRef{
+						Name: "rcon-secret",
+						Key:  "password",
+					},
+				},
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "papermc"}},
+					},
+				},
+			})
+			defer deleteServer(serverName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var svc corev1.Service
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &svc)).To(Succeed())
+
+			var hasRCON bool
+			for _, port := range svc.Spec.Ports {
+				if port.Name == "rcon" {
+					hasRCON = true
+					Expect(port.Port).To(Equal(customRCONPort),
+						"Service RCON port should match spec.rcon.port, not hardcoded 25575")
+					break
+				}
+			}
+			Expect(hasRCON).To(BeTrue(), "Service should have RCON port when RCON is enabled")
+		})
+
 		It("should return not found without error for deleted server", func() {
 			req := ctrl.Request{NamespacedName: types.NamespacedName{
 				Name: "nonexistent-server", Namespace: namespace,
