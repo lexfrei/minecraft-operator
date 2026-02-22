@@ -143,7 +143,11 @@ func (r *PaperMCServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	return result, err
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return result, nil
 }
 
 // doReconcile performs the actual reconciliation logic.

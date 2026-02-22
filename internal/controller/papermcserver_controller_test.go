@@ -712,6 +712,66 @@ var _ = Describe("PaperMCServer Controller", func() {
 		})
 	})
 
+	Context("Reconcile must not return both non-zero Result and error", func() {
+		It("should never return result and error simultaneously", func() {
+			// controller-runtime ignores Result when error is non-nil.
+			// Returning both is undefined behavior and produces a runtime warning.
+			// The Reconcile function must return ctrl.Result{} when returning an error.
+			fset := token.NewFileSet()
+			node, parseErr := parser.ParseFile(fset, "papermcserver_controller.go", nil, parser.AllErrors)
+			Expect(parseErr).NotTo(HaveOccurred())
+
+			ast.Inspect(node, func(n ast.Node) bool {
+				funcDecl, ok := n.(*ast.FuncDecl)
+				if !ok {
+					return true
+				}
+				if funcDecl.Name.Name != "Reconcile" || funcDecl.Recv == nil {
+					return false
+				}
+
+				// Check all return statements in Reconcile
+				ast.Inspect(funcDecl.Body, func(inner ast.Node) bool {
+					retStmt, ok := inner.(*ast.ReturnStmt)
+					if !ok || len(retStmt.Results) != 2 {
+						return true
+					}
+
+					resultExpr := retStmt.Results[0]
+					errExpr := retStmt.Results[1]
+
+					// Allow: return ctrl.Result{}, err (zero result with error)
+					// Allow: return result, nil (non-zero result without error)
+					// Forbid: return result, err (both could be non-zero)
+
+					// Check if error arg is just an identifier "err" (not nil)
+					errIdent, errIsIdent := errExpr.(*ast.Ident)
+					if !errIsIdent || errIdent.Name == "nil" {
+						return true // error is nil literal — safe
+					}
+
+					// Check if result arg is a composite literal ctrl.Result{}
+					if _, isCompLit := resultExpr.(*ast.CompositeLit); isCompLit {
+						return true // zero-value Result{} — safe
+					}
+
+					// If result is an identifier (like "result"), it could be non-zero
+					if resultIdent, ok := resultExpr.(*ast.Ident); ok {
+						Expect(resultIdent.Name).NotTo(Equal("result"),
+							fmt.Sprintf("Reconcile at line %d returns both 'result' and '%s' — "+
+								"controller-runtime ignores Result when error is non-nil. "+
+								"Use ctrl.Result{} when returning an error.",
+								fset.Position(retStmt.Pos()).Line, errIdent.Name))
+					}
+
+					return true
+				})
+
+				return false
+			})
+		})
+	})
+
 	Context("buildPluginStatus preserves existing data", func() {
 		It("should preserve InstalledJARName from previous status", func() {
 			// Regression: buildPluginStatus used to overwrite entire status,
