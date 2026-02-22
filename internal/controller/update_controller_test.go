@@ -19,6 +19,9 @@ package controller
 import (
 	"context"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -36,7 +39,8 @@ import (
 )
 
 const (
-	testNamespace = "default"
+	testNamespace          = "default"
+	updateControllerPath   = "update_controller.go"
 )
 
 var _ = Describe("UpdateController", func() {
@@ -2102,29 +2106,57 @@ var _ = Describe("UpdateController", func() {
 		})
 	})
 
-	Context("shouldApplyNow uses context.Background (Minor issue)", func() {
-		It("should accept a context parameter instead of using context.Background()", func() {
-			// shouldApplyNow currently has signature:
-			//   func (r *UpdateReconciler) shouldApplyNow(server *mcv1alpha1.PaperMCServer) bool
-			//
-			// It calls slog.WarnContext(context.Background(), ...) and
-			// slog.InfoContext(context.Background(), ...) at lines 1078 and 1090.
-			//
-			// Problems:
-			// 1. Loses trace/request context propagation (important for observability)
-			// 2. Inconsistent with every other method on UpdateReconciler which takes ctx
-			// 3. Makes it impossible to correlate logs with the reconciliation request
-			//
-			// The method should accept ctx context.Context and use it for logging.
-			// Since we can't easily detect context.Background() usage at runtime,
-			// we verify the structural issue: the function signature lacks ctx.
+	Context("shouldApplyNow context propagation (Minor issue)", func() {
+		It("should accept a context parameter and not use context.Background()", func() {
+			// Verify via AST that shouldApplyNow accepts context.Context
+			// and does not call context.Background()
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, updateControllerPath, nil, parser.AllErrors)
+			Expect(err).NotTo(HaveOccurred())
 
-			// A Go function that does not accept context but logs with it is a code smell.
-			// This red test documents that shouldApplyNow should accept context.
-			Fail("Minor: shouldApplyNow() uses context.Background() instead of accepting " +
-				"ctx parameter. Lines 1078 and 1090 in update_controller.go call " +
-				"slog.WarnContext(context.Background(), ...) and slog.InfoContext(context.Background(), ...). " +
-				"This breaks context propagation for tracing and log correlation.")
+			var found bool
+			ast.Inspect(f, func(n ast.Node) bool {
+				fn, ok := n.(*ast.FuncDecl)
+				if !ok || fn.Name.Name != "shouldApplyNow" {
+					return true
+				}
+				found = true
+
+				// Check that first parameter (after receiver) is context.Context
+				params := fn.Type.Params.List
+				Expect(len(params)).To(BeNumerically(">=", 1),
+					"shouldApplyNow should have at least one parameter")
+
+				firstParam := params[0]
+				sel, ok := firstParam.Type.(*ast.SelectorExpr)
+				Expect(ok).To(BeTrue(), "first parameter should be context.Context")
+				pkg, ok := sel.X.(*ast.Ident)
+				Expect(ok).To(BeTrue())
+				Expect(pkg.Name).To(Equal("context"))
+				Expect(sel.Sel.Name).To(Equal("Context"))
+
+				// Check that context.Background() is NOT called inside
+				ast.Inspect(fn.Body, func(inner ast.Node) bool {
+					call, ok := inner.(*ast.CallExpr)
+					if !ok {
+						return true
+					}
+					sel, ok := call.Fun.(*ast.SelectorExpr)
+					if !ok {
+						return true
+					}
+					pkg, ok := sel.X.(*ast.Ident)
+					if !ok {
+						return true
+					}
+					Expect(pkg.Name + "." + sel.Sel.Name).NotTo(Equal("context.Background"),
+						"shouldApplyNow should not call context.Background()")
+					return true
+				})
+
+				return false
+			})
+			Expect(found).To(BeTrue(), "shouldApplyNow function not found")
 		})
 	})
 
@@ -2226,7 +2258,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(k8sClient.Create(ctx, server)).To(Succeed())
 
 			By("checking if apply-now is valid")
-			valid := reconciler.shouldApplyNow(server)
+			valid := reconciler.shouldApplyNow(ctx, server)
 			Expect(valid).To(BeTrue())
 		})
 
@@ -2272,7 +2304,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(k8sClient.Create(ctx, server)).To(Succeed())
 
 			By("checking if apply-now is valid")
-			valid := reconciler.shouldApplyNow(server)
+			valid := reconciler.shouldApplyNow(ctx, server)
 			Expect(valid).To(BeFalse())
 		})
 
@@ -2317,7 +2349,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(k8sClient.Create(ctx, server)).To(Succeed())
 
 			By("checking if apply-now is valid")
-			valid := reconciler.shouldApplyNow(server)
+			valid := reconciler.shouldApplyNow(ctx, server)
 			Expect(valid).To(BeFalse())
 		})
 
@@ -2359,7 +2391,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(k8sClient.Create(ctx, server)).To(Succeed())
 
 			By("checking if apply-now is valid")
-			valid := reconciler.shouldApplyNow(server)
+			valid := reconciler.shouldApplyNow(ctx, server)
 			Expect(valid).To(BeFalse())
 		})
 

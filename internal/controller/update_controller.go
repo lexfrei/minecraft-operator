@@ -118,7 +118,7 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Check for immediate apply annotation (bypasses maintenance window and updateDelay)
-	applyNow := r.shouldApplyNow(&server)
+	applyNow := r.shouldApplyNow(ctx, &server)
 	if applyNow {
 		slog.InfoContext(ctx, "Apply-now annotation detected, triggering immediate update",
 			"server", server.Name)
@@ -1062,7 +1062,7 @@ func (r *UpdateReconciler) deletePluginJAR(
 const applyNowMaxAge = 5 * time.Minute
 
 // shouldApplyNow checks if the apply-now annotation is present and valid.
-func (r *UpdateReconciler) shouldApplyNow(server *mcv1alpha1.PaperMCServer) bool {
+func (r *UpdateReconciler) shouldApplyNow(ctx context.Context, server *mcv1alpha1.PaperMCServer) bool {
 	if server.Annotations == nil {
 		return false
 	}
@@ -1075,7 +1075,7 @@ func (r *UpdateReconciler) shouldApplyNow(server *mcv1alpha1.PaperMCServer) bool
 	// Parse Unix timestamp
 	var ts int64
 	if _, err := fmt.Sscanf(tsStr, "%d", &ts); err != nil {
-		slog.WarnContext(context.Background(), "Invalid apply-now annotation format",
+		slog.WarnContext(ctx, "Invalid apply-now annotation format",
 			"value", tsStr,
 			"server", server.Name)
 
@@ -1087,7 +1087,7 @@ func (r *UpdateReconciler) shouldApplyNow(server *mcv1alpha1.PaperMCServer) bool
 
 	// Reject stale annotations
 	if age > applyNowMaxAge {
-		slog.InfoContext(context.Background(), "Ignoring stale apply-now annotation",
+		slog.InfoContext(ctx, "Ignoring stale apply-now annotation",
 			"age", age,
 			"maxAge", applyNowMaxAge,
 			"server", server.Name)
