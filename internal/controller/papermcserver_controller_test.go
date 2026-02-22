@@ -711,6 +711,81 @@ var _ = Describe("PaperMCServer Controller", func() {
 			Expect(serverStatusEqual(a, b)).To(BeFalse(),
 				"serverStatusEqual should detect UpdateBlocked nil vs non-nil")
 		})
+
+		It("should detect UpdateBlocked Reason changes", func() {
+			// BUG: serverStatusEqual only compares Blocked boolean,
+			// not the Reason string. If the reason changes (e.g., different
+			// plugin blocks the update), the status won't be updated.
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				UpdateBlocked: &mck8slexlav1alpha1.UpdateBlockedStatus{
+					Blocked: true,
+					Reason:  "Plugin A incompatible",
+				},
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				UpdateBlocked: &mck8slexlav1alpha1.UpdateBlockedStatus{
+					Blocked: true,
+					Reason:  "Plugin B incompatible",
+				},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeFalse(),
+				"serverStatusEqual should detect UpdateBlocked.Reason changes")
+		})
+
+		It("should treat same plugins in different order as equal", func() {
+			// BUG: serverStatusEqual compares plugins by index, so the same
+			// set of plugins in different order is treated as different.
+			// This causes unnecessary status updates (reconciliation churn)
+			// because k8s List() doesn't guarantee order.
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+					{
+						PluginRef:       mck8slexlav1alpha1.PluginRef{Name: "plugin-a", Namespace: "default"},
+						ResolvedVersion: "1.0.0",
+						Compatible:      true,
+					},
+					{
+						PluginRef:       mck8slexlav1alpha1.PluginRef{Name: "plugin-b", Namespace: "default"},
+						ResolvedVersion: "2.0.0",
+						Compatible:      true,
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				CurrentBuild:   100,
+				DesiredVersion: "1.21.1",
+				DesiredBuild:   100,
+				Plugins: []mck8slexlav1alpha1.ServerPluginStatus{
+					{
+						PluginRef:       mck8slexlav1alpha1.PluginRef{Name: "plugin-b", Namespace: "default"},
+						ResolvedVersion: "2.0.0",
+						Compatible:      true,
+					},
+					{
+						PluginRef:       mck8slexlav1alpha1.PluginRef{Name: "plugin-a", Namespace: "default"},
+						ResolvedVersion: "1.0.0",
+						Compatible:      true,
+					},
+				},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeTrue(),
+				"same plugins in different order should be considered equal to prevent reconciliation churn")
+		})
 	})
 
 	Context("Reconcile must not return both non-zero Result and error", func() {

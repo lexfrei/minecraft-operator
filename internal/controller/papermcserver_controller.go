@@ -1603,18 +1603,12 @@ func serverStatusEqual(a, b *mcv1alpha1.PaperMCServerStatus) bool {
 		if a.UpdateBlocked.Blocked != b.UpdateBlocked.Blocked {
 			return false
 		}
+		if a.UpdateBlocked.Reason != b.UpdateBlocked.Reason {
+			return false
+		}
 	}
-	if len(a.Plugins) != len(b.Plugins) {
+	if !pluginStatusSliceEqual(a.Plugins, b.Plugins) {
 		return false
-	}
-	// Compare plugin status content
-	for i := range a.Plugins {
-		if a.Plugins[i].ResolvedVersion != b.Plugins[i].ResolvedVersion {
-			return false
-		}
-		if a.Plugins[i].Compatible != b.Plugins[i].Compatible {
-			return false
-		}
 	}
 
 	// Compare AvailableUpdate
@@ -1637,6 +1631,34 @@ func serverStatusEqual(a, b *mcv1alpha1.PaperMCServerStatus) bool {
 			a.Conditions[i].Status != b.Conditions[i].Status ||
 			a.Conditions[i].Reason != b.Conditions[i].Reason ||
 			a.Conditions[i].Message != b.Conditions[i].Message {
+			return false
+		}
+	}
+
+	return true
+}
+
+// pluginStatusSliceEqual compares two plugin status slices for equality,
+// independent of order. Uses PluginRef as the key for matching.
+func pluginStatusSliceEqual(a, b []mcv1alpha1.ServerPluginStatus) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	// Build lookup by plugin ref key
+	lookup := make(map[string]mcv1alpha1.ServerPluginStatus, len(a))
+	for _, p := range a {
+		key := p.PluginRef.Namespace + "/" + p.PluginRef.Name
+		lookup[key] = p
+	}
+
+	for _, p := range b {
+		key := p.PluginRef.Namespace + "/" + p.PluginRef.Name
+		prev, ok := lookup[key]
+		if !ok {
+			return false
+		}
+		if prev.ResolvedVersion != p.ResolvedVersion || prev.Compatible != p.Compatible {
 			return false
 		}
 	}
