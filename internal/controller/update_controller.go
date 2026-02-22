@@ -227,7 +227,7 @@ func (r *UpdateReconciler) shouldApplyUpdate(server *mcv1alpha1.PaperMCServer) (
 
 	delay := server.Spec.UpdateDelay.Duration
 	releasedAt := server.Status.AvailableUpdate.ReleasedAt.Time
-	timeSinceRelease := time.Since(releasedAt)
+	timeSinceRelease := r.now().Sub(releasedAt)
 
 	// Check if delay satisfied
 	if timeSinceRelease >= delay {
@@ -1132,7 +1132,7 @@ func (r *UpdateReconciler) shouldApplyNow(ctx context.Context, server *mcv1alpha
 	}
 
 	annotationTime := time.Unix(ts, 0)
-	age := time.Since(annotationTime)
+	age := r.now().Sub(annotationTime)
 
 	// Reject stale annotations
 	if age > applyNowMaxAge {

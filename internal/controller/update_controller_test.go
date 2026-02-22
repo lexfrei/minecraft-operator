@@ -839,7 +839,7 @@ var _ = Describe("UpdateController", func() {
 			// With r.now(): timeSinceRelease = 3 days > 36h delay → ALLOWED (correct)
 			realNow := time.Now()
 			releaseTime := metav1.NewTime(realNow.Add(-24 * time.Hour)) // Released 1 day ago (real)
-			futureNow := realNow.Add(48 * time.Hour)                   // Mock: 2 days in the future
+			futureNow := realNow.Add(48 * time.Hour)                    // Mock: 2 days in the future
 
 			futureReconciler := &UpdateReconciler{
 				Client:  k8sClient,
@@ -904,15 +904,14 @@ var _ = Describe("UpdateController", func() {
 			// BUG: shouldApplyNow uses time.Since() for annotation age,
 			// not r.now(). With mocked time, staleness check is wrong.
 			//
-			// Scenario: Annotation was set 2 hours ago (real time).
-			// nowFunc is set to 30 minutes ago. With time.Since(), age = 2h.
-			// With r.now(), age = 1.5h. Both under 24h so this particular
-			// combo passes. But if annotation was set 25h ago (real) and nowFunc
-			// is 2h ago, time.Since() says 25h > 24h (stale), but r.now()
-			// would say 23h < 24h (valid).
+			// applyNowMaxAge is 5 minutes.
+			// Scenario: Annotation was set 6 min ago (real time).
+			// nowFunc is set to 2 min in the past, making effective age = 4 min.
+			// With time.Since(): age = 6 min > 5 min → stale (wrong)
+			// With r.now(): age = 4 min < 5 min → valid (correct)
 			realNow := time.Now()
-			annotationTime := realNow.Add(-25 * time.Hour) // 25h ago in real time
-			mockedNow := realNow.Add(-2 * time.Hour)       // Mock: 2h in the past
+			annotationTime := realNow.Add(-6 * time.Minute) // 6 min ago in real time
+			mockedNow := realNow.Add(-2 * time.Minute)      // Mock: 2 min in the past
 
 			pastReconciler := &UpdateReconciler{
 				Client:  k8sClient,
@@ -932,8 +931,8 @@ var _ = Describe("UpdateController", func() {
 
 			ctx := context.Background()
 			result := pastReconciler.shouldApplyNow(ctx, server)
-			// With r.now() = mockedNow: age = mockedNow - annotationTime = 23h < 24h → valid
-			// With time.Since(): age = realNow - annotationTime = 25h > 24h → stale (wrong)
+			// With r.now() = mockedNow: age = 4 min < 5 min → valid
+			// With time.Since(): age = 6 min > 5 min → stale (wrong)
 			Expect(result).To(BeTrue(),
 				"shouldApplyNow should use r.now() for staleness check, not time.Since()")
 		})
