@@ -1401,5 +1401,72 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(plugin.Status.AvailableVersions[0].Hash).To(Equal("abc123"))
 			Expect(plugin.Status.AvailableVersions[1].Version).To(Equal("2.21.2"))
 		})
+
+		It("should immediately complete deletion for plugins never installed on a server", func() {
+			// Regression: markPluginForDeletionOnServers iterates server.Status.Plugins
+			// looking for the plugin. If the plugin was never resolved/installed (e.g., repo
+			// unavailable), there is no entry. JARDeleted stays false and the finalizer
+			// waits the full 10-minute timeout before force-completing.
+			pluginName := "test-never-installed-plugin"
+			serverName := "test-no-plugin-status-server"
+
+			// Create server WITHOUT this plugin in its Status.Plugins
+			server := &mck8slexlav1alpha1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+				Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "papermc"}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, server)
+			}()
+
+			// Create plugin that matches the server
+			createPlugin(pluginName, mck8slexlav1alpha1.PluginSpec{
+				Source:           mck8slexlav1alpha1.PluginSource{Type: "hangar", Project: "NonExistentPlugin"},
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{
+					// Empty selector matches everything
+				},
+			})
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// Reconcile to add finalizer
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Reconcile to sync metadata (will fail - nonexistent project)
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Delete plugin
+			var plugin mck8slexlav1alpha1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &plugin)).To(Succeed())
+
+			// Reconcile deletion — should handle never-installed case quickly
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// After one more reconcile, the finalizer should be removed because
+			// the plugin was never installed (no entry in server.Status.Plugins)
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Plugin should be fully deleted (finalizer removed)
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)
+			Expect(errors.IsNotFound(err)).To(BeTrue(),
+				"Plugin should be fully deleted when it was never installed on any server")
+		})
 	})
 })

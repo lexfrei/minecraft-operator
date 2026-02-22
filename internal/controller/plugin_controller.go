@@ -606,16 +606,35 @@ func (r *PluginReconciler) markPluginForDeletionOnServers(
 		}
 
 		// Find and mark the plugin status in server
+		found := false
 		updated := false
+
 		for i := range server.Status.Plugins {
 			if server.Status.Plugins[i].PluginRef.Name == plugin.Name &&
 				server.Status.Plugins[i].PluginRef.Namespace == plugin.Namespace {
+				found = true
+
 				if !server.Status.Plugins[i].PendingDeletion {
 					server.Status.Plugins[i].PendingDeletion = true
 					updated = true
 				}
+
 				break
 			}
+		}
+
+		if !found {
+			// Plugin was never installed on this server (no entry in Status.Plugins).
+			// No JAR to delete — mark as completed immediately.
+			slog.InfoContext(ctx, "Plugin was never installed on server, skipping JAR cleanup",
+				"plugin", plugin.Name,
+				"server", progress.ServerName)
+
+			if err := r.markJARAsDeleted(ctx, plugin, progress.ServerName, progress.Namespace); err != nil {
+				return err
+			}
+
+			continue
 		}
 
 		if updated {
