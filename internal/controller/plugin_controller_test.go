@@ -1718,3 +1718,49 @@ var _ = Describe("Plugin Controller", func() {
 		})
 	})
 })
+
+var _ = Describe("PluginController helpers", func() {
+	Context("statusEqual conditions comparison", func() {
+		It("should treat conditions with same content but different order as equal", func() {
+			// BUG: statusEqual compares conditions by index, so the same
+			// conditions in different order are incorrectly treated as not equal.
+			// Conditions should be compared by type (order-independent), since
+			// serialization/deserialization does not guarantee order.
+			a := &mck8slexlav1alpha1.PluginStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:    "Ready",
+						Status:  metav1.ConditionTrue,
+						Reason:  "AllGood",
+						Message: "Plugin is ready",
+					},
+					{
+						Type:    "VersionResolved",
+						Status:  metav1.ConditionTrue,
+						Reason:  "Resolved",
+						Message: "Version resolved",
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PluginStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:    "VersionResolved",
+						Status:  metav1.ConditionTrue,
+						Reason:  "Resolved",
+						Message: "Version resolved",
+					},
+					{
+						Type:    "Ready",
+						Status:  metav1.ConditionTrue,
+						Reason:  "AllGood",
+						Message: "Plugin is ready",
+					},
+				},
+			}
+
+			Expect(statusEqual(a, b)).To(BeTrue(),
+				"statusEqual must compare conditions order-independently")
+		})
+	})
+})

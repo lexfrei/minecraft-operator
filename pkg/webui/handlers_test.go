@@ -533,6 +533,47 @@ func TestParsePluginFormRejectsInvalidNamespace(t *testing.T) {
 	}
 }
 
+func TestHandleServerStatus_NegativeAttempt_ShouldClampOrReject(t *testing.T) {
+	// BUG: handleServerStatus parses attempt parameter with fmt.Sscanf
+	// without bounds checking. A negative value (e.g., -999) bypasses
+	// the timeout check (attempt > 30), causing the polling to never
+	// stop for that request. Negative values should be clamped to 1
+	// or rejected with 400.
+	t.Parallel()
+
+	server := &mck8slexlav1alpha1.PaperMCServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "status-test",
+			Namespace: "default",
+		},
+		Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+			UpdateStrategy: "auto",
+		},
+	}
+
+	srv := newTestServer(server)
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/ui/server/status?name=status-test&namespace=default&attempt=-999", nil)
+	w := httptest.NewRecorder()
+
+	srv.handleServerStatus(w, req)
+
+	// With attempt=-999, the response should either:
+	// a) Return 400 for invalid attempt, OR
+	// b) Treat it as attempt=1 (clamp to valid range), OR
+	// c) Return timeout response (treat as > 30)
+	// Currently it processes normally (no timeout, no error), which is wrong.
+	body := w.Body.String()
+
+	// The response should NOT contain a polling HTMX attribute that continues
+	// with the negative attempt value (it would poll forever)
+	if strings.Contains(body, "attempt=-") {
+		t.Error("handleServerStatus should not propagate negative attempt values — " +
+			"this causes infinite polling")
+	}
+}
+
 func TestHandleServerDeleteRemovesServer(t *testing.T) {
 	t.Parallel()
 

@@ -1875,6 +1875,50 @@ var _ = Describe("PaperMCServer Controller", func() {
 })
 
 var _ = Describe("PaperMCServerController helpers", func() {
+	Context("serverStatusEqual conditions comparison", func() {
+		It("should treat conditions with same content but different order as equal", func() {
+			// BUG: serverStatusEqual compares conditions by index, so the same
+			// conditions in different order are incorrectly treated as not equal.
+			// Conditions should be compared by type (order-independent), since
+			// serialization/deserialization does not guarantee order.
+			a := &mck8slexlav1alpha1.PaperMCServerStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:    "Ready",
+						Status:  metav1.ConditionTrue,
+						Reason:  "AllGood",
+						Message: "Server is ready",
+					},
+					{
+						Type:    "VersionResolved",
+						Status:  metav1.ConditionTrue,
+						Reason:  "Resolved",
+						Message: "Version resolved",
+					},
+				},
+			}
+			b := &mck8slexlav1alpha1.PaperMCServerStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:    "VersionResolved",
+						Status:  metav1.ConditionTrue,
+						Reason:  "Resolved",
+						Message: "Version resolved",
+					},
+					{
+						Type:    "Ready",
+						Status:  metav1.ConditionTrue,
+						Reason:  "AllGood",
+						Message: "Server is ready",
+					},
+				},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeTrue(),
+				"serverStatusEqual must compare conditions order-independently")
+		})
+	})
+
 	Context("updateHistoryEqual", func() {
 		It("should detect different AppliedAt timestamps as not equal", func() {
 			// BUG: updateHistoryEqual only compares Successful and PreviousVersion,

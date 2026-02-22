@@ -922,6 +922,107 @@ func TestLabelSelectorToK8s(t *testing.T) {
 	assert.Equal(t, "game", result.MatchLabels["tier"])
 }
 
+func TestCreatePlugin_NegativePort_ShouldReturn400(t *testing.T) {
+	// BUG: pluginCreateRequestToData converts port int to int32 without
+	// validating range (1-65535). Negative or out-of-range port values
+	// pass through to the service layer. With a real API server, the CRD
+	// validation catches it and returns 500 instead of 400.
+	// The API handler should validate port range before submission.
+	srv := newTestServer()
+	ctx := context.Background()
+
+	port := -1
+	project := "TestProject"
+	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
+		Body: &generated.CreatePluginJSONRequestBody{
+			Name:      "bad-port-plugin",
+			Namespace: "default",
+			Port:      &port,
+			Source: generated.PluginSource{
+				Type:    "hangar",
+				Project: &project,
+			},
+			InstanceSelector: generated.LabelSelector{
+				MatchLabels: &map[string]string{"app": "papermc"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, ok := resp.(generated.CreatePlugin400JSONResponse)
+	assert.True(t, ok, "Expected 400 response for negative port, got %T", resp)
+}
+
+func TestCreatePlugin_OverflowPort_ShouldReturn400(t *testing.T) {
+	// BUG: Port value 100000 exceeds valid TCP port range (1-65535).
+	// API handler should reject it with 400, not pass through.
+	srv := newTestServer()
+	ctx := context.Background()
+
+	port := 100000
+	project := "TestProject"
+	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
+		Body: &generated.CreatePluginJSONRequestBody{
+			Name:      "overflow-port-plugin",
+			Namespace: "default",
+			Port:      &port,
+			Source: generated.PluginSource{
+				Type:    "hangar",
+				Project: &project,
+			},
+			InstanceSelector: generated.LabelSelector{
+				MatchLabels: &map[string]string{"app": "papermc"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, ok := resp.(generated.CreatePlugin400JSONResponse)
+	assert.True(t, ok, "Expected 400 response for port > 65535, got %T", resp)
+}
+
+func TestUpdatePlugin_NegativePort_ShouldReturn400(t *testing.T) {
+	// BUG: Same port validation gap in UpdatePlugin handler.
+	plugin := &mcv1alpha1.Plugin{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "port-test-plugin",
+			Namespace: "default",
+		},
+		Spec: mcv1alpha1.PluginSpec{
+			Source: mcv1alpha1.PluginSource{
+				Type:    "hangar",
+				Project: "TestProject",
+			},
+			UpdateStrategy: "latest",
+			InstanceSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "papermc"},
+			},
+		},
+	}
+
+	scheme := newTestScheme()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(plugin).
+		Build()
+
+	srv := NewServer(c, VersionInfo{Version: "test"})
+	ctx := context.Background()
+
+	port := -1
+	resp, err := srv.UpdatePlugin(ctx, generated.UpdatePluginRequestObject{
+		Namespace: "default",
+		Name:      "port-test-plugin",
+		Body: &generated.PluginUpdateRequest{
+			Port: &port,
+		},
+	})
+	require.NoError(t, err)
+
+	_, ok := resp.(generated.UpdatePlugin400JSONResponse)
+	assert.True(t, ok, "Expected 400 response for negative port, got %T", resp)
+}
+
 func TestLabelSelectorToK8s_WithExpressions(t *testing.T) {
 	key := "app"
 	operator := generated.LabelSelectorRequirementOperator("In")
