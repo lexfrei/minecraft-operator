@@ -39,8 +39,8 @@ import (
 )
 
 const (
-	testNamespace          = "default"
-	updateControllerPath   = "update_controller.go"
+	testNamespace        = "default"
+	updateControllerPath = "update_controller.go"
 )
 
 var _ = Describe("UpdateController", func() {
@@ -2036,8 +2036,8 @@ var _ = Describe("UpdateController", func() {
 
 				// Check that first parameter (after receiver) is context.Context
 				params := fn.Type.Params.List
-				Expect(len(params)).To(BeNumerically(">=", 1),
-					"shouldApplyNow should have at least one parameter")
+				Expect(params).To(HaveLen(2),
+					"shouldApplyNow should have ctx and server parameters")
 
 				firstParam := params[0]
 				sel, ok := firstParam.Type.(*ast.SelectorExpr)
@@ -2061,7 +2061,7 @@ var _ = Describe("UpdateController", func() {
 					if !ok {
 						return true
 					}
-					Expect(pkg.Name + "." + sel.Sel.Name).NotTo(Equal("context.Background"),
+					Expect(pkg.Name+"."+sel.Sel.Name).NotTo(Equal("context.Background"),
 						"shouldApplyNow should not call context.Background()")
 					return true
 				})

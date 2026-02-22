@@ -30,10 +30,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mccron "github.com/lexfrei/minecraft-operator/pkg/cron"
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/rcon"
-	mccron "github.com/lexfrei/minecraft-operator/pkg/cron"
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"

@@ -44,11 +44,11 @@ import (
 	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
 	"github.com/lexfrei/minecraft-operator/internal/controller"
 	"github.com/lexfrei/minecraft-operator/pkg/api"
+	mccron "github.com/lexfrei/minecraft-operator/pkg/cron"
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/registry"
 	"github.com/lexfrei/minecraft-operator/pkg/solver"
-	mccron "github.com/lexfrei/minecraft-operator/pkg/cron"
 	"github.com/lexfrei/minecraft-operator/pkg/webui"
 	// +kubebuilder:scaffold:imports
 )

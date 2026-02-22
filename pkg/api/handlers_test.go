@@ -38,17 +38,10 @@ func newTestScheme() *runtime.Scheme {
 	return scheme
 }
 
-func newTestServer(objects ...runtime.Object) *Server {
+func newTestServer() *Server {
 	scheme := newTestScheme()
 
-	builder := fake.NewClientBuilder().WithScheme(scheme)
-	if len(objects) > 0 {
-		runtimeObjects := make([]runtime.Object, len(objects))
-		copy(runtimeObjects, objects)
-		builder = builder.WithRuntimeObjects(runtimeObjects...)
-	}
-
-	c := builder.Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	return NewServer(c, VersionInfo{
 		Version:   "v0.1.0-test",

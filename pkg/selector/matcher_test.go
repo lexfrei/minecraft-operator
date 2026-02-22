@@ -88,54 +88,29 @@ func TestMatchesSelector(t *testing.T) {
 }
 
 func TestFindMatchingPlugins_InvalidSelector(t *testing.T) {
-	// Bug: FindMatchingPlugins silently skips plugins with invalid selectors.
-	// At line 80-83 in matcher.go, if metav1.LabelSelectorAsSelector fails,
-	// the error is silently swallowed (continue without logging).
-	// This can hide configuration errors from users.
-
 	t.Run("should return error when plugin has invalid instanceSelector", func(t *testing.T) {
 		scheme := runtime.NewScheme()
-		err := mcv1alpha1.AddToScheme(scheme)
-		require.NoError(t, err)
+		require.NoError(t, mcv1alpha1.AddToScheme(scheme))
 
-		// Create a plugin with an invalid selector
 		invalidPlugin := &mcv1alpha1.Plugin{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "plugin-invalid-selector",
-				Namespace: "default",
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: "plugin-invalid", Namespace: "default"},
 			Spec: mcv1alpha1.PluginSpec{
-				Source: mcv1alpha1.PluginSource{
-					Type:    "hangar",
-					Project: "TestPlugin",
-				},
+				Source:         mcv1alpha1.PluginSource{Type: "hangar", Project: "TestPlugin"},
 				UpdateStrategy: "latest",
 				InstanceSelector: metav1.LabelSelector{
 					MatchExpressions: []metav1.LabelSelectorRequirement{
-						{
-							Key:      "app",
-							Operator: "InvalidOperator", // Invalid operator
-						},
+						{Key: "app", Operator: "InvalidOperator"},
 					},
 				},
 			},
 		}
-
 		validPlugin := &mcv1alpha1.Plugin{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "plugin-valid-selector",
-				Namespace: "default",
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: "plugin-valid", Namespace: "default"},
 			Spec: mcv1alpha1.PluginSpec{
-				Source: mcv1alpha1.PluginSource{
-					Type:    "hangar",
-					Project: "TestPlugin2",
-				},
+				Source:         mcv1alpha1.PluginSource{Type: "hangar", Project: "TestPlugin2"},
 				UpdateStrategy: "latest",
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						"app": "papermc",
-					},
+					MatchLabels: map[string]string{"app": "papermc"},
 				},
 			},
 		}
@@ -145,22 +120,9 @@ func TestFindMatchingPlugins_InvalidSelector(t *testing.T) {
 			WithObjects(invalidPlugin, validPlugin).
 			Build()
 
-		serverLabels := map[string]string{
-			"app": "papermc",
-		}
-
-		ctx := context.Background()
-		matched, err := FindMatchingPlugins(ctx, fakeClient, "default", serverLabels)
-
-		// BUG: Currently FindMatchingPlugins silently skips the invalid plugin
-		// and returns only the valid one without any error.
-		// Expected behavior: should return an error (or at minimum, the function
-		// should log a warning about the invalid selector).
-		// For this red test, we assert it should return an error.
-		require.Error(t, err,
-			"FindMatchingPlugins should return error when a plugin has invalid instanceSelector, "+
-				"not silently skip it. Currently the invalid selector at line 80-83 is swallowed.")
-
-		_ = matched
+		_, err := FindMatchingPlugins(
+			context.Background(), fakeClient, "default", map[string]string{"app": "papermc"},
+		)
+		require.Error(t, err, "should return error for invalid instanceSelector")
 	})
 }
