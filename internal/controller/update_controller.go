@@ -127,6 +127,12 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
+	// Check if there's an available update — exit early before any delay/window checks
+	if server.Status.AvailableUpdate == nil {
+		slog.DebugContext(ctx, "No available update", "server", server.Name)
+		return ctrl.Result{}, nil
+	}
+
 	// Check for immediate apply annotation (bypasses maintenance window and updateDelay)
 	applyNow := r.shouldApplyNow(ctx, &server)
 	if applyNow {
@@ -160,12 +166,6 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 			return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 		}
-	}
-
-	// Check if there's an available update
-	if server.Status.AvailableUpdate == nil {
-		slog.DebugContext(ctx, "No available update", "server", server.Name)
-		return ctrl.Result{}, nil
 	}
 
 	// Set updating condition

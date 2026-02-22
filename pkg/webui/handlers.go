@@ -372,6 +372,10 @@ func (s *Server) parsePluginFormToData(r *http.Request) (service.PluginCreateDat
 		return service.PluginCreateData{}, errors.New("invalid plugin name format")
 	}
 
+	if !isValidKubernetesName(namespace) {
+		return service.PluginCreateData{}, errors.New("invalid namespace format")
+	}
+
 	data := service.PluginCreateData{
 		Name:      name,
 		Namespace: namespace,
@@ -463,6 +467,10 @@ func (s *Server) parseServerFormToData(r *http.Request) (service.ServerCreateDat
 
 	if !isValidKubernetesName(name) {
 		return service.ServerCreateData{}, errors.New("invalid server name format")
+	}
+
+	if !isValidKubernetesName(namespace) {
+		return service.ServerCreateData{}, errors.New("invalid namespace format")
 	}
 
 	data := service.ServerCreateData{
