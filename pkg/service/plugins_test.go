@@ -27,19 +27,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 )
 
 // --- Test fixtures ---
 
-func makeTestPlugin(name, namespace string) *mck8slexlav1alpha1.Plugin {
-	return &mck8slexlav1alpha1.Plugin{
+func makeTestPlugin(name, namespace string) *mck8slexlav1beta1.Plugin {
+	return &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec: mck8slexlav1alpha1.PluginSpec{
-			Source: mck8slexlav1alpha1.PluginSource{
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
 				Type:    "hangar",
 				Project: "test-project",
 			},
@@ -115,7 +115,7 @@ func TestPluginService_GetPlugin_Found(t *testing.T) {
 	plugin := makeTestPlugin("test-plugin", "default")
 	plugin.Spec.Version = "1.0.0"
 	plugin.Status.RepositoryStatus = "available"
-	plugin.Status.MatchedInstances = []mck8slexlav1alpha1.MatchedInstance{
+	plugin.Status.MatchedInstances = []mck8slexlav1beta1.MatchedInstance{
 		{Name: "server1", Namespace: "default", Version: "1.21.1", Compatible: true},
 	}
 
@@ -223,7 +223,7 @@ func TestPluginService_CreatePlugin_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify plugin was created
-	var plugin mck8slexlav1alpha1.Plugin
+	var plugin mck8slexlav1beta1.Plugin
 	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "new-plugin"}, &plugin)
 	require.NoError(t, err)
 	assert.Equal(t, "new-plugin", plugin.Name)
@@ -258,7 +258,7 @@ func TestPluginService_CreatePlugin_MinimalData(t *testing.T) {
 
 	require.NoError(t, err)
 
-	var plugin mck8slexlav1alpha1.Plugin
+	var plugin mck8slexlav1beta1.Plugin
 	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "minimal-plugin"}, &plugin)
 	require.NoError(t, err)
 	assert.Nil(t, plugin.Spec.Build)
@@ -285,7 +285,7 @@ func TestPluginService_DeletePlugin_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify plugin was deleted
-	var deleted mck8slexlav1alpha1.Plugin
+	var deleted mck8slexlav1beta1.Plugin
 	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "to-delete"}, &deleted)
 	require.Error(t, err)
 }
@@ -335,7 +335,7 @@ func TestPluginService_UpdatePlugin_Success(t *testing.T) {
 
 	require.NoError(t, err)
 
-	var updated mck8slexlav1alpha1.Plugin
+	var updated mck8slexlav1beta1.Plugin
 	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "test-plugin"}, &updated)
 	require.NoError(t, err)
 	assert.Equal(t, "pinned", updated.Spec.UpdateStrategy)
@@ -370,7 +370,7 @@ func TestPluginService_UpdatePlugin_PartialUpdate(t *testing.T) {
 
 	require.NoError(t, err)
 
-	var updated mck8slexlav1alpha1.Plugin
+	var updated mck8slexlav1beta1.Plugin
 	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "test-plugin"}, &updated)
 	require.NoError(t, err)
 	assert.Equal(t, "latest", updated.Spec.UpdateStrategy) // Unchanged
@@ -415,7 +415,7 @@ func TestPluginService_TriggerReconciliation_AddsAnnotation(t *testing.T) {
 
 	require.NoError(t, err)
 
-	var updated mck8slexlav1alpha1.Plugin
+	var updated mck8slexlav1beta1.Plugin
 	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "test-plugin"}, &updated)
 	require.NoError(t, err)
 	assert.Contains(t, updated.Annotations, AnnotationReconcile)
@@ -495,7 +495,7 @@ func TestPluginToData_WithAvailableVersions(t *testing.T) {
 
 	plugin := makeTestPlugin("test-plugin", "default")
 	now := metav1.Now()
-	plugin.Status.AvailableVersions = []mck8slexlav1alpha1.PluginVersionInfo{
+	plugin.Status.AvailableVersions = []mck8slexlav1beta1.PluginVersionInfo{
 		{
 			Version:           "1.0.0",
 			MinecraftVersions: []string{"1.21.1"},
@@ -552,13 +552,13 @@ func TestPluginService_UpdatePlugin_InvalidUpdateDelay(t *testing.T) {
 	// BUG: UpdatePlugin silently ignores invalid UpdateDelay strings.
 	t.Parallel()
 
-	existingPlugin := &mck8slexlav1alpha1.Plugin{
+	existingPlugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "delay-test-plugin",
 			Namespace: "default",
 		},
-		Spec: mck8slexlav1alpha1.PluginSpec{
-			Source: mck8slexlav1alpha1.PluginSource{
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
 				Type:    "hangar",
 				Project: "EssentialsX",
 			},

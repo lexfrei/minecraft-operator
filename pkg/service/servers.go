@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -120,7 +120,7 @@ type ServerUpdateData struct {
 
 // ListServers returns all servers, optionally filtered by namespace.
 func (s *ServerService) ListServers(ctx context.Context, namespace string) ([]ServerData, error) {
-	var serverList mck8slexlav1alpha1.PaperMCServerList
+	var serverList mck8slexlav1beta1.PaperMCServerList
 
 	if err := s.client.List(ctx, &serverList); err != nil {
 		return nil, errors.Wrap(err, "failed to list PaperMCServers")
@@ -145,7 +145,7 @@ func (s *ServerService) ListServers(ctx context.Context, namespace string) ([]Se
 
 // GetServer returns a specific server by namespace and name.
 func (s *ServerService) GetServer(ctx context.Context, namespace, name string) (*ServerData, error) {
-	var server mck8slexlav1alpha1.PaperMCServer
+	var server mck8slexlav1beta1.PaperMCServer
 
 	if err := s.client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &server); err != nil {
 		return nil, errors.Wrap(err, "failed to get PaperMCServer")
@@ -161,7 +161,7 @@ func (s *ServerService) GetServer(ctx context.Context, namespace, name string) (
 
 // GetServerByName finds a server by name across all namespaces.
 func (s *ServerService) GetServerByName(ctx context.Context, name string) (*ServerData, error) {
-	var serverList mck8slexlav1alpha1.PaperMCServerList
+	var serverList mck8slexlav1beta1.PaperMCServerList
 
 	if err := s.client.List(ctx, &serverList); err != nil {
 		return nil, errors.Wrap(err, "failed to list PaperMCServers")
@@ -180,7 +180,7 @@ func (s *ServerService) GetServerByName(ctx context.Context, name string) (*Serv
 
 // TriggerReconciliation sets the reconcile annotation to trigger reconciliation.
 func (s *ServerService) TriggerReconciliation(ctx context.Context, namespace, name string) error {
-	var server mck8slexlav1alpha1.PaperMCServer
+	var server mck8slexlav1beta1.PaperMCServer
 
 	if err := s.client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &server); err != nil {
 		return errors.Wrap(err, "failed to get server")
@@ -200,7 +200,7 @@ func (s *ServerService) TriggerReconciliation(ctx context.Context, namespace, na
 
 // ApplyNow sets the apply-now annotation to trigger immediate update.
 func (s *ServerService) ApplyNow(ctx context.Context, namespace, name string) error {
-	var server mck8slexlav1alpha1.PaperMCServer
+	var server mck8slexlav1beta1.PaperMCServer
 
 	if err := s.client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &server); err != nil {
 		return errors.Wrap(err, "failed to get server")
@@ -220,7 +220,7 @@ func (s *ServerService) ApplyNow(ctx context.Context, namespace, name string) er
 
 // DeleteServer deletes a server.
 func (s *ServerService) DeleteServer(ctx context.Context, namespace, name string) error {
-	var server mck8slexlav1alpha1.PaperMCServer
+	var server mck8slexlav1beta1.PaperMCServer
 
 	if err := s.client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &server); err != nil {
 		return errors.Wrap(err, "failed to get server")
@@ -235,13 +235,13 @@ func (s *ServerService) DeleteServer(ctx context.Context, namespace, name string
 
 // CreateServer creates a new PaperMCServer from the provided data.
 func (s *ServerService) CreateServer(ctx context.Context, data ServerCreateData) error {
-	server := &mck8slexlav1alpha1.PaperMCServer{
+	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      data.Name,
 			Namespace: data.Namespace,
 			Labels:    data.Labels,
 		},
-		Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+		Spec: mck8slexlav1beta1.PaperMCServerSpec{
 			UpdateStrategy: data.UpdateStrategy,
 			Version:        data.Version,
 		},
@@ -278,7 +278,7 @@ func (s *ServerService) CreateServer(ctx context.Context, data ServerCreateData)
 
 // UpdateServer updates an existing PaperMCServer with the provided data.
 func (s *ServerService) UpdateServer(ctx context.Context, data ServerUpdateData) error {
-	var server mck8slexlav1alpha1.PaperMCServer
+	var server mck8slexlav1beta1.PaperMCServer
 
 	if err := s.client.Get(ctx, client.ObjectKey{Namespace: data.Namespace, Name: data.Name}, &server); err != nil {
 		return errors.Wrap(err, "failed to get server")
@@ -329,7 +329,7 @@ func (s *ServerService) UpdateServer(ctx context.Context, data ServerUpdateData)
 }
 
 // DetermineStatus determines the display status of a server.
-func (s *ServerService) DetermineStatus(server *mck8slexlav1alpha1.PaperMCServer) string {
+func (s *ServerService) DetermineStatus(server *mck8slexlav1beta1.PaperMCServer) string {
 	// Check StatefulSet readiness via conditions
 	for _, condition := range server.Status.Conditions {
 		if condition.Type == "StatefulSetReady" {
@@ -375,7 +375,7 @@ func (s *ServerService) CheckStatefulSetStatus(ctx context.Context, name, namesp
 }
 
 // serverToData converts a PaperMCServer to ServerData.
-func (s *ServerService) serverToData(ctx context.Context, server *mck8slexlav1alpha1.PaperMCServer) ServerData {
+func (s *ServerService) serverToData(ctx context.Context, server *mck8slexlav1beta1.PaperMCServer) ServerData {
 	data := ServerData{
 		Name:           server.Name,
 		Namespace:      server.Namespace,
@@ -440,12 +440,12 @@ func (s *ServerService) serverToData(ctx context.Context, server *mck8slexlav1al
 // fetchPluginDetails fetches full plugin details from Plugin CRDs.
 func (s *ServerService) fetchPluginDetails(
 	ctx context.Context,
-	pluginStatuses []mck8slexlav1alpha1.ServerPluginStatus,
+	pluginStatuses []mck8slexlav1beta1.ServerPluginStatus,
 ) []ServerPluginData {
 	plugins := make([]ServerPluginData, 0, len(pluginStatuses))
 
 	for _, pluginStatus := range pluginStatuses {
-		var plugin mck8slexlav1alpha1.Plugin
+		var plugin mck8slexlav1beta1.Plugin
 		if err := s.client.Get(ctx, client.ObjectKey{
 			Name:      pluginStatus.PluginRef.Name,
 			Namespace: pluginStatus.PluginRef.Namespace,
@@ -477,7 +477,7 @@ func (s *ServerService) fetchPluginDetails(
 
 // GetServerNamespaces returns unique namespaces that have servers.
 func (s *ServerService) GetServerNamespaces(ctx context.Context) ([]string, error) {
-	var serverList mck8slexlav1alpha1.PaperMCServerList
+	var serverList mck8slexlav1beta1.PaperMCServerList
 
 	if err := s.client.List(ctx, &serverList); err != nil {
 		return nil, errors.Wrap(err, "failed to list PaperMCServers")

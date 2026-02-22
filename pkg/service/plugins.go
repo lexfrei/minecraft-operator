@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -93,7 +93,7 @@ type PluginUpdateData struct {
 
 // ListPlugins returns all plugins, optionally filtered by namespace.
 func (s *PluginService) ListPlugins(ctx context.Context, namespace string) ([]PluginData, error) {
-	var pluginList mck8slexlav1alpha1.PluginList
+	var pluginList mck8slexlav1beta1.PluginList
 
 	if err := s.client.List(ctx, &pluginList); err != nil {
 		return nil, errors.Wrap(err, "failed to list Plugins")
@@ -118,7 +118,7 @@ func (s *PluginService) ListPlugins(ctx context.Context, namespace string) ([]Pl
 
 // GetPlugin returns a specific plugin by namespace and name.
 func (s *PluginService) GetPlugin(ctx context.Context, namespace, name string) (*PluginData, error) {
-	var plugin mck8slexlav1alpha1.Plugin
+	var plugin mck8slexlav1beta1.Plugin
 
 	if err := s.client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &plugin); err != nil {
 		return nil, errors.Wrap(err, "failed to get Plugin")
@@ -130,13 +130,13 @@ func (s *PluginService) GetPlugin(ctx context.Context, namespace, name string) (
 
 // CreatePlugin creates a new plugin from the provided data.
 func (s *PluginService) CreatePlugin(ctx context.Context, data PluginCreateData) error {
-	plugin := &mck8slexlav1alpha1.Plugin{
+	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      data.Name,
 			Namespace: data.Namespace,
 		},
-		Spec: mck8slexlav1alpha1.PluginSpec{
-			Source: mck8slexlav1alpha1.PluginSource{
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
 				Type:    data.Source.Type,
 				Project: data.Source.Project,
 				URL:     data.Source.URL,
@@ -173,7 +173,7 @@ func (s *PluginService) CreatePlugin(ctx context.Context, data PluginCreateData)
 
 // DeletePlugin deletes a plugin.
 func (s *PluginService) DeletePlugin(ctx context.Context, namespace, name string) error {
-	var plugin mck8slexlav1alpha1.Plugin
+	var plugin mck8slexlav1beta1.Plugin
 
 	if err := s.client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &plugin); err != nil {
 		return errors.Wrap(err, "failed to get plugin")
@@ -188,7 +188,7 @@ func (s *PluginService) DeletePlugin(ctx context.Context, namespace, name string
 
 // TriggerReconciliation sets the reconcile annotation to trigger reconciliation.
 func (s *PluginService) TriggerReconciliation(ctx context.Context, namespace, name string) error {
-	var plugin mck8slexlav1alpha1.Plugin
+	var plugin mck8slexlav1beta1.Plugin
 
 	if err := s.client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &plugin); err != nil {
 		return errors.Wrap(err, "failed to get plugin")
@@ -208,7 +208,7 @@ func (s *PluginService) TriggerReconciliation(ctx context.Context, namespace, na
 
 // UpdatePlugin updates an existing Plugin with the provided data.
 func (s *PluginService) UpdatePlugin(ctx context.Context, data PluginUpdateData) error {
-	var plugin mck8slexlav1alpha1.Plugin
+	var plugin mck8slexlav1beta1.Plugin
 
 	if err := s.client.Get(ctx, client.ObjectKey{Namespace: data.Namespace, Name: data.Name}, &plugin); err != nil {
 		return errors.Wrap(err, "failed to get plugin")
@@ -251,7 +251,7 @@ func (s *PluginService) UpdatePlugin(ctx context.Context, data PluginUpdateData)
 }
 
 // pluginToData converts a Plugin to PluginData.
-func (s *PluginService) pluginToData(plugin *mck8slexlav1alpha1.Plugin) PluginData {
+func (s *PluginService) pluginToData(plugin *mck8slexlav1beta1.Plugin) PluginData {
 	data := PluginData{
 		Name:             plugin.Name,
 		Namespace:        plugin.Namespace,
@@ -308,7 +308,7 @@ func (s *PluginService) pluginToData(plugin *mck8slexlav1alpha1.Plugin) PluginDa
 
 // GetPluginNamespaces returns unique namespaces that have plugins.
 func (s *PluginService) GetPluginNamespaces(ctx context.Context) ([]string, error) {
-	var pluginList mck8slexlav1alpha1.PluginList
+	var pluginList mck8slexlav1beta1.PluginList
 
 	if err := s.client.List(ctx, &pluginList); err != nil {
 		return nil, errors.Wrap(err, "failed to list Plugins")

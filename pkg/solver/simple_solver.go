@@ -6,7 +6,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/cockroachdb/errors"
-	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/version"
 )
@@ -35,8 +35,8 @@ func NewSimpleSolver() *SimpleSolver {
 //  5. Return first version that satisfies all constraints
 func (s *SimpleSolver) FindBestPluginVersion(
 	ctx context.Context,
-	plugin *mcv1alpha1.Plugin,
-	servers []mcv1alpha1.PaperMCServer,
+	plugin *mcv1beta1.Plugin,
+	servers []mcv1beta1.PaperMCServer,
 	allVersions []plugins.PluginVersion,
 ) (string, error) {
 	if len(allVersions) == 0 {
@@ -63,7 +63,7 @@ func (s *SimpleSolver) FindBestPluginVersion(
 }
 
 // checkPinnedPluginVersion returns pinned version if strategy is pin/build-pin/pinned.
-func (s *SimpleSolver) checkPinnedPluginVersion(plugin *mcv1alpha1.Plugin) string {
+func (s *SimpleSolver) checkPinnedPluginVersion(plugin *mcv1beta1.Plugin) string {
 	strategy := plugin.Spec.UpdateStrategy
 	if strategy == "" {
 		strategy = updateStrategyLatest
@@ -85,7 +85,7 @@ func (s *SimpleSolver) checkPinnedPluginVersion(plugin *mcv1alpha1.Plugin) strin
 
 // filterAndSortPluginVersions filters by updateDelay and sorts plugin versions descending.
 func (s *SimpleSolver) filterAndSortPluginVersions(
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 	allVersions []plugins.PluginVersion,
 ) ([]plugins.PluginVersion, error) {
 	var delay time.Duration
@@ -104,8 +104,8 @@ func (s *SimpleSolver) filterAndSortPluginVersions(
 // findCompatiblePluginVersion finds first version compatible with all servers.
 func (s *SimpleSolver) findCompatiblePluginVersion(
 	sortedVersions []plugins.PluginVersion,
-	servers []mcv1alpha1.PaperMCServer,
-	plugin *mcv1alpha1.Plugin,
+	servers []mcv1beta1.PaperMCServer,
+	plugin *mcv1beta1.Plugin,
 ) (string, error) {
 	for _, pv := range sortedVersions {
 		compatible := true
@@ -135,8 +135,8 @@ func (s *SimpleSolver) findCompatiblePluginVersion(
 //  5. Return first Paper version that satisfies all constraints
 func (s *SimpleSolver) FindBestPaperVersion(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 	paperVersions []string,
 ) (string, error) {
 	if len(paperVersions) == 0 {
@@ -189,7 +189,7 @@ func (s *SimpleSolver) filterAndSortPaperVersions(paperVersions []string) []stri
 // isPaperVersionCompatibleWithAllPlugins checks if a Paper version is compatible with all plugins.
 func (s *SimpleSolver) isPaperVersionCompatibleWithAllPlugins(
 	paperVer string,
-	matchedPlugins []mcv1alpha1.Plugin,
+	matchedPlugins []mcv1beta1.Plugin,
 ) bool {
 	for i := range matchedPlugins {
 		plugin := &matchedPlugins[i]
@@ -278,8 +278,8 @@ func sortPaperVersionsDesc(versions []string) []string {
 // isPluginCompatibleWithServer checks if a plugin version is compatible with a server's Paper version.
 func isPluginCompatibleWithServer(
 	pv plugins.PluginVersion,
-	server *mcv1alpha1.PaperMCServer,
-	plugin *mcv1alpha1.Plugin,
+	server *mcv1beta1.PaperMCServer,
+	plugin *mcv1beta1.Plugin,
 ) bool {
 	// Use the current Paper version from status, fallback to spec
 	paperVersion := server.Status.CurrentVersion

@@ -14,7 +14,7 @@ spec:
     singular: papermcserver
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - name: v1beta1
     schema:
       openAPIV3Schema:
         description: PaperMCServer is the Schema for the papermcservers API.

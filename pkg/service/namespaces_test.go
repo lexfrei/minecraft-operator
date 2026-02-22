@@ -26,12 +26,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 )
 
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
-	_ = mck8slexlav1alpha1.AddToScheme(scheme)
+	_ = mck8slexlav1beta1.AddToScheme(scheme)
 	return scheme
 }
 
@@ -57,13 +57,13 @@ func TestNamespaceService_ListNamespaces_IncludesDefault(t *testing.T) {
 func TestNamespaceService_ListNamespaces_FromPlugins(t *testing.T) {
 	t.Parallel()
 
-	plugin := &mck8slexlav1alpha1.Plugin{
+	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-plugin",
 			Namespace: "minecraft",
 		},
-		Spec: mck8slexlav1alpha1.PluginSpec{
-			Source: mck8slexlav1alpha1.PluginSource{
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
 				Type:    "hangar",
 				Project: "test",
 			},
@@ -88,12 +88,12 @@ func TestNamespaceService_ListNamespaces_FromPlugins(t *testing.T) {
 func TestNamespaceService_ListNamespaces_FromServers(t *testing.T) {
 	t.Parallel()
 
-	server := &mck8slexlav1alpha1.PaperMCServer{
+	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-server",
 			Namespace: "games",
 		},
-		Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+		Spec: mck8slexlav1beta1.PaperMCServerSpec{
 			Version: "1.21.1",
 		},
 	}
@@ -117,25 +117,25 @@ func TestNamespaceService_ListNamespaces_Deduplicates(t *testing.T) {
 	t.Parallel()
 
 	// Plugin and server in the same namespace
-	plugin := &mck8slexlav1alpha1.Plugin{
+	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-plugin",
 			Namespace: "shared",
 		},
-		Spec: mck8slexlav1alpha1.PluginSpec{
-			Source: mck8slexlav1alpha1.PluginSource{
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
 				Type:    "hangar",
 				Project: "test",
 			},
 		},
 	}
 
-	server := &mck8slexlav1alpha1.PaperMCServer{
+	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-server",
 			Namespace: "shared",
 		},
-		Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+		Spec: mck8slexlav1beta1.PaperMCServerSpec{
 			Version: "1.21.1",
 		},
 	}
@@ -158,38 +158,38 @@ func TestNamespaceService_ListNamespaces_Deduplicates(t *testing.T) {
 func TestNamespaceService_ListNamespaces_MultipleNamespaces(t *testing.T) {
 	t.Parallel()
 
-	plugin1 := &mck8slexlav1alpha1.Plugin{
+	plugin1 := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "plugin1",
 			Namespace: "ns1",
 		},
-		Spec: mck8slexlav1alpha1.PluginSpec{
-			Source: mck8slexlav1alpha1.PluginSource{
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
 				Type:    "hangar",
 				Project: "test1",
 			},
 		},
 	}
 
-	plugin2 := &mck8slexlav1alpha1.Plugin{
+	plugin2 := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "plugin2",
 			Namespace: "ns2",
 		},
-		Spec: mck8slexlav1alpha1.PluginSpec{
-			Source: mck8slexlav1alpha1.PluginSource{
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
 				Type:    "hangar",
 				Project: "test2",
 			},
 		},
 	}
 
-	server := &mck8slexlav1alpha1.PaperMCServer{
+	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "server1",
 			Namespace: "ns3",
 		},
-		Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+		Spec: mck8slexlav1beta1.PaperMCServerSpec{
 			Version: "1.21.1",
 		},
 	}
@@ -215,13 +215,13 @@ func TestNamespaceService_ListNamespaces_DefaultNamespaceResources(t *testing.T)
 	t.Parallel()
 
 	// Resources in default namespace
-	plugin := &mck8slexlav1alpha1.Plugin{
+	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "default-plugin",
 			Namespace: "default",
 		},
-		Spec: mck8slexlav1alpha1.PluginSpec{
-			Source: mck8slexlav1alpha1.PluginSource{
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
 				Type:    "hangar",
 				Project: "test",
 			},

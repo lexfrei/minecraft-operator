@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/templates"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -398,7 +398,7 @@ func (s *Server) parsePluginFormToData(r *http.Request) (service.PluginCreateDat
 // handlePluginDelete handles plugin deletion.
 func (s *Server) handlePluginDelete(w http.ResponseWriter, r *http.Request) {
 	handleResourceDelete(s, w, r, "/ui/plugin/", "plugin",
-		func() *mck8slexlav1alpha1.Plugin { return &mck8slexlav1alpha1.Plugin{} },
+		func() *mck8slexlav1beta1.Plugin { return &mck8slexlav1beta1.Plugin{} },
 		"/ui/plugins")
 }
 
@@ -527,7 +527,7 @@ func (s *Server) handleApplyNow(w http.ResponseWriter, r *http.Request) {
 // handleServerDelete handles server deletion.
 func (s *Server) handleServerDelete(w http.ResponseWriter, r *http.Request) {
 	handleResourceDelete(s, w, r, "/ui/server/", "server",
-		func() *mck8slexlav1alpha1.PaperMCServer { return &mck8slexlav1alpha1.PaperMCServer{} },
+		func() *mck8slexlav1beta1.PaperMCServer { return &mck8slexlav1beta1.PaperMCServer{} },
 		"/ui")
 }
 

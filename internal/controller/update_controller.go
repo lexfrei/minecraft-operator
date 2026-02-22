@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	mccron "github.com/lexfrei/minecraft-operator/pkg/cron"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/rcon"
@@ -101,7 +101,7 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Fetch the PaperMCServer resource
-	var server mcv1alpha1.PaperMCServer
+	var server mcv1beta1.PaperMCServer
 	if err := r.Get(ctx, req.NamespacedName, &server); err != nil {
 		if apierrors.IsNotFound(err) {
 			// Resource deleted - remove cron job if exists
@@ -214,7 +214,7 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 // shouldApplyUpdate checks if an update should be applied based on updateDelay.
 // Returns (shouldApply bool, remainingDelay time.Duration).
-func (r *UpdateReconciler) shouldApplyUpdate(server *mcv1alpha1.PaperMCServer) (bool, time.Duration) {
+func (r *UpdateReconciler) shouldApplyUpdate(server *mcv1beta1.PaperMCServer) (bool, time.Duration) {
 	// No available update - nothing to apply
 	if server.Status.AvailableUpdate == nil {
 		return true, 0
@@ -254,7 +254,7 @@ func (r *UpdateReconciler) now() time.Time {
 // isInMaintenanceWindow checks if the current time is within the maintenance window.
 // The maintenance window starts at the cron trigger time and lasts for maintenanceWindowDuration.
 // Returns true if maintenance window is disabled (updates always allowed).
-func (r *UpdateReconciler) isInMaintenanceWindow(ctx context.Context, server *mcv1alpha1.PaperMCServer) bool {
+func (r *UpdateReconciler) isInMaintenanceWindow(ctx context.Context, server *mcv1beta1.PaperMCServer) bool {
 	mw := server.Spec.UpdateSchedule.MaintenanceWindow
 	if !mw.Enabled || mw.Cron == "" {
 		return true // No maintenance window configured, always allow
@@ -306,7 +306,7 @@ func findLastCronTrigger(schedule cron.Schedule, now time.Time) time.Time {
 }
 
 // manageCronSchedule adds, updates, or removes cron jobs based on server spec.
-func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1alpha1.PaperMCServer) {
+func (r *UpdateReconciler) manageCronSchedule(ctx context.Context, server *mcv1beta1.PaperMCServer) {
 	serverKey := types.NamespacedName{
 		Name:      server.Name,
 		Namespace: server.Namespace,
@@ -452,7 +452,7 @@ func (r *UpdateReconciler) verifyChecksum(filePath, expectedHash string) error {
 // downloadPluginToServer downloads a plugin JAR to the server's /data/plugins/update/ directory.
 func (r *UpdateReconciler) downloadPluginToServer(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	pluginName string,
 	downloadURL string,
 	expectedHash string,
@@ -510,16 +510,16 @@ func (r *UpdateReconciler) downloadPluginToServer(
 //nolint:funlen // Complex plugin download orchestration with error handling
 func (r *UpdateReconciler) applyPluginUpdates(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 ) error {
 	// Get current Plugin CRDs to access download URLs
-	var pluginList mcv1alpha1.PluginList
+	var pluginList mcv1beta1.PluginList
 	if err := r.List(ctx, &pluginList, client.InNamespace(server.Namespace)); err != nil {
 		return errors.Wrap(err, "failed to list plugins")
 	}
 
 	// Build map of plugin name -> Plugin CRD for quick lookup
-	pluginMap := make(map[string]*mcv1alpha1.Plugin)
+	pluginMap := make(map[string]*mcv1beta1.Plugin)
 	for i := range pluginList.Items {
 		plugin := &pluginList.Items[i]
 		pluginMap[plugin.Name] = plugin
@@ -592,7 +592,7 @@ func (r *UpdateReconciler) applyPluginUpdates(
 // waitForPodReady waits for the server pod to become ready after restart.
 func (r *UpdateReconciler) waitForPodReady(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 ) error {
 	podName := server.Name + "-0"
 	namespace := server.Namespace
@@ -637,7 +637,7 @@ func (r *UpdateReconciler) waitForPodReady(
 // createRCONClient creates an RCON client for the server by fetching Pod IP and password from Secret.
 func (r *UpdateReconciler) createRCONClient(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 ) (*rcon.RCONClient, error) {
 	podName := server.Name + "-0"
 	namespace := server.Namespace
@@ -695,7 +695,7 @@ func (r *UpdateReconciler) createRCONClient(
 // performPluginOnlyUpdate handles updates when only plugins changed (Paper version unchanged).
 func (r *UpdateReconciler) performPluginOnlyUpdate(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 ) error {
 	slog.InfoContext(ctx, "Starting plugin-only update", "server", server.Name)
 
@@ -742,7 +742,7 @@ func (r *UpdateReconciler) performPluginOnlyUpdate(
 // updateStatefulSetImage updates the Paper container image in the StatefulSet.
 func (r *UpdateReconciler) updateStatefulSetImage(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	newImage string,
 ) error {
 	slog.InfoContext(ctx, "Updating StatefulSet image",
@@ -786,7 +786,7 @@ func (r *UpdateReconciler) updateStatefulSetImage(
 // performCombinedUpdate handles updates when both Paper and plugins need updating.
 func (r *UpdateReconciler) performCombinedUpdate(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 ) error {
 	slog.InfoContext(ctx, "Starting combined Paper and plugins update", "server", server.Name)
 
@@ -843,7 +843,7 @@ func (r *UpdateReconciler) performCombinedUpdate(
 // This allows for testing with mock clients.
 func (r *UpdateReconciler) executeGracefulShutdownWithClient(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	rconClient interface {
 		Connect(ctx context.Context) error
 		GracefulShutdown(ctx context.Context, warnings []string, warningInterval time.Duration) error
@@ -884,13 +884,13 @@ func (r *UpdateReconciler) executeGracefulShutdownWithClient(
 
 // updateServerStatus updates the server status after an update attempt.
 func (r *UpdateReconciler) updateServerStatus(
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	successful bool,
 ) {
 	now := metav1.Now()
 
 	// Record update history
-	server.Status.LastUpdate = &mcv1alpha1.UpdateHistory{
+	server.Status.LastUpdate = &mcv1beta1.UpdateHistory{
 		AppliedAt:       now,
 		PreviousVersion: server.Status.CurrentVersion,
 		Successful:      successful,
@@ -914,7 +914,7 @@ func (r *UpdateReconciler) updateServerStatus(
 }
 
 // setUpdatingCondition sets the Updating condition on the server.
-func (r *UpdateReconciler) setUpdatingCondition(server *mcv1alpha1.PaperMCServer, updating bool, message string) {
+func (r *UpdateReconciler) setUpdatingCondition(server *mcv1beta1.PaperMCServer, updating bool, message string) {
 	var status metav1.ConditionStatus
 	var reason string
 
@@ -940,7 +940,7 @@ func (r *UpdateReconciler) setUpdatingCondition(server *mcv1alpha1.PaperMCServer
 
 // setUpdatingConditionWithType sets a condition with a specific type on the server.
 func (r *UpdateReconciler) setUpdatingConditionWithType(
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	conditionType string,
 	status metav1.ConditionStatus,
 	reason string,
@@ -960,9 +960,9 @@ func (r *UpdateReconciler) setUpdatingConditionWithType(
 
 // getPluginsToDelete returns all plugins marked for deletion.
 func (r *UpdateReconciler) getPluginsToDelete(
-	server *mcv1alpha1.PaperMCServer,
-) []mcv1alpha1.ServerPluginStatus {
-	var result []mcv1alpha1.ServerPluginStatus
+	server *mcv1beta1.PaperMCServer,
+) []mcv1beta1.ServerPluginStatus {
+	var result []mcv1beta1.ServerPluginStatus
 
 	for _, plugin := range server.Status.Plugins {
 		if plugin.PendingDeletion {
@@ -980,7 +980,7 @@ func (r *UpdateReconciler) markJARAsDeleted(
 	serverName, serverNamespace string,
 ) error {
 	// Fetch the Plugin resource
-	var plugin mcv1alpha1.Plugin
+	var plugin mcv1beta1.Plugin
 	if err := r.Get(ctx, client.ObjectKey{
 		Name:      pluginName,
 		Namespace: pluginNamespace,
@@ -1026,7 +1026,7 @@ func (r *UpdateReconciler) markJARAsDeleted(
 // deleteMarkedPlugins deletes plugin JARs that are marked for deletion from the server.
 func (r *UpdateReconciler) deleteMarkedPlugins(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 ) error {
 	pluginsToDelete := r.getPluginsToDelete(server)
 
@@ -1060,8 +1060,8 @@ func (r *UpdateReconciler) deleteMarkedPlugins(
 // plugin in plugins/ only, or plugin in both plugins/ and update/ folders.
 func (r *UpdateReconciler) deletePluginJAR(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	plugin mcv1alpha1.ServerPluginStatus,
+	server *mcv1beta1.PaperMCServer,
+	plugin mcv1beta1.ServerPluginStatus,
 ) error {
 	if plugin.InstalledJARName == "" {
 		slog.InfoContext(ctx, "Plugin was never installed, marking as deleted",
@@ -1118,7 +1118,7 @@ func (r *UpdateReconciler) deletePluginJAR(
 const applyNowMaxAge = 5 * time.Minute
 
 // shouldApplyNow checks if the apply-now annotation is present and valid.
-func (r *UpdateReconciler) shouldApplyNow(ctx context.Context, server *mcv1alpha1.PaperMCServer) bool {
+func (r *UpdateReconciler) shouldApplyNow(ctx context.Context, server *mcv1beta1.PaperMCServer) bool {
 	if server.Annotations == nil {
 		return false
 	}
@@ -1157,7 +1157,7 @@ func (r *UpdateReconciler) shouldApplyNow(ctx context.Context, server *mcv1alpha
 // removeApplyNowAnnotation removes the apply-now annotation from the server.
 func (r *UpdateReconciler) removeApplyNowAnnotation(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 ) error {
 	if server.Annotations == nil {
 		return nil
@@ -1168,7 +1168,7 @@ func (r *UpdateReconciler) removeApplyNowAnnotation(
 	}
 
 	// Re-fetch to avoid conflicts
-	var currentServer mcv1alpha1.PaperMCServer
+	var currentServer mcv1beta1.PaperMCServer
 	if err := r.Get(ctx, client.ObjectKey{
 		Name:      server.Name,
 		Namespace: server.Namespace,
@@ -1228,7 +1228,7 @@ func (r *UpdateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&mcv1alpha1.PaperMCServer{}).
+		For(&mcv1beta1.PaperMCServer{}).
 		Named("update").
 		Complete(r)
 }

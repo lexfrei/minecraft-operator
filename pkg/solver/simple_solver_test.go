@@ -9,35 +9,35 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/version"
 )
 
 // Test fixtures.
-func makePlugin(strategy, ver string) *mcv1alpha1.Plugin {
-	return &mcv1alpha1.Plugin{
+func makePlugin(strategy, ver string) *mcv1beta1.Plugin {
+	return &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-plugin",
 			Namespace: "default",
 		},
-		Spec: mcv1alpha1.PluginSpec{
+		Spec: mcv1beta1.PluginSpec{
 			UpdateStrategy: strategy,
 			Version:        ver,
 		},
 	}
 }
 
-func makeServer(name, currentVersion, specVersion string) mcv1alpha1.PaperMCServer {
-	return mcv1alpha1.PaperMCServer{
+func makeServer(name, currentVersion, specVersion string) mcv1beta1.PaperMCServer {
+	return mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
 		},
-		Spec: mcv1alpha1.PaperMCServerSpec{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			Version: specVersion,
 		},
-		Status: mcv1alpha1.PaperMCServerStatus{
+		Status: mcv1beta1.PaperMCServerStatus{
 			CurrentVersion: currentVersion,
 		},
 	}
@@ -230,7 +230,7 @@ func TestIsPluginCompatibleWithServer_CompatibilityOverride(t *testing.T) {
 	pv := makePluginVersion("1.0.0", []string{"1.20.1"}, time.Now())
 	server := makeServer("test", "1.21.1", "")
 	plugin := makePlugin("latest", "")
-	plugin.Spec.CompatibilityOverride = &mcv1alpha1.CompatibilityOverride{
+	plugin.Spec.CompatibilityOverride = &mcv1beta1.CompatibilityOverride{
 		Enabled:           true,
 		MinecraftVersions: []string{"1.21.1", "1.21.4"},
 	}
@@ -244,7 +244,7 @@ func TestIsPluginCompatibleWithServer_CompatibilityOverride_EmptyVersions(t *tes
 	pv := makePluginVersion("1.0.0", []string{"1.20.1"}, time.Now())
 	server := makeServer("test", "1.21.1", "")
 	plugin := makePlugin("latest", "")
-	plugin.Spec.CompatibilityOverride = &mcv1alpha1.CompatibilityOverride{
+	plugin.Spec.CompatibilityOverride = &mcv1beta1.CompatibilityOverride{
 		Enabled:           true,
 		MinecraftVersions: []string{},
 	}
@@ -259,7 +259,7 @@ func TestFindBestPluginVersion_PinStrategy_ReturnsExactVersion(t *testing.T) {
 
 	solver := NewSimpleSolver()
 	plugin := makePlugin("pin", "1.5.0")
-	servers := []mcv1alpha1.PaperMCServer{makeServer("s1", "1.21.1", "")}
+	servers := []mcv1beta1.PaperMCServer{makeServer("s1", "1.21.1", "")}
 	versions := []plugins.PluginVersion{
 		makePluginVersion("2.0.0", []string{"1.21.1"}, time.Now()),
 		makePluginVersion("1.5.0", []string{"1.21.1"}, time.Now()),
@@ -276,7 +276,7 @@ func TestFindBestPluginVersion_BuildPinStrategy_ReturnsExactVersion(t *testing.T
 
 	solver := NewSimpleSolver()
 	plugin := makePlugin("build-pin", "1.2.3")
-	servers := []mcv1alpha1.PaperMCServer{makeServer("s1", "1.21.1", "")}
+	servers := []mcv1beta1.PaperMCServer{makeServer("s1", "1.21.1", "")}
 	versions := []plugins.PluginVersion{
 		makePluginVersion("2.0.0", []string{"1.21.1"}, time.Now()),
 	}
@@ -292,7 +292,7 @@ func TestFindBestPluginVersion_LatestStrategy_FindsNewest(t *testing.T) {
 
 	solver := NewSimpleSolver()
 	plugin := makePlugin("latest", "")
-	servers := []mcv1alpha1.PaperMCServer{makeServer("s1", "1.21.1", "")}
+	servers := []mcv1beta1.PaperMCServer{makeServer("s1", "1.21.1", "")}
 	now := time.Now()
 	versions := []plugins.PluginVersion{
 		makePluginVersion("1.0.0", []string{"1.21.1"}, now.Add(-48*time.Hour)),
@@ -311,7 +311,7 @@ func TestFindBestPluginVersion_NoVersionsAvailable_ReturnsError(t *testing.T) {
 
 	solver := NewSimpleSolver()
 	plugin := makePlugin("latest", "")
-	servers := []mcv1alpha1.PaperMCServer{makeServer("s1", "1.21.1", "")}
+	servers := []mcv1beta1.PaperMCServer{makeServer("s1", "1.21.1", "")}
 
 	_, err := solver.FindBestPluginVersion(context.Background(), plugin, servers, []plugins.PluginVersion{})
 
@@ -328,7 +328,7 @@ func TestFindBestPluginVersion_NoServersMatched_ReturnsError(t *testing.T) {
 		makePluginVersion("1.0.0", []string{"1.21.1"}, time.Now()),
 	}
 
-	_, err := solver.FindBestPluginVersion(context.Background(), plugin, []mcv1alpha1.PaperMCServer{}, versions)
+	_, err := solver.FindBestPluginVersion(context.Background(), plugin, []mcv1beta1.PaperMCServer{}, versions)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no servers matched")
@@ -339,7 +339,7 @@ func TestFindBestPluginVersion_NoCompatibleVersion_ReturnsError(t *testing.T) {
 
 	solver := NewSimpleSolver()
 	plugin := makePlugin("latest", "")
-	servers := []mcv1alpha1.PaperMCServer{makeServer("s1", "1.21.1", "")}
+	servers := []mcv1beta1.PaperMCServer{makeServer("s1", "1.21.1", "")}
 	now := time.Now()
 	versions := []plugins.PluginVersion{
 		makePluginVersion("1.0.0", []string{"1.20.1"}, now.Add(-48*time.Hour)),
@@ -358,7 +358,7 @@ func TestFindBestPluginVersion_UpdateDelay_FiltersNewVersions(t *testing.T) {
 	solver := NewSimpleSolver()
 	plugin := makePlugin("latest", "")
 	plugin.Spec.UpdateDelay = &metav1.Duration{Duration: 24 * time.Hour}
-	servers := []mcv1alpha1.PaperMCServer{makeServer("s1", "1.21.1", "")}
+	servers := []mcv1beta1.PaperMCServer{makeServer("s1", "1.21.1", "")}
 	now := time.Now()
 	versions := []plugins.PluginVersion{
 		makePluginVersion("1.0.0", []string{"1.21.1"}, now.Add(-48*time.Hour)),
@@ -377,7 +377,7 @@ func TestFindBestPluginVersion_UpdateDelay_AllFiltered_ReturnsError(t *testing.T
 	solver := NewSimpleSolver()
 	plugin := makePlugin("latest", "")
 	plugin.Spec.UpdateDelay = &metav1.Duration{Duration: 24 * time.Hour}
-	servers := []mcv1alpha1.PaperMCServer{makeServer("s1", "1.21.1", "")}
+	servers := []mcv1beta1.PaperMCServer{makeServer("s1", "1.21.1", "")}
 	now := time.Now()
 	versions := []plugins.PluginVersion{
 		makePluginVersion("1.0.0", []string{"1.21.1"}, now), // too new
@@ -400,11 +400,11 @@ func TestFindBestPaperVersion_UpdateDelay_ShouldNotFilterAllVersions(t *testing.
 	server.Spec.UpdateDelay = &metav1.Duration{Duration: 1 * time.Hour}
 
 	// Plugin compatible with both Paper versions
-	plugin := mcv1alpha1.Plugin{
+	plugin := mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-plugin", Namespace: "default"},
-		Spec:       mcv1alpha1.PluginSpec{UpdateStrategy: "latest"},
-		Status: mcv1alpha1.PluginStatus{
-			AvailableVersions: []mcv1alpha1.PluginVersionInfo{
+		Spec:       mcv1beta1.PluginSpec{UpdateStrategy: "latest"},
+		Status: mcv1beta1.PluginStatus{
+			AvailableVersions: []mcv1beta1.PluginVersionInfo{
 				{Version: "1.0.0", MinecraftVersions: []string{"1.21.0", "1.21.1"}},
 			},
 		},
@@ -421,7 +421,7 @@ func TestFindBestPaperVersion_UpdateDelay_ShouldNotFilterAllVersions(t *testing.
 	result, err := solver.FindBestPaperVersion(
 		context.Background(),
 		&server,
-		[]mcv1alpha1.Plugin{plugin},
+		[]mcv1beta1.Plugin{plugin},
 		paperVersions,
 	)
 
@@ -434,7 +434,7 @@ func TestFindBestPluginVersion_MultipleServers_MustSatisfyAll(t *testing.T) {
 
 	solver := NewSimpleSolver()
 	plugin := makePlugin("latest", "")
-	servers := []mcv1alpha1.PaperMCServer{
+	servers := []mcv1beta1.PaperMCServer{
 		makeServer("s1", "1.21.1", ""),
 		makeServer("s2", "1.20.4", ""),
 	}
@@ -457,8 +457,8 @@ func TestFindBestPaperVersion_PinStrategy_ReturnsExactVersion(t *testing.T) {
 	t.Parallel()
 
 	solver := NewSimpleSolver()
-	server := mcv1alpha1.PaperMCServer{
-		Spec: mcv1alpha1.PaperMCServerSpec{
+	server := mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			UpdateStrategy: "pin",
 			Version:        "1.20.4",
 		},
@@ -475,8 +475,8 @@ func TestFindBestPaperVersion_PinStrategy_NoVersion_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	solver := NewSimpleSolver()
-	server := mcv1alpha1.PaperMCServer{
-		Spec: mcv1alpha1.PaperMCServerSpec{
+	server := mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			UpdateStrategy: "pin",
 			Version:        "",
 		},
@@ -493,8 +493,8 @@ func TestFindBestPaperVersion_LatestStrategy_ReturnsNewest(t *testing.T) {
 	t.Parallel()
 
 	solver := NewSimpleSolver()
-	server := mcv1alpha1.PaperMCServer{
-		Spec: mcv1alpha1.PaperMCServerSpec{
+	server := mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			UpdateStrategy: "latest",
 		},
 	}
@@ -510,15 +510,15 @@ func TestFindBestPaperVersion_AutoStrategy_ChecksPluginCompatibility(t *testing.
 	t.Parallel()
 
 	solver := NewSimpleSolver()
-	server := mcv1alpha1.PaperMCServer{
-		Spec: mcv1alpha1.PaperMCServerSpec{
+	server := mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			UpdateStrategy: "auto",
 		},
 	}
-	matchedPlugins := []mcv1alpha1.Plugin{
+	matchedPlugins := []mcv1beta1.Plugin{
 		{
-			Status: mcv1alpha1.PluginStatus{
-				AvailableVersions: []mcv1alpha1.PluginVersionInfo{
+			Status: mcv1beta1.PluginStatus{
+				AvailableVersions: []mcv1beta1.PluginVersionInfo{
 					{Version: "1.0.0", MinecraftVersions: []string{"1.20.4", "1.20.6"}},
 				},
 			},
@@ -536,8 +536,8 @@ func TestFindBestPaperVersion_NoVersionsAvailable_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	solver := NewSimpleSolver()
-	server := mcv1alpha1.PaperMCServer{
-		Spec: mcv1alpha1.PaperMCServerSpec{
+	server := mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			UpdateStrategy: "latest",
 		},
 	}
@@ -552,8 +552,8 @@ func TestFindBestPaperVersion_InvalidStrategy_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	solver := NewSimpleSolver()
-	server := mcv1alpha1.PaperMCServer{
-		Spec: mcv1alpha1.PaperMCServerSpec{
+	server := mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			UpdateStrategy: "invalid",
 		},
 	}
@@ -569,15 +569,15 @@ func TestFindBestPaperVersion_PluginWithoutCachedVersions_AssumesCompatible(t *t
 	t.Parallel()
 
 	solver := NewSimpleSolver()
-	server := mcv1alpha1.PaperMCServer{
-		Spec: mcv1alpha1.PaperMCServerSpec{
+	server := mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			UpdateStrategy: "auto",
 		},
 	}
-	matchedPlugins := []mcv1alpha1.Plugin{
+	matchedPlugins := []mcv1beta1.Plugin{
 		{
-			Status: mcv1alpha1.PluginStatus{
-				AvailableVersions: []mcv1alpha1.PluginVersionInfo{}, // empty
+			Status: mcv1beta1.PluginStatus{
+				AvailableVersions: []mcv1beta1.PluginVersionInfo{}, // empty
 			},
 		},
 	}
@@ -593,22 +593,22 @@ func TestFindBestPaperVersion_MultiplePlugins_MustSatisfyAll(t *testing.T) {
 	t.Parallel()
 
 	solver := NewSimpleSolver()
-	server := mcv1alpha1.PaperMCServer{
-		Spec: mcv1alpha1.PaperMCServerSpec{
+	server := mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			UpdateStrategy: "auto",
 		},
 	}
-	matchedPlugins := []mcv1alpha1.Plugin{
+	matchedPlugins := []mcv1beta1.Plugin{
 		{
-			Status: mcv1alpha1.PluginStatus{
-				AvailableVersions: []mcv1alpha1.PluginVersionInfo{
+			Status: mcv1beta1.PluginStatus{
+				AvailableVersions: []mcv1beta1.PluginVersionInfo{
 					{Version: "1.0.0", MinecraftVersions: []string{"1.21.1", "1.20.6"}},
 				},
 			},
 		},
 		{
-			Status: mcv1alpha1.PluginStatus{
-				AvailableVersions: []mcv1alpha1.PluginVersionInfo{
+			Status: mcv1beta1.PluginStatus{
+				AvailableVersions: []mcv1beta1.PluginVersionInfo{
 					{Version: "2.0.0", MinecraftVersions: []string{"1.20.6", "1.20.4"}},
 				},
 			},
@@ -626,22 +626,22 @@ func TestFindBestPaperVersion_ConflictingPlugins_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	solver := NewSimpleSolver()
-	server := mcv1alpha1.PaperMCServer{
-		Spec: mcv1alpha1.PaperMCServerSpec{
+	server := mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			UpdateStrategy: "auto",
 		},
 	}
-	matchedPlugins := []mcv1alpha1.Plugin{
+	matchedPlugins := []mcv1beta1.Plugin{
 		{
-			Status: mcv1alpha1.PluginStatus{
-				AvailableVersions: []mcv1alpha1.PluginVersionInfo{
+			Status: mcv1beta1.PluginStatus{
+				AvailableVersions: []mcv1beta1.PluginVersionInfo{
 					{Version: "1.0.0", MinecraftVersions: []string{"1.21.1"}},
 				},
 			},
 		},
 		{
-			Status: mcv1alpha1.PluginStatus{
-				AvailableVersions: []mcv1alpha1.PluginVersionInfo{
+			Status: mcv1beta1.PluginStatus{
+				AvailableVersions: []mcv1beta1.PluginVersionInfo{
 					{Version: "2.0.0", MinecraftVersions: []string{"1.20.4"}},
 				},
 			},
@@ -659,8 +659,8 @@ func TestFindBestPaperVersion_DefaultStrategy_TreatedAsLatest(t *testing.T) {
 	t.Parallel()
 
 	solver := NewSimpleSolver()
-	server := mcv1alpha1.PaperMCServer{
-		Spec: mcv1alpha1.PaperMCServerSpec{
+	server := mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			UpdateStrategy: "", // empty, should default to latest
 		},
 	}

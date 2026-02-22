@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -199,7 +199,7 @@ type solverStatusInfo struct {
 }
 
 // parseSolverStatus extracts solver status from server conditions.
-func parseSolverStatus(server *mck8slexlav1alpha1.PaperMCServer) solverStatusInfo {
+func parseSolverStatus(server *mck8slexlav1beta1.PaperMCServer) solverStatusInfo {
 	var info solverStatusInfo
 	for _, cond := range server.Status.Conditions {
 		if cond.Type == "SolverRunning" {
@@ -253,7 +253,7 @@ func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var server mck8slexlav1alpha1.PaperMCServer
+	var server mck8slexlav1beta1.PaperMCServer
 	if err := s.client.Get(ctx, client.ObjectKey{Name: serverName, Namespace: namespace}, &server); err != nil {
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = fmt.Fprintf(w, `<span style="color: red;">❌ Error</span>`)

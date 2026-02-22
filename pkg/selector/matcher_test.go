@@ -20,7 +20,7 @@ import (
 	"context"
 	"testing"
 
-	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -90,12 +90,12 @@ func TestMatchesSelector(t *testing.T) {
 func TestFindMatchingPlugins_InvalidSelector(t *testing.T) {
 	t.Run("should return error when plugin has invalid instanceSelector", func(t *testing.T) {
 		scheme := runtime.NewScheme()
-		require.NoError(t, mcv1alpha1.AddToScheme(scheme))
+		require.NoError(t, mcv1beta1.AddToScheme(scheme))
 
-		invalidPlugin := &mcv1alpha1.Plugin{
+		invalidPlugin := &mcv1beta1.Plugin{
 			ObjectMeta: metav1.ObjectMeta{Name: "plugin-invalid", Namespace: "default"},
-			Spec: mcv1alpha1.PluginSpec{
-				Source:         mcv1alpha1.PluginSource{Type: "hangar", Project: "TestPlugin"},
+			Spec: mcv1beta1.PluginSpec{
+				Source:         mcv1beta1.PluginSource{Type: "hangar", Project: "TestPlugin"},
 				UpdateStrategy: "latest",
 				InstanceSelector: metav1.LabelSelector{
 					MatchExpressions: []metav1.LabelSelectorRequirement{
@@ -104,10 +104,10 @@ func TestFindMatchingPlugins_InvalidSelector(t *testing.T) {
 				},
 			},
 		}
-		validPlugin := &mcv1alpha1.Plugin{
+		validPlugin := &mcv1beta1.Plugin{
 			ObjectMeta: metav1.ObjectMeta{Name: "plugin-valid", Namespace: "default"},
-			Spec: mcv1alpha1.PluginSpec{
-				Source:         mcv1alpha1.PluginSource{Type: "hangar", Project: "TestPlugin2"},
+			Spec: mcv1beta1.PluginSpec{
+				Source:         mcv1beta1.PluginSource{Type: "hangar", Project: "TestPlugin2"},
 				UpdateStrategy: "latest",
 				InstanceSelector: metav1.LabelSelector{
 					MatchLabels: map[string]string{"app": "papermc"},

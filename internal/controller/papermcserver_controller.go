@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/selector"
@@ -107,7 +107,7 @@ type PaperMCServerReconciler struct {
 // Reconcile implements the reconciliation loop for PaperMCServer resources.
 func (r *PaperMCServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// Fetch the PaperMCServer resource
-	var server mcv1alpha1.PaperMCServer
+	var server mcv1beta1.PaperMCServer
 	if err := r.Get(ctx, req.NamespacedName, &server); err != nil {
 		if apierrors.IsNotFound(err) {
 			slog.InfoContext(ctx, "PaperMCServer resource not found, ignoring")
@@ -151,7 +151,7 @@ func (r *PaperMCServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 // doReconcile performs the actual reconciliation logic.
-func (r *PaperMCServerReconciler) doReconcile(ctx context.Context, server *mcv1alpha1.PaperMCServer) (ctrl.Result, error) {
+func (r *PaperMCServerReconciler) doReconcile(ctx context.Context, server *mcv1beta1.PaperMCServer) (ctrl.Result, error) {
 	// Step 1: Find matched plugins
 	matchedPlugins, err := r.findMatchedPlugins(ctx, server)
 	if err != nil {
@@ -192,8 +192,8 @@ func (r *PaperMCServerReconciler) doReconcile(ctx context.Context, server *mcv1a
 // updateDesiredVersion resolves and updates the desired Paper version in server status.
 func (r *PaperMCServerReconciler) updateDesiredVersion(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) error {
 	desiredVersion, desiredBuild, err := r.resolveDesiredPaperVersion(ctx, server, matchedPlugins)
 	if err != nil {
@@ -219,8 +219,8 @@ func (r *PaperMCServerReconciler) updateDesiredVersion(
 // ensureInfrastructure ensures StatefulSet and Service exist.
 func (r *PaperMCServerReconciler) ensureInfrastructure(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) (*appsv1.StatefulSet, error) {
 	statefulSet, err := r.ensureStatefulSet(ctx, server)
 	if err != nil {
@@ -237,9 +237,9 @@ func (r *PaperMCServerReconciler) ensureInfrastructure(
 // updateServerStatus updates all status fields for the server.
 func (r *PaperMCServerReconciler) updateServerStatus(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	statefulSet *appsv1.StatefulSet,
-	matchedPlugins []mcv1alpha1.Plugin,
+	matchedPlugins []mcv1beta1.Plugin,
 ) {
 	// Detect current Paper version and build from StatefulSet
 	currentVersion, currentBuild := r.detectCurrentPaperVersion(ctx, statefulSet)
@@ -261,8 +261,8 @@ func (r *PaperMCServerReconciler) updateServerStatus(
 // updateAvailableUpdateStatus checks for and updates available update information.
 func (r *PaperMCServerReconciler) updateAvailableUpdateStatus(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) {
 	availableUpdate, err := r.findAvailableUpdate(ctx, server, matchedPlugins)
 	if err != nil {
@@ -286,7 +286,7 @@ func (r *PaperMCServerReconciler) updateAvailableUpdateStatus(
 
 // updateStatefulSetReadiness updates the StatefulSet readiness condition.
 func (r *PaperMCServerReconciler) updateStatefulSetReadiness(
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	statefulSet *appsv1.StatefulSet,
 ) {
 	if r.isStatefulSetReady(statefulSet) {
@@ -301,8 +301,8 @@ func (r *PaperMCServerReconciler) updateStatefulSetReadiness(
 // findMatchedPlugins finds all Plugin resources matching this server's labels.
 func (r *PaperMCServerReconciler) findMatchedPlugins(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-) ([]mcv1alpha1.Plugin, error) {
+	server *mcv1beta1.PaperMCServer,
+) ([]mcv1beta1.Plugin, error) {
 	matchedPlugins, err := selector.FindMatchingPlugins(ctx, r.Client, server.Namespace, server.Labels)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find matching plugins")
@@ -313,7 +313,7 @@ func (r *PaperMCServerReconciler) findMatchedPlugins(
 // ensureStatefulSet creates or verifies the StatefulSet for this server.
 func (r *PaperMCServerReconciler) ensureStatefulSet(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 ) (*appsv1.StatefulSet, error) {
 	statefulSetName := server.Name
 	var statefulSet appsv1.StatefulSet
@@ -357,7 +357,7 @@ func (r *PaperMCServerReconciler) ensureStatefulSet(
 }
 
 // buildStatefulSet constructs a StatefulSet for the PaperMCServer.
-func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1alpha1.PaperMCServer) (*appsv1.StatefulSet, error) {
+func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1beta1.PaperMCServer) (*appsv1.StatefulSet, error) {
 	replicas := int32(1)
 	serviceName := server.Name
 
@@ -387,7 +387,7 @@ func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1alpha1.PaperMCSer
 // buildPodSpec constructs the pod spec with configured container.
 // CRITICAL: This function MUST NEVER generate an image tag with :latest.
 // All images MUST use concrete version-build tags (e.g., docker.io/lexfrei/papermc:1.21.1-91).
-func (r *PaperMCServerReconciler) buildPodSpec(server *mcv1alpha1.PaperMCServer) (*corev1.PodSpec, error) {
+func (r *PaperMCServerReconciler) buildPodSpec(server *mcv1beta1.PaperMCServer) (*corev1.PodSpec, error) {
 	podSpec := server.Spec.PodTemplate.Spec.DeepCopy()
 
 	if len(podSpec.Containers) == 0 {
@@ -427,7 +427,7 @@ func (r *PaperMCServerReconciler) buildPodSpec(server *mcv1alpha1.PaperMCServer)
 }
 
 // buildSelector creates the label selector for the StatefulSet.
-func (r *PaperMCServerReconciler) buildSelector(server *mcv1alpha1.PaperMCServer) *metav1.LabelSelector {
+func (r *PaperMCServerReconciler) buildSelector(server *mcv1beta1.PaperMCServer) *metav1.LabelSelector {
 	return &metav1.LabelSelector{
 		MatchLabels: map[string]string{
 			"app":                       "papermc",
@@ -438,7 +438,7 @@ func (r *PaperMCServerReconciler) buildSelector(server *mcv1alpha1.PaperMCServer
 
 // buildPodTemplate creates the pod template for the StatefulSet.
 func (r *PaperMCServerReconciler) buildPodTemplate(
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	podSpec *corev1.PodSpec,
 ) corev1.PodTemplateSpec {
 	return corev1.PodTemplateSpec{
@@ -475,7 +475,7 @@ func (r *PaperMCServerReconciler) buildVolumeClaimTemplates() []corev1.Persisten
 
 // buildEnvironmentVariables constructs environment variables for the Paper container.
 func (r *PaperMCServerReconciler) buildEnvironmentVariables(
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	existingEnv []corev1.EnvVar,
 ) []corev1.EnvVar {
 	env := existingEnv
@@ -529,8 +529,8 @@ func (r *PaperMCServerReconciler) addOrUpdateEnv(env []corev1.EnvVar, name, valu
 // ensureService creates or updates the Service for the PaperMCServer.
 func (r *PaperMCServerReconciler) ensureService(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) error {
 	serviceName := server.Name
 	var existingService corev1.Service
@@ -584,7 +584,7 @@ func (r *PaperMCServerReconciler) ensureService(
 }
 
 // buildServicePorts constructs the list of ServicePorts for the PaperMCServer.
-func buildServicePorts(server *mcv1alpha1.PaperMCServer, matchedPlugins []mcv1alpha1.Plugin) []corev1.ServicePort {
+func buildServicePorts(server *mcv1beta1.PaperMCServer, matchedPlugins []mcv1beta1.Plugin) []corev1.ServicePort {
 	ports := []corev1.ServicePort{
 		{
 			Name:       "minecraft",
@@ -638,8 +638,8 @@ func buildServicePorts(server *mcv1alpha1.PaperMCServer, matchedPlugins []mcv1al
 
 // buildService constructs a Service for the PaperMCServer.
 func (r *PaperMCServerReconciler) buildService(
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) *corev1.Service {
 	ports := buildServicePorts(server, matchedPlugins)
 
@@ -748,8 +748,8 @@ func (r *PaperMCServerReconciler) detectCurrentPaperVersion(ctx context.Context,
 // CRITICAL: Checks downgrade and plugin compatibility BEFORE setting desired version.
 func (r *PaperMCServerReconciler) resolveDesiredPaperVersion(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) (paperVersion string, build int, err error) {
 	switch server.Spec.UpdateStrategy {
 	case updateStrategyLatest:
@@ -783,7 +783,7 @@ func (r *PaperMCServerReconciler) resolveDesiredPaperVersion(
 
 // checkDowngrade checks if candidate version would be a downgrade from current.
 func (r *PaperMCServerReconciler) checkDowngrade(
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	candidateVersion string,
 ) error {
 	if server.Status.CurrentVersion == "" {
@@ -813,14 +813,14 @@ func (r *PaperMCServerReconciler) checkDowngrade(
 // checkCompatibility checks plugin compatibility with candidate version.
 func (r *PaperMCServerReconciler) checkCompatibility(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	candidateVersion string,
-	matchedPlugins []mcv1alpha1.Plugin,
+	matchedPlugins []mcv1beta1.Plugin,
 ) error {
 	compatible, blockingPlugin, blockReason := r.checkPluginCompatibility(ctx, candidateVersion, matchedPlugins)
 	if !compatible {
 		// Find blocking plugin details
-		var blockedBy *mcv1alpha1.BlockedByInfo
+		var blockedBy *mcv1beta1.BlockedByInfo
 		for i := range matchedPlugins {
 			plugin := &matchedPlugins[i]
 			if plugin.Name == blockingPlugin {
@@ -829,7 +829,7 @@ func (r *PaperMCServerReconciler) checkCompatibility(
 				if len(plugin.Status.AvailableVersions) > 0 {
 					pluginVersion = plugin.Status.AvailableVersions[0].Version
 				}
-				blockedBy = &mcv1alpha1.BlockedByInfo{
+				blockedBy = &mcv1beta1.BlockedByInfo{
 					Plugin:  blockingPlugin,
 					Version: pluginVersion,
 					// TODO: Get SupportedPaperVersions from plugin metadata
@@ -848,8 +848,8 @@ func (r *PaperMCServerReconciler) checkCompatibility(
 // resolveLatestVersion resolves "latest" to actual latest Paper version from Docker Hub.
 func (r *PaperMCServerReconciler) resolveLatestVersion(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) (string, int, error) {
 	slog.InfoContext(ctx, "Using latest Paper version policy - resolving from Docker Hub tags")
 
@@ -934,8 +934,8 @@ func (r *PaperMCServerReconciler) findLatestVersionFromTags(tags []string) (stri
 // resolveAutoVersion resolves version using auto mode with solver.
 func (r *PaperMCServerReconciler) resolveAutoVersion(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) (string, int, error) {
 	slog.InfoContext(ctx, "Using auto Paper version policy")
 
@@ -982,9 +982,9 @@ func (r *PaperMCServerReconciler) resolveAutoVersion(
 // resolveVersionOnlyMode finds latest build for a specific version.
 func (r *PaperMCServerReconciler) resolveVersionOnlyMode(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	candidateVersion string,
-	matchedPlugins []mcv1alpha1.Plugin,
+	matchedPlugins []mcv1beta1.Plugin,
 ) (string, int, error) {
 	slog.InfoContext(ctx, "Using specific version policy", "version", candidateVersion)
 
@@ -1030,11 +1030,11 @@ func (r *PaperMCServerReconciler) resolveVersionOnlyMode(
 // resolvePinnedVersionBuild resolves exact version-build combination.
 func (r *PaperMCServerReconciler) resolvePinnedVersionBuild(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	candidateVersion string,
 	buildStr string,
 	fullSpec string,
-	matchedPlugins []mcv1alpha1.Plugin,
+	matchedPlugins []mcv1beta1.Plugin,
 ) (string, int, error) {
 	build, err := strconv.Atoi(buildStr)
 	if err != nil {
@@ -1090,8 +1090,8 @@ func (r *PaperMCServerReconciler) isStatefulSetReady(statefulSet *appsv1.Statefu
 //nolint:funlen // Complex version resolution logic, hard to simplify further
 func (r *PaperMCServerReconciler) resolvePluginVersionForServer(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	plugin *mcv1alpha1.Plugin,
+	server *mcv1beta1.PaperMCServer,
+	plugin *mcv1beta1.Plugin,
 ) (string, error) {
 	// Get available versions from plugin status
 	if len(plugin.Status.AvailableVersions) == 0 {
@@ -1183,7 +1183,7 @@ func (r *PaperMCServerReconciler) resolvePluginVersionForServer(
 
 	// Use solver to find best version for THIS SERVER
 	// Create a single-server slice for solver
-	serverList := []mcv1alpha1.PaperMCServer{*server}
+	serverList := []mcv1beta1.PaperMCServer{*server}
 
 	resolvedVersion, err := r.Solver.FindBestPluginVersion(ctx, plugin, serverList, filteredVersions)
 	if err != nil {
@@ -1223,17 +1223,17 @@ func (r *PaperMCServerReconciler) resolvePluginVersionForServer(
 // are preserved from previous status.
 func (r *PaperMCServerReconciler) buildPluginStatus(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
-) []mcv1alpha1.ServerPluginStatus {
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) []mcv1beta1.ServerPluginStatus {
 	// Build lookup from existing status for field preservation
-	existing := make(map[string]mcv1alpha1.ServerPluginStatus, len(server.Status.Plugins))
+	existing := make(map[string]mcv1beta1.ServerPluginStatus, len(server.Status.Plugins))
 	for _, p := range server.Status.Plugins {
 		key := p.PluginRef.Namespace + "/" + p.PluginRef.Name
 		existing[key] = p
 	}
 
-	status := make([]mcv1alpha1.ServerPluginStatus, 0, len(matchedPlugins))
+	status := make([]mcv1beta1.ServerPluginStatus, 0, len(matchedPlugins))
 
 	for i := range matchedPlugins {
 		plugin := &matchedPlugins[i]
@@ -1248,8 +1248,8 @@ func (r *PaperMCServerReconciler) buildPluginStatus(
 			// Continue with empty resolved version - will be retried on next reconciliation
 		}
 
-		pluginStatus := mcv1alpha1.ServerPluginStatus{
-			PluginRef: mcv1alpha1.PluginRef{
+		pluginStatus := mcv1beta1.ServerPluginStatus{
+			PluginRef: mcv1beta1.PluginRef{
 				Name:      plugin.Name,
 				Namespace: plugin.Namespace,
 			},
@@ -1275,9 +1275,9 @@ func (r *PaperMCServerReconciler) buildPluginStatus(
 // findAvailableUpdate runs the solver to find available Paper version or build updates.
 func (r *PaperMCServerReconciler) findAvailableUpdate(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
-) (*mcv1alpha1.AvailableUpdate, error) {
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) (*mcv1beta1.AvailableUpdate, error) {
 	switch server.Spec.UpdateStrategy {
 	case updateStrategyLatest, updateStrategyAuto:
 		// For latest/auto: find best version through solver
@@ -1299,9 +1299,9 @@ func (r *PaperMCServerReconciler) findAvailableUpdate(
 // findVersionUpdate finds the best Paper version using the solver.
 func (r *PaperMCServerReconciler) findVersionUpdate(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
-) (*mcv1alpha1.AvailableUpdate, error) {
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) (*mcv1beta1.AvailableUpdate, error) {
 	// Fetch available Paper versions
 	paperVersions, err := r.PaperClient.GetPaperVersions(ctx)
 	if err != nil {
@@ -1341,7 +1341,7 @@ func (r *PaperMCServerReconciler) findVersionUpdate(
 	// Build plugin version pairs using solver to find compatible versions
 	pluginPairs := r.buildPluginVersionPairs(ctx, bestVersion, matchedPlugins)
 
-	return &mcv1alpha1.AvailableUpdate{
+	return &mcv1beta1.AvailableUpdate{
 		Version:    bestVersion,
 		Build:      buildInfo.Build,
 		ReleasedAt: metav1.Now(),
@@ -1353,9 +1353,9 @@ func (r *PaperMCServerReconciler) findVersionUpdate(
 // findBuildUpdate checks for newer builds of the current version.
 func (r *PaperMCServerReconciler) findBuildUpdate(
 	ctx context.Context,
-	server *mcv1alpha1.PaperMCServer,
-	matchedPlugins []mcv1alpha1.Plugin,
-) (*mcv1alpha1.AvailableUpdate, error) {
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) (*mcv1beta1.AvailableUpdate, error) {
 	// Get latest build for the specified version
 	buildInfo, err := r.PaperClient.GetPaperBuild(ctx, server.Spec.Version)
 	if err != nil {
@@ -1382,7 +1382,7 @@ func (r *PaperMCServerReconciler) findBuildUpdate(
 
 	slog.InfoContext(ctx, "Build update available", "current", server.Status.CurrentBuild, "available", buildInfo.Build)
 
-	return &mcv1alpha1.AvailableUpdate{
+	return &mcv1beta1.AvailableUpdate{
 		Version:    server.Spec.Version,
 		Build:      buildInfo.Build,
 		ReleasedAt: metav1.Now(),
@@ -1396,9 +1396,9 @@ func (r *PaperMCServerReconciler) findBuildUpdate(
 func (r *PaperMCServerReconciler) buildPluginVersionPairs(
 	ctx context.Context,
 	candidatePaperVersion string,
-	matchedPlugins []mcv1alpha1.Plugin,
-) []mcv1alpha1.PluginVersionPair {
-	pluginPairs := make([]mcv1alpha1.PluginVersionPair, 0, len(matchedPlugins))
+	matchedPlugins []mcv1beta1.Plugin,
+) []mcv1beta1.PluginVersionPair {
+	pluginPairs := make([]mcv1beta1.PluginVersionPair, 0, len(matchedPlugins))
 
 	for i := range matchedPlugins {
 		plugin := &matchedPlugins[i]
@@ -1420,15 +1420,15 @@ func (r *PaperMCServerReconciler) buildPluginVersionPairs(
 		}
 
 		// Create temporary server with candidate version for solver compatibility check
-		tempServer := mcv1alpha1.PaperMCServer{
-			Status: mcv1alpha1.PaperMCServerStatus{
+		tempServer := mcv1beta1.PaperMCServer{
+			Status: mcv1beta1.PaperMCServerStatus{
 				CurrentVersion: candidatePaperVersion,
 			},
 		}
 
 		// Use solver to find best compatible version
 		resolvedVersion, err := r.Solver.FindBestPluginVersion(
-			ctx, plugin, []mcv1alpha1.PaperMCServer{tempServer}, allVersions)
+			ctx, plugin, []mcv1beta1.PaperMCServer{tempServer}, allVersions)
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to resolve plugin version for candidate Paper",
 				"plugin", plugin.Name,
@@ -1438,8 +1438,8 @@ func (r *PaperMCServerReconciler) buildPluginVersionPairs(
 			resolvedVersion = plugin.Status.AvailableVersions[0].Version
 		}
 
-		pluginPairs = append(pluginPairs, mcv1alpha1.PluginVersionPair{
-			PluginRef: mcv1alpha1.PluginRef{
+		pluginPairs = append(pluginPairs, mcv1beta1.PluginVersionPair{
+			PluginRef: mcv1beta1.PluginRef{
 				Name:      plugin.Name,
 				Namespace: plugin.Namespace,
 			},
@@ -1458,7 +1458,7 @@ func (r *PaperMCServerReconciler) buildPluginVersionPairs(
 func (r *PaperMCServerReconciler) checkPluginCompatibility(
 	ctx context.Context,
 	candidateVersion string,
-	matchedPlugins []mcv1alpha1.Plugin,
+	matchedPlugins []mcv1beta1.Plugin,
 ) (compatible bool, blockingPlugin string, blockReason string) {
 	if len(matchedPlugins) == 0 {
 		return true, "", "" // No plugins, no compatibility issues
@@ -1494,7 +1494,7 @@ func (r *PaperMCServerReconciler) checkPluginCompatibility(
 // Returns true if at least one available plugin version supports the given Paper/Minecraft version.
 func (r *PaperMCServerReconciler) isPluginCompatibleWithPaper(
 	ctx context.Context,
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 	candidateVersion string,
 ) bool {
 	// Check if plugin has CompatibilityOverride — takes precedence over API metadata
@@ -1540,11 +1540,11 @@ func (r *PaperMCServerReconciler) isPluginCompatibleWithPaper(
 
 // setUpdateBlocked marks the server's updates as blocked.
 func (r *PaperMCServerReconciler) setUpdateBlocked(
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	reason string,
-	blockedBy *mcv1alpha1.BlockedByInfo,
+	blockedBy *mcv1beta1.BlockedByInfo,
 ) {
-	server.Status.UpdateBlocked = &mcv1alpha1.UpdateBlockedStatus{
+	server.Status.UpdateBlocked = &mcv1beta1.UpdateBlockedStatus{
 		Blocked:   true,
 		Reason:    reason,
 		BlockedBy: blockedBy,
@@ -1555,7 +1555,7 @@ func (r *PaperMCServerReconciler) setUpdateBlocked(
 }
 
 // clearUpdateBlocked clears the update blocked status unconditionally.
-func (r *PaperMCServerReconciler) clearUpdateBlocked(server *mcv1alpha1.PaperMCServer) {
+func (r *PaperMCServerReconciler) clearUpdateBlocked(server *mcv1beta1.PaperMCServer) {
 	server.Status.UpdateBlocked = nil
 
 	r.setCondition(server, conditionTypeUpdateBlocked, metav1.ConditionFalse,
@@ -1564,7 +1564,7 @@ func (r *PaperMCServerReconciler) clearUpdateBlocked(server *mcv1alpha1.PaperMCS
 
 // setCondition sets or updates a condition in the server status.
 func (r *PaperMCServerReconciler) setCondition(
-	server *mcv1alpha1.PaperMCServer,
+	server *mcv1beta1.PaperMCServer,
 	conditionType string,
 	status metav1.ConditionStatus,
 	reason,
@@ -1583,7 +1583,7 @@ func (r *PaperMCServerReconciler) setCondition(
 }
 
 // serverStatusEqual compares two server statuses for equality.
-func serverStatusEqual(a, b *mcv1alpha1.PaperMCServerStatus) bool {
+func serverStatusEqual(a, b *mcv1beta1.PaperMCServerStatus) bool {
 	if a.CurrentVersion != b.CurrentVersion {
 		return false
 	}
@@ -1660,13 +1660,13 @@ func conditionsEqual(a, b []metav1.Condition) bool {
 
 // pluginStatusSliceEqual compares two plugin status slices for equality,
 // independent of order. Uses PluginRef as the key for matching.
-func pluginStatusSliceEqual(a, b []mcv1alpha1.ServerPluginStatus) bool {
+func pluginStatusSliceEqual(a, b []mcv1beta1.ServerPluginStatus) bool {
 	if len(a) != len(b) {
 		return false
 	}
 
 	// Build lookup by plugin ref key
-	lookup := make(map[string]mcv1alpha1.ServerPluginStatus, len(a))
+	lookup := make(map[string]mcv1beta1.ServerPluginStatus, len(a))
 	for _, p := range a {
 		key := p.PluginRef.Namespace + "/" + p.PluginRef.Name
 		lookup[key] = p
@@ -1690,7 +1690,7 @@ func pluginStatusSliceEqual(a, b []mcv1alpha1.ServerPluginStatus) bool {
 }
 
 // availableUpdateEqual compares two AvailableUpdate pointers for equality.
-func availableUpdateEqual(a, b *mcv1alpha1.AvailableUpdate) bool {
+func availableUpdateEqual(a, b *mcv1beta1.AvailableUpdate) bool {
 	if (a == nil) != (b == nil) {
 		return false
 	}
@@ -1713,7 +1713,7 @@ func availableUpdateEqual(a, b *mcv1alpha1.AvailableUpdate) bool {
 }
 
 // updateHistoryEqual compares two UpdateHistory pointers for equality.
-func updateHistoryEqual(a, b *mcv1alpha1.UpdateHistory) bool {
+func updateHistoryEqual(a, b *mcv1beta1.UpdateHistory) bool {
 	if (a == nil) != (b == nil) {
 		return false
 	}
@@ -1728,11 +1728,11 @@ func updateHistoryEqual(a, b *mcv1alpha1.UpdateHistory) bool {
 // SetupWithManager sets up the controller with the Manager.
 func (r *PaperMCServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&mcv1alpha1.PaperMCServer{}).
+		For(&mcv1beta1.PaperMCServer{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Watches(
-			&mcv1alpha1.Plugin{},
+			&mcv1beta1.Plugin{},
 			handler.EnqueueRequestsFromMapFunc(r.findServersForPlugin),
 		).
 		Named("papermcserver").
@@ -1742,7 +1742,7 @@ func (r *PaperMCServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // findServersForPlugin maps Plugin changes to PaperMCServer reconciliation requests.
 // This ensures servers are reconciled when plugin status changes.
 func (r *PaperMCServerReconciler) findServersForPlugin(ctx context.Context, obj client.Object) []reconcile.Request {
-	plugin, ok := obj.(*mcv1alpha1.Plugin)
+	plugin, ok := obj.(*mcv1beta1.Plugin)
 	if !ok {
 		return nil
 	}

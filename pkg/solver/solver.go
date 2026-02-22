@@ -4,7 +4,7 @@ package solver
 import (
 	"context"
 
-	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 )
 
@@ -15,8 +15,8 @@ type Solver interface {
 	// This implements the constraint: ∀ server ∈ servers: compatible(plugin_version, server.paperVersion).
 	FindBestPluginVersion(
 		ctx context.Context,
-		plugin *mcv1alpha1.Plugin,
-		servers []mcv1alpha1.PaperMCServer,
+		plugin *mcv1beta1.Plugin,
+		servers []mcv1beta1.PaperMCServer,
 		allVersions []plugins.PluginVersion,
 	) (string, error)
 
@@ -24,8 +24,8 @@ type Solver interface {
 	// This implements the constraint: ∀ plugin ∈ plugins: ∃ plugin_version compatible with paper_version.
 	FindBestPaperVersion(
 		ctx context.Context,
-		server *mcv1alpha1.PaperMCServer,
-		matchedPlugins []mcv1alpha1.Plugin,
+		server *mcv1beta1.PaperMCServer,
+		matchedPlugins []mcv1beta1.Plugin,
 		paperVersions []string,
 	) (string, error)
 }

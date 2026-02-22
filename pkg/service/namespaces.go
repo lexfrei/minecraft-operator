@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/errors"
-	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -23,7 +23,7 @@ func (s *NamespaceService) ListNamespaces(ctx context.Context) ([]string, error)
 	namespaceSet := make(map[string]bool)
 
 	// Get namespaces from plugins
-	var pluginList mck8slexlav1alpha1.PluginList
+	var pluginList mck8slexlav1beta1.PluginList
 	if err := s.client.List(ctx, &pluginList); err != nil {
 		return nil, errors.Wrap(err, "failed to list Plugins")
 	}
@@ -32,7 +32,7 @@ func (s *NamespaceService) ListNamespaces(ctx context.Context) ([]string, error)
 	}
 
 	// Get namespaces from servers
-	var serverList mck8slexlav1alpha1.PaperMCServerList
+	var serverList mck8slexlav1beta1.PaperMCServerList
 	if err := s.client.List(ctx, &serverList); err != nil {
 		return nil, errors.Wrap(err, "failed to list PaperMCServers")
 	}

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/internal/controller"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -163,7 +163,7 @@ func TestGetWeekdayName(t *testing.T) {
 // newTestScheme creates a scheme with required types registered.
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
-	_ = mck8slexlav1alpha1.AddToScheme(scheme)
+	_ = mck8slexlav1beta1.AddToScheme(scheme)
 
 	return scheme
 }
@@ -231,26 +231,26 @@ func TestHandlePluginResolve_XSS_PluginName(t *testing.T) {
 func TestHandlePluginListShowsAllPlugins(t *testing.T) {
 	t.Parallel()
 
-	plugin1 := &mck8slexlav1alpha1.Plugin{
+	plugin1 := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "essentialsx",
 			Namespace: "default",
 		},
-		Spec: mck8slexlav1alpha1.PluginSpec{
-			Source: mck8slexlav1alpha1.PluginSource{
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
 				Type:    "hangar",
 				Project: "EssentialsX",
 			},
 			UpdateStrategy: "latest",
 		},
 	}
-	plugin2 := &mck8slexlav1alpha1.Plugin{
+	plugin2 := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "bluemap",
 			Namespace: "default",
 		},
-		Spec: mck8slexlav1alpha1.PluginSpec{
-			Source: mck8slexlav1alpha1.PluginSource{
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
 				Type:    "hangar",
 				Project: "BlueMap",
 			},
@@ -323,7 +323,7 @@ func TestHandlePluginCreatePostCreatesPlugin(t *testing.T) {
 	}
 
 	// Verify plugin was created
-	var plugin mck8slexlav1alpha1.Plugin
+	var plugin mck8slexlav1beta1.Plugin
 	err := srv.client.Get(context.Background(), client.ObjectKey{
 		Name:      "test-plugin",
 		Namespace: "default",
@@ -360,13 +360,13 @@ func TestHandlePluginCreateValidatesForm(t *testing.T) {
 func TestHandlePluginDeleteRemovesPlugin(t *testing.T) {
 	t.Parallel()
 
-	plugin := &mck8slexlav1alpha1.Plugin{
+	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "to-delete",
 			Namespace: "default",
 		},
-		Spec: mck8slexlav1alpha1.PluginSpec{
-			Source: mck8slexlav1alpha1.PluginSource{
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
 				Type:    "hangar",
 				Project: "DeleteMe",
 			},
@@ -387,7 +387,7 @@ func TestHandlePluginDeleteRemovesPlugin(t *testing.T) {
 	}
 
 	// Verify plugin was deleted
-	var deletedPlugin mck8slexlav1alpha1.Plugin
+	var deletedPlugin mck8slexlav1beta1.Plugin
 	err := srv.client.Get(context.Background(), client.ObjectKey{
 		Name:      "to-delete",
 		Namespace: "default",
@@ -400,12 +400,12 @@ func TestHandlePluginDeleteRemovesPlugin(t *testing.T) {
 func TestHandleApplyNowSetsAnnotation(t *testing.T) {
 	t.Parallel()
 
-	server := &mck8slexlav1alpha1.PaperMCServer{
+	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-server",
 			Namespace: "default",
 		},
-		Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+		Spec: mck8slexlav1beta1.PaperMCServerSpec{
 			UpdateStrategy: "auto",
 		},
 	}
@@ -422,7 +422,7 @@ func TestHandleApplyNowSetsAnnotation(t *testing.T) {
 	}
 
 	// Verify annotation was set
-	var updatedServer mck8slexlav1alpha1.PaperMCServer
+	var updatedServer mck8slexlav1beta1.PaperMCServer
 	err := srv.client.Get(context.Background(), client.ObjectKey{
 		Name:      "test-server",
 		Namespace: "default",
@@ -456,12 +456,12 @@ func TestHandleApplyNowSetsAnnotation(t *testing.T) {
 func TestHandleApplyNowFromPluginRouteReturnsError(t *testing.T) {
 	t.Parallel()
 
-	server := &mck8slexlav1alpha1.PaperMCServer{
+	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-server",
 			Namespace: "default",
 		},
-		Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+		Spec: mck8slexlav1beta1.PaperMCServerSpec{
 			UpdateStrategy: "auto",
 		},
 	}
@@ -541,12 +541,12 @@ func TestHandleServerStatus_NegativeAttempt_ShouldClampOrReject(t *testing.T) {
 	// or rejected with 400.
 	t.Parallel()
 
-	server := &mck8slexlav1alpha1.PaperMCServer{
+	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "status-test",
 			Namespace: "default",
 		},
-		Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+		Spec: mck8slexlav1beta1.PaperMCServerSpec{
 			UpdateStrategy: "auto",
 		},
 	}
@@ -577,12 +577,12 @@ func TestHandleServerStatus_NegativeAttempt_ShouldClampOrReject(t *testing.T) {
 func TestHandleServerDeleteRemovesServer(t *testing.T) {
 	t.Parallel()
 
-	server := &mck8slexlav1alpha1.PaperMCServer{
+	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "server-to-delete",
 			Namespace: "default",
 		},
-		Spec: mck8slexlav1alpha1.PaperMCServerSpec{
+		Spec: mck8slexlav1beta1.PaperMCServerSpec{
 			UpdateStrategy: "auto",
 		},
 	}
@@ -600,7 +600,7 @@ func TestHandleServerDeleteRemovesServer(t *testing.T) {
 	}
 
 	// Verify server was deleted
-	var deletedServer mck8slexlav1alpha1.PaperMCServer
+	var deletedServer mck8slexlav1beta1.PaperMCServer
 	err := srv.client.Get(context.Background(), client.ObjectKey{
 		Name:      "server-to-delete",
 		Namespace: "default",

@@ -47,7 +47,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	mck8slexlav1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/internal/controller"
 	"github.com/lexfrei/minecraft-operator/internal/crdmanager"
 	"github.com/lexfrei/minecraft-operator/pkg/api"
@@ -73,7 +73,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(mck8slexlav1alpha1.AddToScheme(scheme))
+	utilruntime.Must(mck8slexlav1beta1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

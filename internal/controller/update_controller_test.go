@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/pkg/rcon"
 	"github.com/lexfrei/minecraft-operator/pkg/testutil"
 	. "github.com/onsi/ginkgo/v2"
@@ -73,7 +73,7 @@ var _ = Describe("UpdateController", func() {
 
 		AfterEach(func() {
 			// Clean up created resources
-			server := &mcv1alpha1.PaperMCServer{}
+			server := &mcv1beta1.PaperMCServer{}
 			_ = k8sClient.Get(ctx, types.NamespacedName{
 				Name:      serverName,
 				Namespace: namespace,
@@ -82,27 +82,27 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should add cron job when PaperMCServer created with enabled maintenance window", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.0",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -147,27 +147,27 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should not add cron job when maintenance window is disabled", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.0",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: false, // Disabled
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -202,27 +202,27 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should not return error for invalid cron expression but set condition", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.0",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "invalid cron expression",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -255,7 +255,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify condition was set on the server status
-			var updatedServer mcv1alpha1.PaperMCServer
+			var updatedServer mcv1beta1.PaperMCServer
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      serverName,
 				Namespace: namespace,
@@ -268,27 +268,27 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should remove cron job when PaperMCServer deleted", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.0",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -341,27 +341,27 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should update cron job when maintenance window cron spec changes", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.0",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0", // Sunday 4 AM
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -420,27 +420,27 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should NOT recreate cron job when spec is unchanged on re-reconcile", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.0",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -500,27 +500,27 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should handle multiple servers with independent cron schedules", func() {
-			server1 := &mcv1alpha1.PaperMCServer{
+			server1 := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "server-1",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.0",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -538,27 +538,27 @@ var _ = Describe("UpdateController", func() {
 				},
 			}
 
-			server2 := &mcv1alpha1.PaperMCServer{
+			server2 := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "server-2",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.0",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 5 * * 1",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -623,24 +623,24 @@ var _ = Describe("UpdateController", func() {
 			now := metav1.Now()
 			recentRelease := metav1.NewTime(now.Add(-24 * time.Hour)) // 1 day ago
 
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "latest",
 					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour}, // 3 days
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -656,10 +656,10 @@ var _ = Describe("UpdateController", func() {
 						},
 					},
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion: "1.21.0",
 					CurrentBuild:   100,
-					AvailableUpdate: &mcv1alpha1.AvailableUpdate{
+					AvailableUpdate: &mcv1beta1.AvailableUpdate{
 						Version:    "1.21.1",
 						Build:      150,
 						ReleasedAt: recentRelease, // Too recent
@@ -678,24 +678,24 @@ var _ = Describe("UpdateController", func() {
 			now := metav1.Now()
 			oldRelease := metav1.NewTime(now.Add(-96 * time.Hour)) // 4 days ago
 
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "latest",
 					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour}, // 3 days
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -711,10 +711,10 @@ var _ = Describe("UpdateController", func() {
 						},
 					},
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion: "1.21.0",
 					CurrentBuild:   100,
-					AvailableUpdate: &mcv1alpha1.AvailableUpdate{
+					AvailableUpdate: &mcv1beta1.AvailableUpdate{
 						Version:    "1.21.1",
 						Build:      150,
 						ReleasedAt: oldRelease, // Old enough
@@ -732,24 +732,24 @@ var _ = Describe("UpdateController", func() {
 			now := metav1.Now()
 			recentRelease := metav1.NewTime(now.Add(-1 * time.Hour)) // Just released
 
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "latest",
 					// No updateDelay specified
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -765,10 +765,10 @@ var _ = Describe("UpdateController", func() {
 						},
 					},
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion: "1.21.0",
 					CurrentBuild:   100,
-					AvailableUpdate: &mcv1alpha1.AvailableUpdate{
+					AvailableUpdate: &mcv1beta1.AvailableUpdate{
 						Version:    "1.21.1",
 						Build:      150,
 						ReleasedAt: recentRelease, // Recent but no delay configured
@@ -783,24 +783,24 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should return true when no availableUpdate exists", func() {
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "latest",
 					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour},
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -816,7 +816,7 @@ var _ = Describe("UpdateController", func() {
 						},
 					},
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion: "1.21.0",
 					CurrentBuild:   100,
 					// No availableUpdate
@@ -848,24 +848,24 @@ var _ = Describe("UpdateController", func() {
 				nowFunc: func() time.Time { return futureNow },
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "latest",
 					UpdateDelay:    &metav1.Duration{Duration: 36 * time.Hour},
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -881,10 +881,10 @@ var _ = Describe("UpdateController", func() {
 						},
 					},
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion: "1.21.0",
 					CurrentBuild:   100,
-					AvailableUpdate: &mcv1alpha1.AvailableUpdate{
+					AvailableUpdate: &mcv1beta1.AvailableUpdate{
 						Version:    "1.21.1",
 						Build:      150,
 						ReleasedAt: releaseTime,
@@ -920,7 +920,7 @@ var _ = Describe("UpdateController", func() {
 				nowFunc: func() time.Time { return mockedNow },
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-apply-now-mock",
 					Namespace: "default",
@@ -1075,7 +1075,7 @@ var _ = Describe("UpdateController", func() {
 				PodExecutor: mockExec,
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-exec-server",
 					Namespace: "default",
@@ -1102,15 +1102,15 @@ var _ = Describe("UpdateController", func() {
 				PodExecutor: mockExec,
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-exec-server",
 					Namespace: "default",
 				},
 			}
 
-			plugin := mcv1alpha1.ServerPluginStatus{
-				PluginRef: mcv1alpha1.PluginRef{
+			plugin := mcv1beta1.ServerPluginStatus{
+				PluginRef: mcv1beta1.PluginRef{
 					Name:      "test-plugin",
 					Namespace: "default",
 				},
@@ -1153,7 +1153,7 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		AfterEach(func() {
-			server := &mcv1alpha1.PaperMCServer{}
+			server := &mcv1beta1.PaperMCServer{}
 			_ = k8sClient.Get(ctx, types.NamespacedName{
 				Name:      serverName,
 				Namespace: namespace,
@@ -1162,28 +1162,28 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should execute graceful shutdown via RCON", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "latest",
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
@@ -1218,24 +1218,24 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should send warning messages to players", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "latest",
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
@@ -1262,10 +1262,10 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should continue with pod deletion if RCON fails", func() {
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
 					},
@@ -1285,14 +1285,14 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should handle context cancellation during RCON", func() {
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
 				},
@@ -1327,7 +1327,7 @@ var _ = Describe("UpdateController", func() {
 
 		AfterEach(func() {
 			// Clean up server
-			server := &mcv1alpha1.PaperMCServer{}
+			server := &mcv1beta1.PaperMCServer{}
 			_ = k8sClient.Get(ctx, types.NamespacedName{
 				Name:      serverName,
 				Namespace: namespace,
@@ -1335,7 +1335,7 @@ var _ = Describe("UpdateController", func() {
 			_ = k8sClient.Delete(ctx, server)
 
 			// Clean up plugins
-			pluginList := &mcv1alpha1.PluginList{}
+			pluginList := &mcv1beta1.PluginList{}
 			_ = k8sClient.List(ctx, pluginList, client.InNamespace(namespace))
 			for i := range pluginList.Items {
 				_ = k8sClient.Delete(ctx, &pluginList.Items[i])
@@ -1344,25 +1344,25 @@ var _ = Describe("UpdateController", func() {
 
 		It("should identify plugins marked for deletion", func() {
 			By("creating a server")
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: false,
 					},
 					PodTemplate: corev1.PodTemplateSpec{
@@ -1385,12 +1385,12 @@ var _ = Describe("UpdateController", func() {
 				Namespace: namespace,
 			}, server)).To(Succeed())
 
-			server.Status = mcv1alpha1.PaperMCServerStatus{
+			server.Status = mcv1beta1.PaperMCServerStatus{
 				CurrentVersion: "1.21.1",
 				CurrentBuild:   100,
-				Plugins: []mcv1alpha1.ServerPluginStatus{
+				Plugins: []mcv1beta1.ServerPluginStatus{
 					{
-						PluginRef: mcv1alpha1.PluginRef{
+						PluginRef: mcv1beta1.PluginRef{
 							Name:      "plugin-to-delete",
 							Namespace: namespace,
 						},
@@ -1402,7 +1402,7 @@ var _ = Describe("UpdateController", func() {
 						InstalledJARName: "TestPlugin-1.0.0.jar",
 					},
 					{
-						PluginRef: mcv1alpha1.PluginRef{
+						PluginRef: mcv1beta1.PluginRef{
 							Name:      "plugin-to-keep",
 							Namespace: namespace,
 						},
@@ -1434,25 +1434,25 @@ var _ = Describe("UpdateController", func() {
 
 		It("should include plugins without InstalledJARName for immediate deletion", func() {
 			By("creating a server")
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: false,
 					},
 					PodTemplate: corev1.PodTemplateSpec{
@@ -1475,12 +1475,12 @@ var _ = Describe("UpdateController", func() {
 				Namespace: namespace,
 			}, server)).To(Succeed())
 
-			server.Status = mcv1alpha1.PaperMCServerStatus{
+			server.Status = mcv1beta1.PaperMCServerStatus{
 				CurrentVersion: "1.21.1",
 				CurrentBuild:   100,
-				Plugins: []mcv1alpha1.ServerPluginStatus{
+				Plugins: []mcv1beta1.ServerPluginStatus{
 					{
-						PluginRef: mcv1alpha1.PluginRef{
+						PluginRef: mcv1beta1.PluginRef{
 							Name:      "plugin-no-jar",
 							Namespace: namespace,
 						},
@@ -1510,13 +1510,13 @@ var _ = Describe("UpdateController", func() {
 
 		It("should update Plugin.DeletionProgress after JAR deletion", func() {
 			By("creating a Plugin with DeletionProgress")
-			plugin := &mcv1alpha1.Plugin{
+			plugin := &mcv1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "plugin-with-progress",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PluginSpec{
-					Source: mcv1alpha1.PluginSource{
+				Spec: mcv1beta1.PluginSpec{
+					Source: mcv1beta1.PluginSource{
 						Type:    "hangar",
 						Project: "TestPlugin",
 					},
@@ -1531,7 +1531,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
 
 			By("setting DeletionProgress in status")
-			plugin.Status.DeletionProgress = []mcv1alpha1.DeletionProgressEntry{
+			plugin.Status.DeletionProgress = []mcv1beta1.DeletionProgressEntry{
 				{
 					ServerName: serverName,
 					Namespace:  namespace,
@@ -1546,7 +1546,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying DeletionProgress is updated")
-			updatedPlugin := &mcv1alpha1.Plugin{}
+			updatedPlugin := &mcv1beta1.Plugin{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      plugin.Name,
 				Namespace: plugin.Namespace,
@@ -1559,25 +1559,25 @@ var _ = Describe("UpdateController", func() {
 
 		It("should handle multiple plugins marked for deletion", func() {
 			By("creating a server")
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: false,
 					},
 					PodTemplate: corev1.PodTemplateSpec{
@@ -1600,12 +1600,12 @@ var _ = Describe("UpdateController", func() {
 				Namespace: namespace,
 			}, server)).To(Succeed())
 
-			server.Status = mcv1alpha1.PaperMCServerStatus{
+			server.Status = mcv1beta1.PaperMCServerStatus{
 				CurrentVersion: "1.21.1",
 				CurrentBuild:   100,
-				Plugins: []mcv1alpha1.ServerPluginStatus{
+				Plugins: []mcv1beta1.ServerPluginStatus{
 					{
-						PluginRef: mcv1alpha1.PluginRef{
+						PluginRef: mcv1beta1.PluginRef{
 							Name:      "plugin-1",
 							Namespace: namespace,
 						},
@@ -1613,7 +1613,7 @@ var _ = Describe("UpdateController", func() {
 						InstalledJARName: "Plugin1-1.0.0.jar",
 					},
 					{
-						PluginRef: mcv1alpha1.PluginRef{
+						PluginRef: mcv1beta1.PluginRef{
 							Name:      "plugin-2",
 							Namespace: namespace,
 						},
@@ -1621,7 +1621,7 @@ var _ = Describe("UpdateController", func() {
 						InstalledJARName: "Plugin2-2.0.0.jar",
 					},
 					{
-						PluginRef: mcv1alpha1.PluginRef{
+						PluginRef: mcv1beta1.PluginRef{
 							Name:      "plugin-3",
 							Namespace: namespace,
 						},
@@ -1653,13 +1653,13 @@ var _ = Describe("UpdateController", func() {
 			mockExecutor := &testutil.MockPodExecutor{}
 
 			By("creating a Plugin with DeletionProgress for markJARAsDeleted")
-			plugin := &mcv1alpha1.Plugin{
+			plugin := &mcv1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "plugin-both-dirs",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PluginSpec{
-					Source: mcv1alpha1.PluginSource{
+				Spec: mcv1beta1.PluginSpec{
+					Source: mcv1beta1.PluginSource{
 						Type:    "hangar",
 						Project: "TestPlugin",
 					},
@@ -1673,7 +1673,7 @@ var _ = Describe("UpdateController", func() {
 			}
 			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
 
-			plugin.Status.DeletionProgress = []mcv1alpha1.DeletionProgressEntry{
+			plugin.Status.DeletionProgress = []mcv1beta1.DeletionProgressEntry{
 				{
 					ServerName: serverName,
 					Namespace:  namespace,
@@ -1689,15 +1689,15 @@ var _ = Describe("UpdateController", func() {
 				PodExecutor: mockExecutor,
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
 			}
 
-			pluginStatus := mcv1alpha1.ServerPluginStatus{
-				PluginRef: mcv1alpha1.PluginRef{
+			pluginStatus := mcv1beta1.ServerPluginStatus{
+				PluginRef: mcv1beta1.PluginRef{
 					Name:      "plugin-both-dirs",
 					Namespace: namespace,
 				},
@@ -1718,13 +1718,13 @@ var _ = Describe("UpdateController", func() {
 
 		It("should immediately mark as deleted when InstalledJARName is empty", func() {
 			By("creating a Plugin with DeletionProgress")
-			plugin := &mcv1alpha1.Plugin{
+			plugin := &mcv1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "plugin-never-installed",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PluginSpec{
-					Source: mcv1alpha1.PluginSource{
+				Spec: mcv1beta1.PluginSpec{
+					Source: mcv1beta1.PluginSource{
 						Type:    "hangar",
 						Project: "TestPlugin",
 					},
@@ -1738,7 +1738,7 @@ var _ = Describe("UpdateController", func() {
 			}
 			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
 
-			plugin.Status.DeletionProgress = []mcv1alpha1.DeletionProgressEntry{
+			plugin.Status.DeletionProgress = []mcv1beta1.DeletionProgressEntry{
 				{
 					ServerName: serverName,
 					Namespace:  namespace,
@@ -1753,15 +1753,15 @@ var _ = Describe("UpdateController", func() {
 				Scheme: k8sClient.Scheme(),
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
 			}
 
-			pluginStatus := mcv1alpha1.ServerPluginStatus{
-				PluginRef: mcv1alpha1.PluginRef{
+			pluginStatus := mcv1beta1.ServerPluginStatus{
+				PluginRef: mcv1beta1.PluginRef{
 					Name:      "plugin-never-installed",
 					Namespace: namespace,
 				},
@@ -1773,7 +1773,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying Plugin DeletionProgress is marked as deleted")
-			updatedPlugin := &mcv1alpha1.Plugin{}
+			updatedPlugin := &mcv1beta1.Plugin{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      plugin.Name,
 				Namespace: plugin.Namespace,
@@ -1801,13 +1801,13 @@ var _ = Describe("UpdateController", func() {
 			mockExecutor := &testutil.MockPodExecutor{}
 
 			By("creating a Plugin with AvailableVersions")
-			plugin := &mcv1alpha1.Plugin{
+			plugin := &mcv1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-download-plugin",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PluginSpec{
-					Source: mcv1alpha1.PluginSource{
+				Spec: mcv1beta1.PluginSpec{
+					Source: mcv1beta1.PluginSource{
 						Type:    "hangar",
 						Project: "TestDownload",
 					},
@@ -1822,7 +1822,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
 
 			now := metav1.Now()
-			plugin.Status.AvailableVersions = []mcv1alpha1.PluginVersionInfo{
+			plugin.Status.AvailableVersions = []mcv1beta1.PluginVersionInfo{
 				{
 					Version:           "1.0.0",
 					DownloadURL:       "https://example.com/test-download-plugin-1.0.0.jar",
@@ -1840,25 +1840,25 @@ var _ = Describe("UpdateController", func() {
 				PodExecutor: mockExecutor,
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-server-download",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: false,
 					},
 					PodTemplate: corev1.PodTemplateSpec{
@@ -1875,12 +1875,12 @@ var _ = Describe("UpdateController", func() {
 			}
 			Expect(k8sClient.Create(ctx, server)).To(Succeed())
 
-			server.Status = mcv1alpha1.PaperMCServerStatus{
+			server.Status = mcv1beta1.PaperMCServerStatus{
 				CurrentVersion: "1.21.1",
 				CurrentBuild:   100,
-				Plugins: []mcv1alpha1.ServerPluginStatus{
+				Plugins: []mcv1beta1.ServerPluginStatus{
 					{
-						PluginRef: mcv1alpha1.PluginRef{
+						PluginRef: mcv1beta1.PluginRef{
 							Name:      "test-download-plugin",
 							Namespace: namespace,
 						},
@@ -2000,28 +2000,28 @@ var _ = Describe("UpdateController", func() {
 				cron:        mockCron,
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-combined-rcon",
 					Namespace: testNamespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -2037,7 +2037,7 @@ var _ = Describe("UpdateController", func() {
 						},
 					},
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion: "1.21.0",
 					CurrentBuild:   90,
 					DesiredVersion: "1.21.1",
@@ -2247,7 +2247,7 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		AfterEach(func() {
-			server := &mcv1alpha1.PaperMCServer{}
+			server := &mcv1beta1.PaperMCServer{}
 			_ = k8sClient.Get(ctx, types.NamespacedName{
 				Name:      serverName,
 				Namespace: namespace,
@@ -2258,7 +2258,7 @@ var _ = Describe("UpdateController", func() {
 		It("should detect valid apply-now annotation", func() {
 			By("creating a server with apply-now annotation")
 			now := time.Now()
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
@@ -2266,20 +2266,20 @@ var _ = Describe("UpdateController", func() {
 						AnnotationApplyNow: fmt.Sprintf("%d", now.Unix()),
 					},
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: false,
 					},
 					PodTemplate: corev1.PodTemplateSpec{
@@ -2304,7 +2304,7 @@ var _ = Describe("UpdateController", func() {
 		It("should reject stale apply-now annotation older than 5 minutes", func() {
 			By("creating a server with stale apply-now annotation")
 			staleTime := time.Now().Add(-10 * time.Minute) // 10 minutes ago
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
@@ -2312,20 +2312,20 @@ var _ = Describe("UpdateController", func() {
 						AnnotationApplyNow: fmt.Sprintf("%d", staleTime.Unix()),
 					},
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: false,
 					},
 					PodTemplate: corev1.PodTemplateSpec{
@@ -2349,7 +2349,7 @@ var _ = Describe("UpdateController", func() {
 
 		It("should reject invalid apply-now annotation format", func() {
 			By("creating a server with invalid apply-now annotation")
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
@@ -2357,20 +2357,20 @@ var _ = Describe("UpdateController", func() {
 						AnnotationApplyNow: "not-a-timestamp",
 					},
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: false,
 					},
 					PodTemplate: corev1.PodTemplateSpec{
@@ -2394,25 +2394,25 @@ var _ = Describe("UpdateController", func() {
 
 		It("should return false when no apply-now annotation present", func() {
 			By("creating a server without apply-now annotation")
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: false,
 					},
 					PodTemplate: corev1.PodTemplateSpec{
@@ -2437,7 +2437,7 @@ var _ = Describe("UpdateController", func() {
 		It("should remove annotation after processing", func() {
 			By("creating a server with apply-now annotation")
 			now := time.Now()
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
@@ -2445,20 +2445,20 @@ var _ = Describe("UpdateController", func() {
 						AnnotationApplyNow: fmt.Sprintf("%d", now.Unix()),
 					},
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
-					RCON: mcv1alpha1.RCONConfig{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: false,
 					},
 					PodTemplate: corev1.PodTemplateSpec{
@@ -2480,7 +2480,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying annotation is removed")
-			updatedServer := &mcv1alpha1.PaperMCServer{}
+			updatedServer := &mcv1beta1.PaperMCServer{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      serverName,
 				Namespace: namespace,
@@ -2510,7 +2510,7 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		AfterEach(func() {
-			server := &mcv1alpha1.PaperMCServer{}
+			server := &mcv1beta1.PaperMCServer{}
 			_ = k8sClient.Get(ctx, types.NamespacedName{
 				Name:      serverName,
 				Namespace: namespace,
@@ -2519,12 +2519,12 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should update lastUpdate in status after successful update", func() {
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion: "1.21.0",
 					CurrentBuild:   100,
 				},
@@ -2539,12 +2539,12 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should record failed update in status", func() {
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion: "1.21.0",
 				},
 			}
@@ -2557,14 +2557,14 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should clear availableUpdate after successful update", func() {
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion: "1.21.0",
-					AvailableUpdate: &mcv1alpha1.AvailableUpdate{
+					AvailableUpdate: &mcv1beta1.AvailableUpdate{
 						Version: "1.21.1",
 						Build:   150,
 					},
@@ -2578,7 +2578,7 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should set Updating condition during update", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Generation: 1,
 				},
@@ -2594,7 +2594,7 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should clear Updating condition after update", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Generation: 1,
 				},
@@ -2610,17 +2610,17 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should update CurrentVersion to DesiredVersion after successful update", func() {
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion:  "1.21.0",
 					CurrentBuild:    100,
 					DesiredVersion:  "1.21.1",
 					DesiredBuild:    150,
-					AvailableUpdate: &mcv1alpha1.AvailableUpdate{},
+					AvailableUpdate: &mcv1beta1.AvailableUpdate{},
 				},
 			}
 
@@ -2634,27 +2634,27 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should update plugin CurrentVersion to ResolvedVersion after successful update", func() {
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "latest",
 					Version:        "1.21.1",
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion: "1.21.0",
 					DesiredVersion: "1.21.1",
-					Plugins: []mcv1alpha1.ServerPluginStatus{
+					Plugins: []mcv1beta1.ServerPluginStatus{
 						{
-							PluginRef:       mcv1alpha1.PluginRef{Name: "plugin1", Namespace: "default"},
+							PluginRef:       mcv1beta1.PluginRef{Name: "plugin1", Namespace: "default"},
 							CurrentVersion:  "1.0.0",
 							ResolvedVersion: "1.1.0",
 						},
 						{
-							PluginRef:       mcv1alpha1.PluginRef{Name: "plugin2", Namespace: "default"},
+							PluginRef:       mcv1beta1.PluginRef{Name: "plugin2", Namespace: "default"},
 							CurrentVersion:  "2.0.0",
 							ResolvedVersion: "2.1.0",
 						},
 					},
-					AvailableUpdate: &mcv1alpha1.AvailableUpdate{},
+					AvailableUpdate: &mcv1beta1.AvailableUpdate{},
 				},
 			}
 
@@ -2689,7 +2689,7 @@ var _ = Describe("UpdateController", func() {
 
 		AfterEach(func() {
 			// Clean up server
-			server := &mcv1alpha1.PaperMCServer{}
+			server := &mcv1beta1.PaperMCServer{}
 			_ = k8sClient.Get(ctx, types.NamespacedName{
 				Name:      serverName,
 				Namespace: namespace,
@@ -2736,10 +2736,10 @@ var _ = Describe("UpdateController", func() {
 				nowFunc: func() time.Time { return sunday430AM },
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
@@ -2759,10 +2759,10 @@ var _ = Describe("UpdateController", func() {
 				nowFunc: func() time.Time { return wednesday10AM },
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
@@ -2777,10 +2777,10 @@ var _ = Describe("UpdateController", func() {
 		It("should allow update when maintenance window is disabled", func() {
 			reconciler := &UpdateReconciler{}
 
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: false,
 						},
@@ -2802,10 +2802,10 @@ var _ = Describe("UpdateController", func() {
 				nowFunc: func() time.Time { return sunday4AM },
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
@@ -2825,10 +2825,10 @@ var _ = Describe("UpdateController", func() {
 				nowFunc: func() time.Time { return sunday501AM },
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0",
 							Enabled: true,
 						},
@@ -2846,11 +2846,11 @@ var _ = Describe("UpdateController", func() {
 			// Regression: When a plugin was never installed (InstalledJARName empty),
 			// the update controller should immediately mark the JAR as deleted
 			// instead of waiting for a 10-minute timeout.
-			server := &mcv1alpha1.PaperMCServer{
-				Status: mcv1alpha1.PaperMCServerStatus{
-					Plugins: []mcv1alpha1.ServerPluginStatus{
+			server := &mcv1beta1.PaperMCServer{
+				Status: mcv1beta1.PaperMCServerStatus{
+					Plugins: []mcv1beta1.ServerPluginStatus{
 						{
-							PluginRef: mcv1alpha1.PluginRef{
+							PluginRef: mcv1beta1.PluginRef{
 								Name:      "never-installed-plugin",
 								Namespace: "default",
 							},
@@ -2878,10 +2878,10 @@ var _ = Describe("UpdateController", func() {
 			// Safe default: block updates on parse error.
 			reconciler := &UpdateReconciler{}
 
-			server := &mcv1alpha1.PaperMCServer{
-				Spec: mcv1alpha1.PaperMCServerSpec{
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+			server := &mcv1beta1.PaperMCServer{
+				Spec: mcv1beta1.PaperMCServerSpec{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Enabled: true,
 							Cron:    "invalid cron expression!!!",
 						},
@@ -3015,8 +3015,8 @@ var _ = Describe("UpdateController", func() {
 			}
 		})
 
-		createUpdateServer := func(name string, spec mcv1alpha1.PaperMCServerSpec, status mcv1alpha1.PaperMCServerStatus) {
-			server := &mcv1alpha1.PaperMCServer{
+		createUpdateServer := func(name string, spec mcv1beta1.PaperMCServerSpec, status mcv1beta1.PaperMCServerStatus) {
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
@@ -3032,7 +3032,7 @@ var _ = Describe("UpdateController", func() {
 		}
 
 		deleteUpdateServer := func(name string) {
-			server := &mcv1alpha1.PaperMCServer{}
+			server := &mcv1beta1.PaperMCServer{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, server)
 			if err == nil {
 				_ = k8sClient.Delete(ctx, server)
@@ -3041,11 +3041,11 @@ var _ = Describe("UpdateController", func() {
 
 		It("should return no-op when no AvailableUpdate exists", func() {
 			serverName := "test-no-update"
-			createUpdateServer(serverName, mcv1alpha1.PaperMCServerSpec{
+			createUpdateServer(serverName, mcv1beta1.PaperMCServerSpec{
 				UpdateStrategy: "latest",
-				UpdateSchedule: mcv1alpha1.UpdateSchedule{
+				UpdateSchedule: mcv1beta1.UpdateSchedule{
 					CheckCron: "0 3 * * *",
-					MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+					MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 						Cron:    "0 4 * * 0",
 						Enabled: false,
 					},
@@ -3055,7 +3055,7 @@ var _ = Describe("UpdateController", func() {
 						Containers: []corev1.Container{{Name: "papermc"}},
 					},
 				},
-			}, mcv1alpha1.PaperMCServerStatus{
+			}, mcv1beta1.PaperMCServerStatus{
 				CurrentVersion:  "1.21.4",
 				CurrentBuild:    100,
 				DesiredVersion:  "1.21.4",
@@ -3079,11 +3079,11 @@ var _ = Describe("UpdateController", func() {
 			}
 
 			now := metav1.Now()
-			createUpdateServer(serverName, mcv1alpha1.PaperMCServerSpec{
+			createUpdateServer(serverName, mcv1beta1.PaperMCServerSpec{
 				UpdateStrategy: "latest",
-				UpdateSchedule: mcv1alpha1.UpdateSchedule{
+				UpdateSchedule: mcv1beta1.UpdateSchedule{
 					CheckCron: "0 3 * * *",
-					MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+					MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 						Cron:    "0 4 * * 0", // Sunday 4am
 						Enabled: true,
 					},
@@ -3093,17 +3093,17 @@ var _ = Describe("UpdateController", func() {
 						Containers: []corev1.Container{{Name: "papermc"}},
 					},
 				},
-			}, mcv1alpha1.PaperMCServerStatus{
+			}, mcv1beta1.PaperMCServerStatus{
 				CurrentVersion: "1.21.3",
 				CurrentBuild:   80,
 				DesiredVersion: "1.21.4",
 				DesiredBuild:   100,
-				AvailableUpdate: &mcv1alpha1.AvailableUpdate{
+				AvailableUpdate: &mcv1beta1.AvailableUpdate{
 					Version:    "1.21.4",
 					Build:      100,
 					ReleasedAt: now,
 					FoundAt:    now,
-					Plugins:    []mcv1alpha1.PluginVersionPair{},
+					Plugins:    []mcv1beta1.PluginVersionPair{},
 				},
 			})
 			defer deleteUpdateServer(serverName)
@@ -3127,11 +3127,11 @@ var _ = Describe("UpdateController", func() {
 		It("should stop reconciliation and set condition for invalid cron", func() {
 			serverName := "test-invalid-cron-reconcile"
 			now := metav1.Now()
-			createUpdateServer(serverName, mcv1alpha1.PaperMCServerSpec{
+			createUpdateServer(serverName, mcv1beta1.PaperMCServerSpec{
 				UpdateStrategy: "latest",
-				UpdateSchedule: mcv1alpha1.UpdateSchedule{
+				UpdateSchedule: mcv1beta1.UpdateSchedule{
 					CheckCron: "invalid cron",
-					MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+					MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 						Cron:    "also invalid",
 						Enabled: true,
 					},
@@ -3141,17 +3141,17 @@ var _ = Describe("UpdateController", func() {
 						Containers: []corev1.Container{{Name: "papermc"}},
 					},
 				},
-			}, mcv1alpha1.PaperMCServerStatus{
+			}, mcv1beta1.PaperMCServerStatus{
 				CurrentVersion: "1.21.3",
 				CurrentBuild:   80,
 				DesiredVersion: "1.21.4",
 				DesiredBuild:   100,
-				AvailableUpdate: &mcv1alpha1.AvailableUpdate{
+				AvailableUpdate: &mcv1beta1.AvailableUpdate{
 					Version:    "1.21.4",
 					Build:      100,
 					ReleasedAt: now,
 					FoundAt:    now,
-					Plugins:    []mcv1alpha1.PluginVersionPair{},
+					Plugins:    []mcv1beta1.PluginVersionPair{},
 				},
 			})
 			defer deleteUpdateServer(serverName)
@@ -3163,7 +3163,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(result).To(Equal(reconcile.Result{}),
 				"Should return empty result, not requeue")
 
-			var server mcv1alpha1.PaperMCServer
+			var server mcv1beta1.PaperMCServer
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: serverName, Namespace: namespace}, &server)).To(Succeed())
 
 			cronCond := meta.FindStatusCondition(server.Status.Conditions, conditionTypeCronScheduleValid)
@@ -3215,7 +3215,7 @@ var _ = Describe("UpdateController", func() {
 				_ = k8sClient.Delete(ctx, sts)
 			}()
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      stsName,
 					Namespace: namespace,
@@ -3259,7 +3259,7 @@ var _ = Describe("UpdateController", func() {
 				_ = k8sClient.Delete(ctx, sts)
 			}()
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      stsName,
 					Namespace: namespace,
@@ -3272,7 +3272,7 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should return error when StatefulSet does not exist", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "nonexistent-sts",
 					Namespace: namespace,
@@ -3300,16 +3300,16 @@ var _ = Describe("UpdateController", func() {
 		})
 
 		It("should return error when Pod does not exist", func() {
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "no-pod-server",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
-					RCON: mcv1alpha1.RCONConfig{
+				Spec: mcv1beta1.PaperMCServerSpec{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -3338,16 +3338,16 @@ var _ = Describe("UpdateController", func() {
 				_ = k8sClient.Delete(ctx, pod)
 			}()
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "no-ip-server",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
-					RCON: mcv1alpha1.RCONConfig{
+				Spec: mcv1beta1.PaperMCServerSpec{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-secret",
 							Key:  "password",
 						},
@@ -3382,16 +3382,16 @@ var _ = Describe("UpdateController", func() {
 				_ = k8sClient.Delete(ctx, pod)
 			}()
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "no-secret-server",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
-					RCON: mcv1alpha1.RCONConfig{
+				Spec: mcv1beta1.PaperMCServerSpec{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "nonexistent-secret",
 							Key:  "password",
 						},
@@ -3436,16 +3436,16 @@ var _ = Describe("UpdateController", func() {
 				_ = k8sClient.Delete(ctx, secret)
 			}()
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "bad-key-server",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
-					RCON: mcv1alpha1.RCONConfig{
+				Spec: mcv1beta1.PaperMCServerSpec{
+					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
-						PasswordSecret: mcv1alpha1.SecretKeyRef{
+						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-bad-key-secret",
 							Key:  "password",
 						},
@@ -3495,22 +3495,22 @@ var _ = Describe("UpdateController", func() {
 				_ = k8sClient.Delete(ctx, ns)
 			}()
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "no-update-server",
 					Namespace: namespace,
 				},
-				Spec: mcv1alpha1.PaperMCServerSpec{
+				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "auto",
 					Version:        "1.21.1",
-					UpdateSchedule: mcv1alpha1.UpdateSchedule{
+					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						CheckCron: "0 3 * * *",
-						MaintenanceWindow: mcv1alpha1.MaintenanceWindow{
+						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 4 * * 0", // Sunday 4am
 							Enabled: true,
 						},
 					},
-					GracefulShutdown: mcv1alpha1.GracefulShutdown{
+					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
@@ -3521,7 +3521,7 @@ var _ = Describe("UpdateController", func() {
 						},
 					},
 				},
-				Status: mcv1alpha1.PaperMCServerStatus{
+				Status: mcv1beta1.PaperMCServerStatus{
 					CurrentVersion:  "1.21.1",
 					CurrentBuild:    100,
 					AvailableUpdate: nil, // No available update
@@ -3676,7 +3676,7 @@ var _ = Describe("UpdateController", func() {
 				Client: k8sClient,
 			}
 
-			server := &mcv1alpha1.PaperMCServer{
+			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        "nil-annotations-server",
 					Namespace:   "default",

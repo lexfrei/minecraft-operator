@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/selector"
 	"github.com/lexfrei/minecraft-operator/pkg/solver"
@@ -70,7 +70,7 @@ type PluginReconciler struct {
 // Reconcile implements the reconciliation loop for Plugin resources.
 func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// Fetch the Plugin resource
-	var plugin mcv1alpha1.Plugin
+	var plugin mcv1beta1.Plugin
 	if err := r.Get(ctx, req.NamespacedName, &plugin); err != nil {
 		if apierrors.IsNotFound(err) {
 			slog.InfoContext(ctx, "Plugin resource not found, ignoring")
@@ -128,7 +128,7 @@ func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 // doReconcile performs the actual reconciliation logic.
-func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1alpha1.Plugin) (ctrl.Result, error) {
+func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1beta1.Plugin) (ctrl.Result, error) {
 	// Step 1: Fetch and cache plugin metadata
 	allVersions, result, err := r.syncPluginMetadata(ctx, plugin)
 	if err != nil {
@@ -168,7 +168,7 @@ func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1alpha1.P
 // syncPluginMetadata fetches plugin metadata and updates cache in status.
 func (r *PluginReconciler) syncPluginMetadata(
 	ctx context.Context,
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 ) ([]plugins.PluginVersion, ctrl.Result, error) {
 	allVersions, repoErr := r.fetchPluginMetadata(ctx, plugin)
 
@@ -191,7 +191,7 @@ func (r *PluginReconciler) syncPluginMetadata(
 
 // handleRepositoryError handles repository fetch errors by falling back to cached data.
 func (r *PluginReconciler) handleRepositoryError(
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 	repoErr error,
 ) ([]plugins.PluginVersion, ctrl.Result, error) {
 	if len(plugin.Status.AvailableVersions) > 0 {
@@ -212,8 +212,8 @@ func (r *PluginReconciler) handleRepositoryError(
 // findMatchedServers finds all PaperMCServer instances matching the plugin selector.
 func (r *PluginReconciler) findMatchedServers(
 	ctx context.Context,
-	plugin *mcv1alpha1.Plugin,
-) ([]mcv1alpha1.PaperMCServer, error) {
+	plugin *mcv1beta1.Plugin,
+) ([]mcv1beta1.PaperMCServer, error) {
 	servers, err := selector.FindMatchingServers(
 		ctx,
 		r.Client,
@@ -229,7 +229,7 @@ func (r *PluginReconciler) findMatchedServers(
 // fetchPluginMetadata fetches plugin metadata from the repository.
 func (r *PluginReconciler) fetchPluginMetadata(
 	ctx context.Context,
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 ) ([]plugins.PluginVersion, error) {
 	if plugin.Spec.Source.Type != "hangar" {
 		return nil, errors.Newf("unsupported source type: %s", plugin.Spec.Source.Type)
@@ -247,10 +247,10 @@ func (r *PluginReconciler) fetchPluginMetadata(
 // Reads each server's Status.Plugins to reflect the real compatibility
 // result from PaperMCServer controller's version resolution.
 func buildMatchedInstances(
-	servers []mcv1alpha1.PaperMCServer,
+	servers []mcv1beta1.PaperMCServer,
 	pluginName, pluginNamespace string,
-) []mcv1alpha1.MatchedInstance {
-	instances := make([]mcv1alpha1.MatchedInstance, 0, len(servers))
+) []mcv1beta1.MatchedInstance {
+	instances := make([]mcv1beta1.MatchedInstance, 0, len(servers))
 
 	for _, server := range servers {
 		compatible := false
@@ -263,7 +263,7 @@ func buildMatchedInstances(
 			}
 		}
 
-		instances = append(instances, mcv1alpha1.MatchedInstance{
+		instances = append(instances, mcv1beta1.MatchedInstance{
 			Name:       server.Name,
 			Namespace:  server.Namespace,
 			Version:    server.Status.CurrentVersion,
@@ -275,12 +275,12 @@ func buildMatchedInstances(
 }
 
 // convertToPluginVersionInfo converts plugin versions to status PluginVersionInfo.
-func convertToPluginVersionInfo(versions []plugins.PluginVersion) []mcv1alpha1.PluginVersionInfo {
-	infos := make([]mcv1alpha1.PluginVersionInfo, len(versions))
+func convertToPluginVersionInfo(versions []plugins.PluginVersion) []mcv1beta1.PluginVersionInfo {
+	infos := make([]mcv1beta1.PluginVersionInfo, len(versions))
 	now := metav1.Now()
 
 	for i, v := range versions {
-		infos[i] = mcv1alpha1.PluginVersionInfo{
+		infos[i] = mcv1beta1.PluginVersionInfo{
 			Version:           v.Version,
 			MinecraftVersions: v.MinecraftVersions,
 			DownloadURL:       v.DownloadURL,
@@ -294,7 +294,7 @@ func convertToPluginVersionInfo(versions []plugins.PluginVersion) []mcv1alpha1.P
 }
 
 // convertCachedVersions converts cached PluginVersionInfo back to PluginVersion.
-func convertCachedVersions(cached []mcv1alpha1.PluginVersionInfo) []plugins.PluginVersion {
+func convertCachedVersions(cached []mcv1beta1.PluginVersionInfo) []plugins.PluginVersion {
 	versions := make([]plugins.PluginVersion, len(cached))
 
 	for i, c := range cached {
@@ -313,7 +313,7 @@ func convertCachedVersions(cached []mcv1alpha1.PluginVersionInfo) []plugins.Plug
 // enqueueMatchedServers triggers reconciliation for matched PaperMCServer instances.
 func (r *PluginReconciler) enqueueMatchedServers(
 	ctx context.Context,
-	servers []mcv1alpha1.PaperMCServer,
+	servers []mcv1beta1.PaperMCServer,
 ) error {
 	// This is handled by the watch in SetupWithManager
 	// The servers will be reconciled automatically when Plugin status changes
@@ -322,7 +322,7 @@ func (r *PluginReconciler) enqueueMatchedServers(
 
 // setCondition sets or updates a condition in the Plugin status.
 func (r *PluginReconciler) setCondition(
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 	conditionType string,
 	status metav1.ConditionStatus,
 	reason,
@@ -341,7 +341,7 @@ func (r *PluginReconciler) setCondition(
 }
 
 // statusEqual compares two Plugin statuses for equality.
-func statusEqual(a, b *mcv1alpha1.PluginStatus) bool {
+func statusEqual(a, b *mcv1beta1.PluginStatus) bool {
 	if a.RepositoryStatus != b.RepositoryStatus {
 		return false
 	}
@@ -351,7 +351,7 @@ func statusEqual(a, b *mcv1alpha1.PluginStatus) bool {
 	}
 
 	// Compare MatchedInstances order-independently, keyed by namespace/name
-	instanceMap := make(map[string]mcv1alpha1.MatchedInstance, len(a.MatchedInstances))
+	instanceMap := make(map[string]mcv1beta1.MatchedInstance, len(a.MatchedInstances))
 	for _, mi := range a.MatchedInstances {
 		instanceMap[mi.Namespace+"/"+mi.Name] = mi
 	}
@@ -403,7 +403,7 @@ func minecraftVersionsEqual(a, b []string) bool {
 // It ensures JARs are deleted from all matched servers before removing the finalizer.
 func (r *PluginReconciler) reconcileDelete(
 	ctx context.Context,
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 ) (ctrl.Result, error) {
 	slog.InfoContext(ctx, "Reconciling Plugin deletion", "plugin", plugin.Name)
 
@@ -458,7 +458,7 @@ func (r *PluginReconciler) reconcileDelete(
 // initDeletionProgressIfNeeded initializes DeletionProgress for all matched servers.
 func (r *PluginReconciler) initDeletionProgressIfNeeded(
 	ctx context.Context,
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 ) error {
 	if len(plugin.Status.DeletionProgress) > 0 {
 		return nil // Already initialized
@@ -471,10 +471,10 @@ func (r *PluginReconciler) initDeletionProgressIfNeeded(
 	}
 
 	now := metav1.Now()
-	plugin.Status.DeletionProgress = make([]mcv1alpha1.DeletionProgressEntry, len(matchedServers))
+	plugin.Status.DeletionProgress = make([]mcv1beta1.DeletionProgressEntry, len(matchedServers))
 
 	for i, server := range matchedServers {
-		plugin.Status.DeletionProgress[i] = mcv1alpha1.DeletionProgressEntry{
+		plugin.Status.DeletionProgress[i] = mcv1beta1.DeletionProgressEntry{
 			ServerName:          server.Name,
 			Namespace:           server.Namespace,
 			JARDeleted:          false,
@@ -498,7 +498,7 @@ const deletionTimeout = 10 * time.Minute
 
 // forceCompleteStaleDeletions force-marks stale deletion entries as completed
 // to prevent deadlocks when JAR deletion fails repeatedly.
-func (r *PluginReconciler) forceCompleteStaleDeletions(ctx context.Context, plugin *mcv1alpha1.Plugin) {
+func (r *PluginReconciler) forceCompleteStaleDeletions(ctx context.Context, plugin *mcv1beta1.Plugin) {
 	now := metav1.Now()
 
 	for i := range plugin.Status.DeletionProgress {
@@ -517,7 +517,7 @@ func (r *PluginReconciler) forceCompleteStaleDeletions(ctx context.Context, plug
 }
 
 // allJARsDeleted checks if all JARs have been deleted from servers.
-func (r *PluginReconciler) allJARsDeleted(plugin *mcv1alpha1.Plugin) bool {
+func (r *PluginReconciler) allJARsDeleted(plugin *mcv1beta1.Plugin) bool {
 	for _, progress := range plugin.Status.DeletionProgress {
 		if !progress.JARDeleted {
 			return false
@@ -530,13 +530,13 @@ func (r *PluginReconciler) allJARsDeleted(plugin *mcv1alpha1.Plugin) bool {
 // This prevents deadlock when a server is deleted before the plugin JAR cleanup completes.
 func (r *PluginReconciler) cleanupDeletedServers(
 	ctx context.Context,
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 ) error {
 	if len(plugin.Status.DeletionProgress) == 0 {
 		return nil
 	}
 
-	remaining := make([]mcv1alpha1.DeletionProgressEntry, 0, len(plugin.Status.DeletionProgress))
+	remaining := make([]mcv1beta1.DeletionProgressEntry, 0, len(plugin.Status.DeletionProgress))
 
 	for _, entry := range plugin.Status.DeletionProgress {
 		// Keep entries that are already marked as deleted
@@ -546,7 +546,7 @@ func (r *PluginReconciler) cleanupDeletedServers(
 		}
 
 		// Check if server still exists
-		var server mcv1alpha1.PaperMCServer
+		var server mcv1beta1.PaperMCServer
 		err := r.Get(ctx, client.ObjectKey{Name: entry.ServerName, Namespace: entry.Namespace}, &server)
 		if apierrors.IsNotFound(err) {
 			// Server deleted - remove entry entirely (no cleanup needed)
@@ -587,7 +587,7 @@ func (r *PluginReconciler) cleanupDeletedServers(
 // removeFinalizer removes the finalizer from the plugin after all cleanup is done.
 func (r *PluginReconciler) removeFinalizer(
 	ctx context.Context,
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 ) (ctrl.Result, error) {
 	slog.InfoContext(ctx, "All JARs deleted, removing finalizer", "plugin", plugin.Name)
 	controllerutil.RemoveFinalizer(plugin, PluginFinalizer)
@@ -603,7 +603,7 @@ func (r *PluginReconciler) removeFinalizer(
 // in all matched server statuses.
 func (r *PluginReconciler) markPluginForDeletionOnServers(
 	ctx context.Context,
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 ) error {
 	for _, progress := range plugin.Status.DeletionProgress {
 		if progress.JARDeleted {
@@ -611,7 +611,7 @@ func (r *PluginReconciler) markPluginForDeletionOnServers(
 		}
 
 		// Get the server
-		var server mcv1alpha1.PaperMCServer
+		var server mcv1beta1.PaperMCServer
 		serverKey := client.ObjectKey{Name: progress.ServerName, Namespace: progress.Namespace}
 		if err := r.Get(ctx, serverKey, &server); err != nil {
 			if apierrors.IsNotFound(err) {
@@ -670,7 +670,7 @@ func (r *PluginReconciler) markPluginForDeletionOnServers(
 // markJARAsDeleted updates the DeletionProgress to indicate JAR was deleted.
 func (r *PluginReconciler) markJARAsDeleted(
 	ctx context.Context,
-	plugin *mcv1alpha1.Plugin,
+	plugin *mcv1beta1.Plugin,
 	serverName,
 	namespace string,
 ) error {
@@ -697,9 +697,9 @@ func (r *PluginReconciler) markJARAsDeleted(
 // SetupWithManager sets up the controller with the Manager.
 func (r *PluginReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&mcv1alpha1.Plugin{}).
+		For(&mcv1beta1.Plugin{}).
 		Watches(
-			&mcv1alpha1.PaperMCServer{},
+			&mcv1beta1.PaperMCServer{},
 			handler.EnqueueRequestsFromMapFunc(r.findPluginsForServer),
 		).
 		Named("plugin").
@@ -709,13 +709,13 @@ func (r *PluginReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // findPluginsForServer maps PaperMCServer changes to Plugin reconciliation requests.
 // This ensures Plugins are reconciled when server labels change.
 func (r *PluginReconciler) findPluginsForServer(ctx context.Context, obj client.Object) []reconcile.Request {
-	server, ok := obj.(*mcv1alpha1.PaperMCServer)
+	server, ok := obj.(*mcv1beta1.PaperMCServer)
 	if !ok {
 		return nil
 	}
 
 	// Find all plugins in the same namespace that might match this server
-	var pluginList mcv1alpha1.PluginList
+	var pluginList mcv1beta1.PluginList
 	if err := r.List(ctx, &pluginList, client.InNamespace(server.Namespace)); err != nil {
 		slog.ErrorContext(ctx, "Failed to list plugins for server watch", "error", err)
 		return nil

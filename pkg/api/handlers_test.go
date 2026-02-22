@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/lexfrei/minecraft-operator/api/openapi/generated"
-	mcv1alpha1 "github.com/lexfrei/minecraft-operator/api/v1alpha1"
+	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,7 +35,7 @@ const testProject = "TestProject"
 
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
-	_ = mcv1alpha1.AddToScheme(scheme)
+	_ = mcv1beta1.AddToScheme(scheme)
 
 	return scheme
 }
@@ -101,12 +101,12 @@ func TestListNamespaces_IncludesDefault(t *testing.T) {
 }
 
 func TestListNamespaces_IncludesServerNamespaces(t *testing.T) {
-	server := &mcv1alpha1.PaperMCServer{
+	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-server",
 			Namespace: "minecraft",
 		},
-		Spec: mcv1alpha1.PaperMCServerSpec{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			Version:        "1.21.1",
 			UpdateStrategy: "latest",
 		},
@@ -145,12 +145,12 @@ func TestListServers_Empty(t *testing.T) {
 }
 
 func TestListServers_WithServer(t *testing.T) {
-	server := &mcv1alpha1.PaperMCServer{
+	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-server",
 			Namespace: "default",
 		},
-		Spec: mcv1alpha1.PaperMCServerSpec{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			Version:        "1.21.1",
 			UpdateStrategy: "latest",
 		},
@@ -176,22 +176,22 @@ func TestListServers_WithServer(t *testing.T) {
 }
 
 func TestListServers_FilterByNamespace(t *testing.T) {
-	server1 := &mcv1alpha1.PaperMCServer{
+	server1 := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "server1",
 			Namespace: "ns1",
 		},
-		Spec: mcv1alpha1.PaperMCServerSpec{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			Version:        "1.21.1",
 			UpdateStrategy: "latest",
 		},
 	}
-	server2 := &mcv1alpha1.PaperMCServer{
+	server2 := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "server2",
 			Namespace: "ns2",
 		},
-		Spec: mcv1alpha1.PaperMCServerSpec{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			Version:        "1.21.1",
 			UpdateStrategy: "latest",
 		},
@@ -253,12 +253,12 @@ func TestCreateServer_Success(t *testing.T) {
 }
 
 func TestCreateServer_Duplicate(t *testing.T) {
-	server := &mcv1alpha1.PaperMCServer{
+	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "existing-server",
 			Namespace: "default",
 		},
-		Spec: mcv1alpha1.PaperMCServerSpec{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			Version:        "1.21.1",
 			UpdateStrategy: "latest",
 		},
@@ -289,12 +289,12 @@ func TestCreateServer_Duplicate(t *testing.T) {
 // --- GetServer tests ---
 
 func TestGetServer_Found(t *testing.T) {
-	server := &mcv1alpha1.PaperMCServer{
+	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-server",
 			Namespace: "default",
 		},
-		Spec: mcv1alpha1.PaperMCServerSpec{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			Version:        "1.21.1",
 			UpdateStrategy: "latest",
 		},
@@ -337,12 +337,12 @@ func TestGetServer_NotFound(t *testing.T) {
 // --- DeleteServer tests ---
 
 func TestDeleteServer_Success(t *testing.T) {
-	server := &mcv1alpha1.PaperMCServer{
+	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "delete-me",
 			Namespace: "default",
 		},
-		Spec: mcv1alpha1.PaperMCServerSpec{
+		Spec: mcv1beta1.PaperMCServerSpec{
 			Version:        "1.21.1",
 			UpdateStrategy: "latest",
 		},
@@ -463,13 +463,13 @@ func TestListPlugins_Empty(t *testing.T) {
 }
 
 func TestListPlugins_WithPlugins(t *testing.T) {
-	plugin := &mcv1alpha1.Plugin{
+	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-plugin",
 			Namespace: "default",
 		},
-		Spec: mcv1alpha1.PluginSpec{
-			Source: mcv1alpha1.PluginSource{
+		Spec: mcv1beta1.PluginSpec{
+			Source: mcv1beta1.PluginSource{
 				Type:    "hangar",
 				Project: testProject,
 			},
@@ -540,13 +540,13 @@ func TestCreatePlugin_Success(t *testing.T) {
 }
 
 func TestCreatePlugin_Duplicate(t *testing.T) {
-	plugin := &mcv1alpha1.Plugin{
+	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "existing-plugin",
 			Namespace: "default",
 		},
-		Spec: mcv1alpha1.PluginSpec{
-			Source: mcv1alpha1.PluginSource{
+		Spec: mcv1beta1.PluginSpec{
+			Source: mcv1beta1.PluginSource{
 				Type:    "hangar",
 				Project: "ExistingProject",
 			},
@@ -589,13 +589,13 @@ func TestCreatePlugin_Duplicate(t *testing.T) {
 // --- GetPlugin tests ---
 
 func TestGetPlugin_Found(t *testing.T) {
-	plugin := &mcv1alpha1.Plugin{
+	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-plugin",
 			Namespace: "default",
 		},
-		Spec: mcv1alpha1.PluginSpec{
-			Source: mcv1alpha1.PluginSource{
+		Spec: mcv1beta1.PluginSpec{
+			Source: mcv1beta1.PluginSource{
 				Type:    "hangar",
 				Project: testProject,
 			},
@@ -678,13 +678,13 @@ func TestUpdatePlugin_NotFound(t *testing.T) {
 // --- DeletePlugin tests ---
 
 func TestDeletePlugin_Success(t *testing.T) {
-	plugin := &mcv1alpha1.Plugin{
+	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "delete-me",
 			Namespace: "default",
 		},
-		Spec: mcv1alpha1.PluginSpec{
-			Source: mcv1alpha1.PluginSource{
+		Spec: mcv1beta1.PluginSpec{
+			Source: mcv1beta1.PluginSource{
 				Type:    "hangar",
 				Project: testProject,
 			},
@@ -985,13 +985,13 @@ func TestCreatePlugin_OverflowPort_ShouldReturn400(t *testing.T) {
 
 func TestUpdatePlugin_NegativePort_ShouldReturn400(t *testing.T) {
 	// BUG: Same port validation gap in UpdatePlugin handler.
-	plugin := &mcv1alpha1.Plugin{
+	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "port-test-plugin",
 			Namespace: "default",
 		},
-		Spec: mcv1alpha1.PluginSpec{
-			Source: mcv1alpha1.PluginSource{
+		Spec: mcv1beta1.PluginSpec{
+			Source: mcv1beta1.PluginSource{
 				Type:    "hangar",
 				Project: testProject,
 			},
