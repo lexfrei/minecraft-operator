@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Prometheus metrics for reconciliation duration, plugin API latency, solver timing,
+  and update success/failure via `/metrics` endpoint
+- ServiceMonitor Helm template for Prometheus Operator auto-discovery
 - Embedded CRD management via `--manage-crds` flag — operator applies CRDs at startup
   using server-side apply, eliminating the need for a separate CRD Helm chart install
 - Plugin deletion lifecycle with finalizer and JAR cleanup tracking

@@ -138,6 +138,31 @@ kubectl logs deployment/minecraft-operator \
 
 ## Monitoring
 
+### Prometheus Metrics
+
+The operator exposes custom metrics at `/metrics` (port 8080):
+
+| Metric | Type | Description |
+| --- | --- | --- |
+| `minecraft_operator_reconcile_total` | counter | Reconciliations by controller |
+| `minecraft_operator_reconcile_errors_total` | counter | Failed reconciliations |
+| `minecraft_operator_reconcile_duration_seconds` | histogram | Reconciliation latency |
+| `minecraft_operator_plugin_api_requests_total` | counter | Plugin API requests by source |
+| `minecraft_operator_plugin_api_errors_total` | counter | Failed plugin API requests |
+| `minecraft_operator_plugin_api_duration_seconds` | histogram | Plugin API latency |
+| `minecraft_operator_solver_runs_total` | counter | Solver invocations by type |
+| `minecraft_operator_solver_errors_total` | counter | Failed solver invocations |
+| `minecraft_operator_solver_duration_seconds` | histogram | Solver latency |
+| `minecraft_operator_updates_total` | counter | Update attempts (success/failure) |
+
+Access metrics locally:
+
+```bash
+kubectl port-forward svc/minecraft-operator-controller-manager-metrics-service \
+  8080:8080 --namespace minecraft-operator-system
+curl --insecure https://localhost:8080/metrics
+```
+
 ### Resource Status
 
 Check conditions on resources:

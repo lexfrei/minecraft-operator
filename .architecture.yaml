@@ -1227,12 +1227,22 @@ observability:
     exporter: "Prometheus"
     endpoint: "/metrics"
     port: 8080
-    key_metrics:
-      - "minecraft_operator_plugin_reconcile_duration_seconds"
-      - "minecraft_operator_plugin_matched_servers_total"
-      - "minecraft_operator_server_reconcile_duration_seconds"
-      - "minecraft_operator_server_update_success_total"
-      - "minecraft_operator_server_update_failure_total"
+    implementation: "pkg/metrics/ — Recorder interface with PrometheusRecorder"
+    registration: "sigs.k8s.io/controller-runtime/pkg/metrics.Registry"
+    helm_servicemonitor: "metrics.serviceMonitor.enabled (default: false)"
+    implemented_metrics:
+      - "minecraft_operator_reconcile_total{controller}"
+      - "minecraft_operator_reconcile_errors_total{controller}"
+      - "minecraft_operator_reconcile_duration_seconds{controller}"
+      - "minecraft_operator_plugin_api_requests_total{source}"
+      - "minecraft_operator_plugin_api_errors_total{source}"
+      - "minecraft_operator_plugin_api_duration_seconds{source}"
+      - "minecraft_operator_solver_runs_total{type}"
+      - "minecraft_operator_solver_errors_total{type}"
+      - "minecraft_operator_solver_duration_seconds{type}"
+      - "minecraft_operator_updates_total{result}"
+    future_metrics:
+      - "minecraft_operator_pending_updates (gauge)"
       - "minecraft_operator_webui_requests_total"
       - "minecraft_operator_webui_sse_connections_total"
 

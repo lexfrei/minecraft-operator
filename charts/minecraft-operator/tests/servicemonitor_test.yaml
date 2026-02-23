@@ -1,0 +1,107 @@
+# Contract: "ServiceMonitor is conditionally created for Prometheus Operator"
+suite: servicemonitor
+templates:
+  - templates/servicemonitor.yaml
+tests:
+  - it: should not render ServiceMonitor when serviceMonitor disabled
+    set:
+      metrics.enabled: true
+      metrics.serviceMonitor.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render ServiceMonitor when metrics disabled
+    set:
+      metrics.enabled: false
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render ServiceMonitor when enabled
+    set:
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - isKind:
+          of: ServiceMonitor
+      - equal:
+          path: spec.endpoints[0].port
+          value: https
+      - equal:
+          path: spec.endpoints[0].scheme
+          value: https
+
+  - it: should include custom labels
+    set:
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.labels:
+        release: prometheus
+    asserts:
+      - equal:
+          path: metadata.labels.release
+          value: prometheus
+
+  - it: should set custom interval when specified
+    set:
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.interval: "30s"
+    asserts:
+      - equal:
+          path: spec.endpoints[0].interval
+          value: "30s"
+
+  - it: should set custom scrapeTimeout when specified
+    set:
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.scrapeTimeout: "10s"
+    asserts:
+      - equal:
+          path: spec.endpoints[0].scrapeTimeout
+          value: "10s"
+
+  - it: should not set interval when empty
+    set:
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.interval: ""
+    asserts:
+      - notExists:
+          path: spec.endpoints[0].interval
+
+  - it: should match controller-manager selector labels
+    set:
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels.control-plane
+          value: controller-manager
+
+  - it: should use release namespace
+    set:
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - contains:
+          path: spec.namespaceSelector.matchNames
+          content: NAMESPACE
+
+  - it: should not include auth config by default
+    set:
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - notExists:
+          path: spec.endpoints[0].authorization
+      - notExists:
+          path: spec.endpoints[0].bearerTokenFile
+
+  - it: should include authorization when endpointAuth is configured
+    set:
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.endpointAuth:
+        authorization:
+          credentials:
+            name: prometheus-token
+            key: token
+    asserts:
+      - equal:
+          path: spec.endpoints[0].authorization.credentials.name
+          value: prometheus-token

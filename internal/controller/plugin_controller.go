@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
+	"github.com/lexfrei/minecraft-operator/pkg/metrics"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/selector"
 	"github.com/lexfrei/minecraft-operator/pkg/solver"
@@ -59,6 +60,7 @@ type PluginReconciler struct {
 	Scheme       *runtime.Scheme
 	PluginClient plugins.PluginClient
 	Solver       solver.Solver
+	Metrics      metrics.Recorder
 }
 
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=plugins,verbs=get;list;watch;create;update;patch;delete
@@ -68,11 +70,22 @@ type PluginReconciler struct {
 //nolint:revive // kubebuilder markers require no space after //
 
 // Reconcile implements the reconciliation loop for Plugin resources.
-func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+	start := time.Now()
+
+	var skipMetrics bool
+
+	defer func() {
+		if r.Metrics != nil && !skipMetrics {
+			r.Metrics.RecordReconcile("plugin", retErr, time.Since(start))
+		}
+	}()
+
 	// Fetch the Plugin resource
 	var plugin mcv1beta1.Plugin
 	if err := r.Get(ctx, req.NamespacedName, &plugin); err != nil {
 		if apierrors.IsNotFound(err) {
+			skipMetrics = true
 			slog.InfoContext(ctx, "Plugin resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}
@@ -235,7 +248,14 @@ func (r *PluginReconciler) fetchPluginMetadata(
 		return nil, errors.Newf("unsupported source type: %s", plugin.Spec.Source.Type)
 	}
 
+	apiStart := time.Now()
+
 	versions, err := r.PluginClient.GetVersions(ctx, plugin.Spec.Source.Project)
+
+	if r.Metrics != nil {
+		r.Metrics.RecordPluginAPICall(plugin.Spec.Source.Type, err, time.Since(apiStart))
+	}
+
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch versions from repository")
 	}
