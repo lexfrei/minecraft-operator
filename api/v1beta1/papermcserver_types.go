@@ -98,7 +98,7 @@ type BackupSpec struct {
 	// BeforeUpdate creates a backup before any server update is applied.
 	// +optional
 	// +kubebuilder:default=true
-	BeforeUpdate bool `json:"beforeUpdate,omitempty"`
+	BeforeUpdate *bool `json:"beforeUpdate,omitempty"`
 
 	// VolumeSnapshotClassName is the VolumeSnapshotClass to use for creating snapshots.
 	// If empty, the cluster default VolumeSnapshotClass is used.

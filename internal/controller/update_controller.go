@@ -722,7 +722,8 @@ func (r *UpdateReconciler) backupBeforeUpdate(
 		return nil
 	}
 
-	if server.Spec.Backup == nil || !server.Spec.Backup.Enabled || !server.Spec.Backup.BeforeUpdate {
+	if server.Spec.Backup == nil || !server.Spec.Backup.Enabled ||
+		(server.Spec.Backup.BeforeUpdate != nil && !*server.Spec.Backup.BeforeUpdate) {
 		return nil
 	}
 

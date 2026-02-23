@@ -466,13 +466,15 @@ func TestBackupReconciler_ServerNotFound(t *testing.T) {
 	assert.Equal(t, ctrl.Result{}, result)
 }
 
+func boolPtr(b bool) *bool { return &b }
+
 func TestUpdateReconciler_BackupBeforeUpdate(t *testing.T) {
 	scheme := newBackupTestScheme()
 
 	now := time.Now()
 	server := newTestServer(&mcv1beta1.BackupSpec{
 		Enabled:      true,
-		BeforeUpdate: true,
+		BeforeUpdate: boolPtr(true),
 		Retention: mcv1beta1.BackupRetention{
 			MaxCount: 10,
 		},
@@ -529,7 +531,7 @@ func TestUpdateReconciler_BackupBeforeUpdateDisabled(t *testing.T) {
 
 	server := newTestServer(&mcv1beta1.BackupSpec{
 		Enabled:      true,
-		BeforeUpdate: false,
+		BeforeUpdate: boolPtr(false),
 	})
 
 	fakeClient := fake.NewClientBuilder().
@@ -568,7 +570,7 @@ func TestUpdateReconciler_BackupBeforeUpdateNilBackupReconciler(t *testing.T) {
 
 	server := newTestServer(&mcv1beta1.BackupSpec{
 		Enabled:      true,
-		BeforeUpdate: true,
+		BeforeUpdate: boolPtr(true),
 	})
 
 	fakeClient := fake.NewClientBuilder().
