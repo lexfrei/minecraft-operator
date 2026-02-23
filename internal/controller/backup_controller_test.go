@@ -218,6 +218,11 @@ func TestBackupReconciler_ManualBackupTrigger(t *testing.T) { //nolint:funlen
 	assert.Len(t, snapshots, 1)
 	assert.Equal(t, "manual", snapshots[0].Labels[backup.LabelTrigger])
 
+	// Verify owner reference for cascade deletion
+	require.Len(t, snapshots[0].OwnerReferences, 1, "VolumeSnapshot should have owner reference")
+	assert.Equal(t, "PaperMCServer", snapshots[0].OwnerReferences[0].Kind)
+	assert.Equal(t, "my-server", snapshots[0].OwnerReferences[0].Name)
+
 	var updatedServer mcv1beta1.PaperMCServer
 	err = fakeClient.Get(context.Background(), types.NamespacedName{
 		Name: "my-server", Namespace: "minecraft",

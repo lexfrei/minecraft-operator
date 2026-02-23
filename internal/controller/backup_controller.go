@@ -265,6 +265,9 @@ func (r *BackupReconciler) performBackup(
 		ServerName:              server.Name,
 		VolumeSnapshotClassName: snapshotClass,
 		Trigger:                 trigger,
+		OwnerReferences: []metav1.OwnerReference{
+			*metav1.NewControllerRef(server, mcv1beta1.GroupVersion.WithKind("PaperMCServer")),
+		},
 	})
 
 	// Post-snapshot hook: save-on (always run, even if snapshot creation failed)

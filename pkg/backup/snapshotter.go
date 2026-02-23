@@ -31,6 +31,9 @@ type SnapshotRequest struct {
 	ServerName              string
 	VolumeSnapshotClassName string
 	Trigger                 string
+
+	// OwnerReferences to set on the VolumeSnapshot for cascade deletion.
+	OwnerReferences []metav1.OwnerReference
 }
 
 // Snapshotter creates and manages VolumeSnapshots.
@@ -65,6 +68,7 @@ func (s *VolumeSnapshotSnapshotter) CreateSnapshot(ctx context.Context, req Snap
 				LabelTrigger:    req.Trigger,
 				LabelManagedBy:  "minecraft-operator",
 			},
+			OwnerReferences: req.OwnerReferences,
 		},
 		Spec: volumesnapshotv1.VolumeSnapshotSpec{
 			Source: volumesnapshotv1.VolumeSnapshotSource{
