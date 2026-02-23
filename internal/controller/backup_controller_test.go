@@ -294,6 +294,55 @@ func TestBackupReconciler_RetentionCleanup(t *testing.T) { //nolint:funlen
 	}
 }
 
+func TestBackupReconciler_ConnectFailurePersistsStatus(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
+	})
+	server.Annotations = map[string]string{
+		AnnotationBackupNow: fmt.Sprintf("%d", now.Unix()),
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod("my-server", "minecraft"), newRCONSecret("my-server", "minecraft")).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	mockRCON.ConnectError = fmt.Errorf("connection refused")
+
+	r := &BackupReconciler{
+		Client: fakeClient, Scheme: scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.Error(t, err)
+
+	var updatedServer mcv1beta1.PaperMCServer
+	getErr := fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &updatedServer)
+	require.NoError(t, getErr)
+
+	require.NotNil(t, updatedServer.Status.Backup, "backup status should be set on Connect failure")
+	require.NotNil(t, updatedServer.Status.Backup.LastBackup)
+	assert.False(t, updatedServer.Status.Backup.LastBackup.Successful)
+	assert.Equal(t, "manual", updatedServer.Status.Backup.LastBackup.Trigger)
+}
+
 func TestBackupReconciler_InvalidCronSchedule(t *testing.T) {
 	scheme := newBackupTestScheme()
 	server := newTestServer(&mcv1beta1.BackupSpec{

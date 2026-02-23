@@ -202,11 +202,23 @@ func (r *BackupReconciler) performBackup(
 
 		// Connect to RCON
 		if err := rconClient.Connect(ctx); err != nil {
+			r.persistBackupStatus(ctx, server, &mcv1beta1.BackupRecord{
+				StartedAt:  startedAt,
+				Successful: false,
+				Trigger:    trigger,
+			}, 0)
+
 			return errors.Wrap(err, "failed to connect to RCON for backup")
 		}
 
 		// Pre-snapshot hook: save-all + save-off
 		if err := backup.PreSnapshotHook(ctx, rconClient); err != nil {
+			r.persistBackupStatus(ctx, server, &mcv1beta1.BackupRecord{
+				StartedAt:  startedAt,
+				Successful: false,
+				Trigger:    trigger,
+			}, 0)
+
 			return errors.Wrap(err, "pre-snapshot hook failed")
 		}
 	}
