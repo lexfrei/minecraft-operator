@@ -55,7 +55,8 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.4.0
+          # renovate: datasource=github-releases depName=golangci/golangci-lint
+          version: v2.10.1
 
       - name: Run markdownlint
         uses: DavidAnson/markdownlint-cli2-action@v22
@@ -420,3 +421,9 @@ jobs:
           echo "| Container Build | ${{ needs.merge-manifests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Chart Lint | ${{ needs.lint-chart.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Chart Build | ${{ needs.build-chart.result }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if any check failed
+        if: >-
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled')
+        run: exit 1
