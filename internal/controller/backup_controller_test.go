@@ -1353,6 +1353,87 @@ func TestBackupReconciler_FailurePreservesExistingBackupCount(t *testing.T) {
 		"existing backup count should be preserved on failure, not reset to 0")
 }
 
+func TestSetBackupCronCondition_LastTransitionTimeStable(t *testing.T) {
+	server := newTestServer(&mcv1beta1.BackupSpec{Enabled: true})
+
+	// Set condition the first time
+	setBackupCronCondition(server, metav1.ConditionTrue, reasonBackupCronValid, "test")
+	cond1 := meta.FindStatusCondition(server.Status.Conditions, conditionTypeBackupCronValid)
+	require.NotNil(t, cond1)
+	firstTime := cond1.LastTransitionTime
+
+	// Small delay to ensure time would differ if set explicitly
+	time.Sleep(10 * time.Millisecond)
+
+	// Set condition again with SAME status — timestamp should NOT change
+	setBackupCronCondition(server, metav1.ConditionTrue, reasonBackupCronValid, "test")
+	cond2 := meta.FindStatusCondition(server.Status.Conditions, conditionTypeBackupCronValid)
+	require.NotNil(t, cond2)
+
+	assert.Equal(t, firstTime, cond2.LastTransitionTime,
+		"LastTransitionTime should not change when status is unchanged")
+}
+
+func TestBackupReconciler_BackupReadyRecoveryRefreshesServer(t *testing.T) {
+	scheme := newBackupTestScheme()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:  true,
+		Schedule: "0 */6 * * *",
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	// First: set BackupReady=False using the CRD-missing snapshotter
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: &crdMissingSnapshotter{},
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// Verify BackupReady=False is set
+	var s1 mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &s1))
+	cond := meta.FindStatusCondition(s1.Status.Conditions, "BackupReady")
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+
+	// Simulate another controller updating status (changes ResourceVersion)
+	s1.Status.CurrentVersion = "1.21.4"
+	require.NoError(t, fakeClient.Status().Update(context.Background(), &s1))
+
+	// Now recover with a working snapshotter — must re-fetch to avoid conflict
+	r.Snapshotter = backup.NewSnapshotter(fakeClient)
+
+	_, err = r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// Verify BackupReady=True and status update didn't conflict
+	var s2 mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &s2))
+	cond = meta.FindStatusCondition(s2.Status.Conditions, "BackupReady")
+	require.NotNil(t, cond, "BackupReady should exist after recovery")
+	assert.Equal(t, metav1.ConditionTrue, cond.Status, "BackupReady should be True after CRD becomes available")
+	assert.Equal(t, "1.21.4", s2.Status.CurrentVersion,
+		"other status fields should be preserved")
+}
+
 func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {
 	reconciler := &BackupReconciler{
 		cronEntries: map[string]cronEntryInfo{

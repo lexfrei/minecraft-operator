@@ -36,7 +36,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 const (
@@ -144,19 +146,29 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		return ctrl.Result{RequeueAfter: snapshotAPIRetryInterval}, nil
 	}
 
-	// Clear stale BackupReady=False condition after CRD becomes available
+	// Clear stale BackupReady=False condition after CRD becomes available.
+	// Re-fetch the server to avoid resource version conflicts with concurrent controllers.
 	if cond := meta.FindStatusCondition(server.Status.Conditions, conditionTypeBackupReady); cond != nil &&
 		cond.Status == metav1.ConditionFalse {
-		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
-			Type:               conditionTypeBackupReady,
-			Status:             metav1.ConditionTrue,
-			Reason:             "VolumeSnapshotAPIAvailable",
-			ObservedGeneration: server.Generation,
-			Message:            "VolumeSnapshot API is available in the cluster.",
-		})
+		var latestServer mcv1beta1.PaperMCServer
+		if getErr := r.Get(ctx, req.NamespacedName, &latestServer); getErr != nil {
+			slog.ErrorContext(ctx, "Failed to re-fetch server for BackupReady recovery", "error", getErr)
+		} else {
+			meta.SetStatusCondition(&latestServer.Status.Conditions, metav1.Condition{
+				Type:               conditionTypeBackupReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "VolumeSnapshotAPIAvailable",
+				ObservedGeneration: latestServer.Generation,
+				Message:            "VolumeSnapshot API is available in the cluster.",
+			})
 
-		if updateErr := r.Status().Update(ctx, &server); updateErr != nil {
-			slog.ErrorContext(ctx, "Failed to update BackupReady condition", "error", updateErr)
+			if updateErr := r.Status().Update(ctx, &latestServer); updateErr != nil {
+				slog.ErrorContext(ctx, "Failed to update BackupReady condition", "error", updateErr)
+			}
+
+			// Copy updated status back to in-memory server
+			server.Status = latestServer.Status
+			server.ResourceVersion = latestServer.ResourceVersion
 		}
 	}
 
@@ -591,11 +603,12 @@ func (r *BackupReconciler) manageBackupCronSchedule(
 
 // setBackupCronCondition sets the BackupCronValid condition on the server.
 func setBackupCronCondition(server *mcv1beta1.PaperMCServer, status metav1.ConditionStatus, reason, message string) {
+	// Do NOT set LastTransitionTime explicitly — meta.SetStatusCondition manages it
+	// and only updates the timestamp when the status actually changes.
 	meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
 		Type:               conditionTypeBackupCronValid,
 		Status:             status,
 		ObservedGeneration: server.Generation,
-		LastTransitionTime: metav1.Now(),
 		Reason:             reason,
 		Message:            message,
 	})
@@ -738,7 +751,14 @@ func (r *BackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&mcv1beta1.PaperMCServer{}).
+		// Only reconcile on spec changes (generation) or annotation changes (backup-now).
+		// Status-only updates from other controllers are filtered out to avoid churn.
+		For(&mcv1beta1.PaperMCServer{}, builder.WithPredicates(
+			predicate.Or(
+				predicate.GenerationChangedPredicate{},
+				predicate.AnnotationChangedPredicate{},
+			),
+		)).
 		Named("backup").
 		Complete(r)
 }
