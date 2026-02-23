@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
+	"github.com/lexfrei/minecraft-operator/pkg/metrics"
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/selector"
@@ -90,6 +91,7 @@ type PaperMCServerReconciler struct {
 	PaperClient    PaperAPI
 	Solver         solver.Solver
 	RegistryClient RegistryAPI
+	Metrics        metrics.Recorder
 }
 
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers,verbs=get;list;watch;create;update;patch;delete
@@ -105,7 +107,15 @@ type PaperMCServerReconciler struct {
 //nolint:revive // kubebuilder markers require no space after //
 
 // Reconcile implements the reconciliation loop for PaperMCServer resources.
-func (r *PaperMCServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *PaperMCServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+	start := time.Now()
+
+	defer func() {
+		if r.Metrics != nil {
+			r.Metrics.RecordReconcile("papermcserver", retErr, time.Since(start))
+		}
+	}()
+
 	// Fetch the PaperMCServer resource
 	var server mcv1beta1.PaperMCServer
 	if err := r.Get(ctx, req.NamespacedName, &server); err != nil {
@@ -1185,7 +1195,14 @@ func (r *PaperMCServerReconciler) resolvePluginVersionForServer(
 	// Create a single-server slice for solver
 	serverList := []mcv1beta1.PaperMCServer{*server}
 
+	solverStart := time.Now()
+
 	resolvedVersion, err := r.Solver.FindBestPluginVersion(ctx, plugin, serverList, filteredVersions)
+
+	if r.Metrics != nil {
+		r.Metrics.RecordSolverRun("plugin_version", err, time.Since(solverStart))
+	}
+
 	if err != nil {
 		return "", errors.Wrap(err, "solver failed to find compatible version")
 	}
@@ -1315,7 +1332,14 @@ func (r *PaperMCServerReconciler) findVersionUpdate(
 		reasonSolverStarted, "Resolving optimal Paper version")
 
 	// Run solver
+	solverStart := time.Now()
+
 	bestVersion, err := r.Solver.FindBestPaperVersion(ctx, server, matchedPlugins, paperVersions)
+
+	if r.Metrics != nil {
+		r.Metrics.RecordSolverRun("paper_version", err, time.Since(solverStart))
+	}
+
 	if err != nil {
 		// Mark solver as failed
 		r.setCondition(server, conditionTypeSolverRunning, metav1.ConditionFalse,
@@ -1427,8 +1451,15 @@ func (r *PaperMCServerReconciler) buildPluginVersionPairs(
 		}
 
 		// Use solver to find best compatible version
+		pluginSolverStart := time.Now()
+
 		resolvedVersion, err := r.Solver.FindBestPluginVersion(
 			ctx, plugin, []mcv1beta1.PaperMCServer{tempServer}, allVersions)
+
+		if r.Metrics != nil {
+			r.Metrics.RecordSolverRun("plugin_version", err, time.Since(pluginSolverStart))
+		}
+
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to resolve plugin version for candidate Paper",
 				"plugin", plugin.Name,
