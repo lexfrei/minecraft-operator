@@ -23,8 +23,8 @@ func TestNoopRecorderDoesNotPanic(t *testing.T) {
 	r.RecordPluginAPICall("hangar", errors.New("test"), time.Millisecond)
 	r.RecordSolverRun("plugin_version", nil, time.Millisecond)
 	r.RecordSolverRun("paper_version", errors.New("test"), time.Millisecond)
-	r.RecordUpdate("test-server", "default", true)
-	r.RecordUpdate("test-server", "default", false)
+	r.RecordUpdate(true)
+	r.RecordUpdate(false)
 }
 
 func TestPrometheusRecorderImplementsRecorder(t *testing.T) {
@@ -42,7 +42,8 @@ func TestPrometheusRecorderRegistersAllMetrics(t *testing.T) {
 	r.RecordPluginAPICall("test", nil, time.Millisecond)
 	r.RecordPluginAPICall("test", errors.New("err"), time.Millisecond)
 	r.RecordSolverRun("test", nil, time.Millisecond)
-	r.RecordUpdate("s", "ns", true)
+	r.RecordSolverRun("test", errors.New("err"), time.Millisecond)
+	r.RecordUpdate(true)
 
 	families, err := reg.Gather()
 	if err != nil {
@@ -57,6 +58,7 @@ func TestPrometheusRecorderRegistersAllMetrics(t *testing.T) {
 		"minecraft_operator_plugin_api_errors_total":     false,
 		"minecraft_operator_plugin_api_duration_seconds": false,
 		"minecraft_operator_solver_runs_total":           false,
+		"minecraft_operator_solver_errors_total":         false,
 		"minecraft_operator_solver_duration_seconds":     false,
 		"minecraft_operator_updates_total":               false,
 	}
@@ -177,15 +179,24 @@ func TestRecordSolverRun(t *testing.T) {
 	if paperVal != 1 {
 		t.Errorf("expected solver_runs_total(paper_version)=1, got %v", paperVal)
 	}
+
+	paperErrVal := getCounterValue(t, reg,
+		"minecraft_operator_solver_errors_total", paperLabels)
+	if paperErrVal != 1 {
+		t.Errorf(
+			"expected solver_errors_total(paper_version)=1, got %v",
+			paperErrVal,
+		)
+	}
 }
 
 func TestRecordUpdate(t *testing.T) {
 	reg := prometheus.NewPedanticRegistry()
 	r := metrics.NewPrometheusRecorder(reg)
 
-	r.RecordUpdate("server1", "ns1", true)
-	r.RecordUpdate("server2", "ns1", false)
-	r.RecordUpdate("server1", "ns1", true)
+	r.RecordUpdate(true)
+	r.RecordUpdate(false)
+	r.RecordUpdate(true)
 
 	successVal := getCounterValue(t, reg,
 		"minecraft_operator_updates_total",

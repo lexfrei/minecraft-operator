@@ -1065,6 +1065,7 @@ minecraft_operator_plugin_api_duration_seconds{source="hangar"}
 
 ```text
 minecraft_operator_solver_runs_total{type="plugin_version|paper_version"}
+minecraft_operator_solver_errors_total{type="plugin_version|paper_version"}
 minecraft_operator_solver_duration_seconds{type="plugin_version|paper_version"}
 ```
 

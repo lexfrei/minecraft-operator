@@ -19,7 +19,7 @@ type Recorder interface {
 	RecordSolverRun(solverType string, err error, duration time.Duration)
 
 	// RecordUpdate records a server update attempt.
-	RecordUpdate(serverName, namespace string, success bool)
+	RecordUpdate(success bool)
 }
 
 // PrometheusRecorder implements Recorder using Prometheus metrics.
@@ -32,8 +32,9 @@ type PrometheusRecorder struct {
 	pluginAPIErrorsTotal   *prometheus.CounterVec
 	pluginAPIDuration      *prometheus.HistogramVec
 
-	solverRunsTotal *prometheus.CounterVec
-	solverDuration  *prometheus.HistogramVec
+	solverRunsTotal   *prometheus.CounterVec
+	solverErrorsTotal *prometheus.CounterVec
+	solverDuration    *prometheus.HistogramVec
 
 	updatesTotal *prometheus.CounterVec
 }
@@ -72,6 +73,10 @@ func NewPrometheusRecorder(reg prometheus.Registerer) *PrometheusRecorder {
 			Name: "minecraft_operator_solver_runs_total",
 			Help: "Total number of constraint solver invocations.",
 		}, []string{"type"}),
+		solverErrorsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "minecraft_operator_solver_errors_total",
+			Help: "Total number of failed constraint solver invocations.",
+		}, []string{"type"}),
 		solverDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name: "minecraft_operator_solver_duration_seconds",
 			Help: "Duration of constraint solver runs in seconds.",
@@ -91,6 +96,7 @@ func NewPrometheusRecorder(reg prometheus.Registerer) *PrometheusRecorder {
 		r.pluginAPIErrorsTotal,
 		r.pluginAPIDuration,
 		r.solverRunsTotal,
+		r.solverErrorsTotal,
 		r.solverDuration,
 		r.updatesTotal,
 	)
@@ -119,9 +125,13 @@ func (r *PrometheusRecorder) RecordPluginAPICall(source string, err error, durat
 func (r *PrometheusRecorder) RecordSolverRun(solverType string, err error, duration time.Duration) {
 	r.solverRunsTotal.WithLabelValues(solverType).Inc()
 	r.solverDuration.WithLabelValues(solverType).Observe(duration.Seconds())
+
+	if err != nil {
+		r.solverErrorsTotal.WithLabelValues(solverType).Inc()
+	}
 }
 
-func (r *PrometheusRecorder) RecordUpdate(_, _ string, success bool) {
+func (r *PrometheusRecorder) RecordUpdate(success bool) {
 	result := "success"
 	if !success {
 		result = "failure"

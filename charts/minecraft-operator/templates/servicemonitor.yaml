@@ -21,7 +21,8 @@ spec:
     {{- if .Values.metrics.serviceMonitor.scrapeTimeout }}
     scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
     {{- end }}
-    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    authorization:
+      type: Bearer
   namespaceSelector:
     matchNames:
     - {{ .Release.Namespace }}

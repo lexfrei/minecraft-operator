@@ -206,7 +206,7 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	successful := updateErr == nil
 
 	if r.Metrics != nil {
-		r.Metrics.RecordUpdate(server.Name, server.Namespace, successful)
+		r.Metrics.RecordUpdate(successful)
 	}
 
 	r.updateServerStatus(&server, successful)

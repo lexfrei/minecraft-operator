@@ -11,4 +11,4 @@ func (n *NoopRecorder) RecordPluginAPICall(_ string, _ error, _ time.Duration) {
 
 func (n *NoopRecorder) RecordSolverRun(_ string, _ error, _ time.Duration) {}
 
-func (n *NoopRecorder) RecordUpdate(_, _ string, _ bool) {}
+func (n *NoopRecorder) RecordUpdate(_ bool) {}

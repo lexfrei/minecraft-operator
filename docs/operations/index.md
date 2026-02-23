@@ -151,6 +151,7 @@ The operator exposes custom metrics at `/metrics` (port 8080):
 | `minecraft_operator_plugin_api_errors_total` | counter | Failed plugin API requests |
 | `minecraft_operator_plugin_api_duration_seconds` | histogram | Plugin API latency |
 | `minecraft_operator_solver_runs_total` | counter | Solver invocations by type |
+| `minecraft_operator_solver_errors_total` | counter | Failed solver invocations |
 | `minecraft_operator_solver_duration_seconds` | histogram | Solver latency |
 | `minecraft_operator_updates_total` | counter | Update attempts (success/failure) |
 

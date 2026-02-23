@@ -1238,6 +1238,7 @@ observability:
       - "minecraft_operator_plugin_api_errors_total{source}"
       - "minecraft_operator_plugin_api_duration_seconds{source}"
       - "minecraft_operator_solver_runs_total{type}"
+      - "minecraft_operator_solver_errors_total{type}"
       - "minecraft_operator_solver_duration_seconds{type}"
       - "minecraft_operator_updates_total{result}"
     future_metrics:
