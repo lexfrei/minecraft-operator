@@ -64,6 +64,15 @@ leaderElection:
 metrics:
   enabled: true
   port: 8080
+  serviceMonitor:
+    # Enable ServiceMonitor for Prometheus Operator auto-discovery
+    enabled: false
+    # Scrape interval (e.g., "30s"). Uses Prometheus default if empty
+    interval: ""
+    # Scrape timeout (e.g., "10s"). Uses Prometheus default if empty
+    scrapeTimeout: ""
+    # Additional labels for ServiceMonitor (e.g., for Prometheus selector matching)
+    labels: {}
 
 # Health probe configuration
 health:
