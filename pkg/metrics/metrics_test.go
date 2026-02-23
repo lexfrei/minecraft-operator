@@ -81,7 +81,10 @@ func TestRecordReconcileIncrementsCounter(t *testing.T) {
 	r.RecordReconcile("plugin", nil, 100*time.Millisecond)
 	r.RecordReconcile("plugin", nil, 200*time.Millisecond)
 
-	val := getCounterValue(t, reg, "minecraft_operator_reconcile_total", map[string]string{"controller": "plugin"})
+	labels := map[string]string{"controller": "plugin"}
+
+	val := getCounterValue(t, reg,
+		"minecraft_operator_reconcile_total", labels)
 	if val != 2 {
 		t.Errorf("expected reconcile_total=2, got %v", val)
 	}
@@ -94,12 +97,16 @@ func TestRecordReconcileErrorIncrementsErrorCounter(t *testing.T) {
 	r.RecordReconcile("plugin", errors.New("fail"), time.Second)
 	r.RecordReconcile("plugin", nil, time.Second)
 
-	errVal := getCounterValue(t, reg, "minecraft_operator_reconcile_errors_total", map[string]string{"controller": "plugin"})
+	labels := map[string]string{"controller": "plugin"}
+
+	errVal := getCounterValue(t, reg,
+		"minecraft_operator_reconcile_errors_total", labels)
 	if errVal != 1 {
 		t.Errorf("expected reconcile_errors_total=1, got %v", errVal)
 	}
 
-	totalVal := getCounterValue(t, reg, "minecraft_operator_reconcile_total", map[string]string{"controller": "plugin"})
+	totalVal := getCounterValue(t, reg,
+		"minecraft_operator_reconcile_total", labels)
 	if totalVal != 2 {
 		t.Errorf("expected reconcile_total=2, got %v", totalVal)
 	}
@@ -111,7 +118,10 @@ func TestRecordReconcileDurationObservesHistogram(t *testing.T) {
 
 	r.RecordReconcile("update", nil, 500*time.Millisecond)
 
-	count := getHistogramCount(t, reg, "minecraft_operator_reconcile_duration_seconds", map[string]string{"controller": "update"})
+	labels := map[string]string{"controller": "update"}
+
+	count := getHistogramCount(t, reg,
+		"minecraft_operator_reconcile_duration_seconds", labels)
 	if count != 1 {
 		t.Errorf("expected histogram count=1, got %v", count)
 	}
@@ -124,17 +134,22 @@ func TestRecordPluginAPICall(t *testing.T) {
 	r.RecordPluginAPICall("hangar", nil, 50*time.Millisecond)
 	r.RecordPluginAPICall("hangar", errors.New("timeout"), 100*time.Millisecond)
 
-	totalVal := getCounterValue(t, reg, "minecraft_operator_plugin_api_requests_total", map[string]string{"source": "hangar"})
+	labels := map[string]string{"source": "hangar"}
+
+	totalVal := getCounterValue(t, reg,
+		"minecraft_operator_plugin_api_requests_total", labels)
 	if totalVal != 2 {
 		t.Errorf("expected api_requests_total=2, got %v", totalVal)
 	}
 
-	errVal := getCounterValue(t, reg, "minecraft_operator_plugin_api_errors_total", map[string]string{"source": "hangar"})
+	errVal := getCounterValue(t, reg,
+		"minecraft_operator_plugin_api_errors_total", labels)
 	if errVal != 1 {
 		t.Errorf("expected api_errors_total=1, got %v", errVal)
 	}
 
-	count := getHistogramCount(t, reg, "minecraft_operator_plugin_api_duration_seconds", map[string]string{"source": "hangar"})
+	count := getHistogramCount(t, reg,
+		"minecraft_operator_plugin_api_duration_seconds", labels)
 	if count != 2 {
 		t.Errorf("expected histogram count=2, got %v", count)
 	}
@@ -147,12 +162,18 @@ func TestRecordSolverRun(t *testing.T) {
 	r.RecordSolverRun("plugin_version", nil, 10*time.Millisecond)
 	r.RecordSolverRun("paper_version", errors.New("no solution"), 20*time.Millisecond)
 
-	pluginVal := getCounterValue(t, reg, "minecraft_operator_solver_runs_total", map[string]string{"type": "plugin_version"})
+	pluginLabels := map[string]string{"type": "plugin_version"}
+
+	pluginVal := getCounterValue(t, reg,
+		"minecraft_operator_solver_runs_total", pluginLabels)
 	if pluginVal != 1 {
 		t.Errorf("expected solver_runs_total(plugin_version)=1, got %v", pluginVal)
 	}
 
-	paperVal := getCounterValue(t, reg, "minecraft_operator_solver_runs_total", map[string]string{"type": "paper_version"})
+	paperLabels := map[string]string{"type": "paper_version"}
+
+	paperVal := getCounterValue(t, reg,
+		"minecraft_operator_solver_runs_total", paperLabels)
 	if paperVal != 1 {
 		t.Errorf("expected solver_runs_total(paper_version)=1, got %v", paperVal)
 	}
@@ -166,19 +187,28 @@ func TestRecordUpdate(t *testing.T) {
 	r.RecordUpdate("server2", "ns1", false)
 	r.RecordUpdate("server1", "ns1", true)
 
-	successVal := getCounterValue(t, reg, "minecraft_operator_updates_total", map[string]string{"result": "success"})
+	successVal := getCounterValue(t, reg,
+		"minecraft_operator_updates_total",
+		map[string]string{"result": "success"})
 	if successVal != 2 {
 		t.Errorf("expected updates_total(success)=2, got %v", successVal)
 	}
 
-	failVal := getCounterValue(t, reg, "minecraft_operator_updates_total", map[string]string{"result": "failure"})
+	failVal := getCounterValue(t, reg,
+		"minecraft_operator_updates_total",
+		map[string]string{"result": "failure"})
 	if failVal != 1 {
 		t.Errorf("expected updates_total(failure)=1, got %v", failVal)
 	}
 }
 
 // getCounterValue extracts counter value for given labels from the registry.
-func getCounterValue(t *testing.T, reg *prometheus.Registry, name string, labels map[string]string) float64 {
+func getCounterValue(
+	t *testing.T,
+	reg *prometheus.Registry,
+	name string,
+	labels map[string]string,
+) float64 {
 	t.Helper()
 
 	families, err := reg.Gather()
@@ -204,7 +234,12 @@ func getCounterValue(t *testing.T, reg *prometheus.Registry, name string, labels
 }
 
 // getHistogramCount extracts histogram sample count for given labels.
-func getHistogramCount(t *testing.T, reg *prometheus.Registry, name string, labels map[string]string) uint64 {
+func getHistogramCount(
+	t *testing.T,
+	reg *prometheus.Registry,
+	name string,
+	labels map[string]string,
+) uint64 {
 	t.Helper()
 
 	families, err := reg.Gather()
@@ -230,7 +265,10 @@ func getHistogramCount(t *testing.T, reg *prometheus.Registry, name string, labe
 }
 
 // matchLabels checks if a metric has all expected label pairs.
-func matchLabels(m *io_prometheus_client.Metric, expected map[string]string) bool {
+func matchLabels(
+	m *io_prometheus_client.Metric,
+	expected map[string]string,
+) bool {
 	labelMap := make(map[string]string)
 	for _, lp := range m.GetLabel() {
 		labelMap[lp.GetName()] = lp.GetValue()
