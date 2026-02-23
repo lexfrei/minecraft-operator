@@ -528,6 +528,198 @@ spec:
 				"Operator should continue running despite invalid cron")
 		})
 	})
+
+	Context("Backup lifecycle", func() {
+		const backupServer = "e2e-backup-server"
+
+		AfterEach(func() {
+			// Clean up VolumeSnapshots
+			cmd := exec.Command("kubectl", "delete", "volumesnapshot",
+				"--selector=mc.k8s.lex.la/server-name="+backupServer,
+				"-n", namespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			// Clean up CR and associated resources
+			cmd = exec.Command("kubectl", "delete", "papermcserver", backupServer,
+				"-n", namespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			cmd = exec.Command("kubectl", "delete", "secret", backupServer+"-rcon",
+				"-n", namespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			// Wait for cleanup
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "statefulset", backupServer,
+					"-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred(), "StatefulSet should be deleted")
+			}, 60*time.Second).Should(Succeed())
+		})
+
+		It("should create VolumeSnapshot when backup-now annotation is set", func() {
+			By("creating RCON secret")
+			cmd := exec.Command("kubectl", "create", "secret", "generic",
+				backupServer+"-rcon",
+				"--from-literal=password=test-pass",
+				"-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating PaperMCServer with backup enabled and backup-now annotation")
+			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1beta1
+kind: PaperMCServer
+metadata:
+  name: %s
+  namespace: %s
+  annotations:
+    mc.k8s.lex.la/backup-now: "%d"
+spec:
+  updateStrategy: "latest"
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+  gracefulShutdown:
+    timeout: 60s
+  rcon:
+    enabled: true
+    port: 25575
+    passwordSecret:
+      name: %s-rcon
+      key: password
+  backup:
+    enabled: true
+    retention:
+      maxCount: 5
+  podTemplate:
+    spec:
+      containers:
+      - name: minecraft
+        image: docker.io/lexfrei/papermc:1.21.1-91
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        env:
+        - name: EULA
+          value: "TRUE"`, backupServer, namespace, time.Now().Unix(), backupServer)
+
+			cmd = exec.Command("kubectl", "apply", "--filename", "-")
+			cmd.Stdin = strings.NewReader(serverYAML)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for StatefulSet to appear")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "statefulset", backupServer,
+					"-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}, 60*time.Second).Should(Succeed())
+
+			By("verifying VolumeSnapshot is created with correct labels")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "volumesnapshot",
+					"--selector=mc.k8s.lex.la/server-name="+backupServer,
+					"-n", namespace,
+					"-o", "jsonpath={.items[0].metadata.labels.mc\\.k8s\\.lex\\.la/backup-trigger}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("manual"),
+					"Backup trigger label should be 'manual'")
+			}, 2*time.Minute).Should(Succeed())
+
+			By("verifying backup-now annotation was removed")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "papermcserver", backupServer,
+					"-n", namespace,
+					"-o", "jsonpath={.metadata.annotations.mc\\.k8s\\.lex\\.la/backup-now}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(BeEmpty(),
+					"backup-now annotation should be removed after backup")
+			}, 30*time.Second).Should(Succeed())
+
+			By("verifying backup status is updated")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "papermcserver", backupServer,
+					"-n", namespace,
+					"-o", "jsonpath={.status.backup.lastBackup.trigger}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("manual"),
+					"Backup status trigger should be 'manual'")
+			}, 30*time.Second).Should(Succeed())
+		})
+
+		It("should set BackupCronValid condition for invalid backup cron", func() {
+			By("creating RCON secret")
+			cmd := exec.Command("kubectl", "create", "secret", "generic",
+				backupServer+"-rcon",
+				"--from-literal=password=test-pass",
+				"-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating PaperMCServer with invalid backup cron")
+			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1beta1
+kind: PaperMCServer
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  updateStrategy: "latest"
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+  gracefulShutdown:
+    timeout: 60s
+  rcon:
+    enabled: true
+    port: 25575
+    passwordSecret:
+      name: %s-rcon
+      key: password
+  backup:
+    enabled: true
+    schedule: "invalid-cron-expression"
+  podTemplate:
+    spec:
+      containers:
+      - name: minecraft
+        image: docker.io/lexfrei/papermc:1.21.1-91
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+        env:
+        - name: EULA
+          value: "TRUE"`, backupServer, namespace, backupServer)
+
+			cmd = exec.Command("kubectl", "apply", "--filename", "-")
+			cmd.Stdin = strings.NewReader(serverYAML)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying BackupCronValid condition is set to False")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "papermcserver", backupServer,
+					"-n", namespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='BackupCronValid')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("False"),
+					"BackupCronValid should be False for invalid cron")
+			}, 60*time.Second).Should(Succeed())
+		})
+	})
 })
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
