@@ -1,7 +1,11 @@
 // Package metrics provides Prometheus metrics for the minecraft-operator.
 package metrics
 
-import "time"
+import (
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 // Recorder defines the interface for recording operator metrics.
 type Recorder interface {
@@ -16,4 +20,112 @@ type Recorder interface {
 
 	// RecordUpdate records a server update attempt.
 	RecordUpdate(serverName, namespace string, success bool)
+}
+
+// PrometheusRecorder implements Recorder using Prometheus metrics.
+type PrometheusRecorder struct {
+	reconcileTotal       *prometheus.CounterVec
+	reconcileErrorsTotal *prometheus.CounterVec
+	reconcileDuration    *prometheus.HistogramVec
+
+	pluginAPIRequestsTotal *prometheus.CounterVec
+	pluginAPIErrorsTotal   *prometheus.CounterVec
+	pluginAPIDuration      *prometheus.HistogramVec
+
+	solverRunsTotal *prometheus.CounterVec
+	solverDuration  *prometheus.HistogramVec
+
+	updatesTotal *prometheus.CounterVec
+}
+
+// NewPrometheusRecorder creates a PrometheusRecorder and registers all metrics
+// with the provided prometheus.Registerer.
+func NewPrometheusRecorder(reg prometheus.Registerer) *PrometheusRecorder {
+	r := &PrometheusRecorder{
+		reconcileTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "minecraft_operator_reconcile_total",
+			Help: "Total number of reconciliation loops completed.",
+		}, []string{"controller"}),
+		reconcileErrorsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "minecraft_operator_reconcile_errors_total",
+			Help: "Total number of failed reconciliation loops.",
+		}, []string{"controller"}),
+		reconcileDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name: "minecraft_operator_reconcile_duration_seconds",
+			Help: "Duration of reconciliation loops in seconds.",
+		}, []string{"controller"}),
+
+		pluginAPIRequestsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "minecraft_operator_plugin_api_requests_total",
+			Help: "Total number of plugin repository API requests.",
+		}, []string{"source"}),
+		pluginAPIErrorsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "minecraft_operator_plugin_api_errors_total",
+			Help: "Total number of failed plugin repository API requests.",
+		}, []string{"source"}),
+		pluginAPIDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name: "minecraft_operator_plugin_api_duration_seconds",
+			Help: "Duration of plugin repository API requests in seconds.",
+		}, []string{"source"}),
+
+		solverRunsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "minecraft_operator_solver_runs_total",
+			Help: "Total number of constraint solver invocations.",
+		}, []string{"type"}),
+		solverDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name: "minecraft_operator_solver_duration_seconds",
+			Help: "Duration of constraint solver runs in seconds.",
+		}, []string{"type"}),
+
+		updatesTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "minecraft_operator_updates_total",
+			Help: "Total number of server update attempts.",
+		}, []string{"result"}),
+	}
+
+	reg.MustRegister(
+		r.reconcileTotal,
+		r.reconcileErrorsTotal,
+		r.reconcileDuration,
+		r.pluginAPIRequestsTotal,
+		r.pluginAPIErrorsTotal,
+		r.pluginAPIDuration,
+		r.solverRunsTotal,
+		r.solverDuration,
+		r.updatesTotal,
+	)
+
+	return r
+}
+
+func (r *PrometheusRecorder) RecordReconcile(controller string, err error, duration time.Duration) {
+	r.reconcileTotal.WithLabelValues(controller).Inc()
+	r.reconcileDuration.WithLabelValues(controller).Observe(duration.Seconds())
+
+	if err != nil {
+		r.reconcileErrorsTotal.WithLabelValues(controller).Inc()
+	}
+}
+
+func (r *PrometheusRecorder) RecordPluginAPICall(source string, err error, duration time.Duration) {
+	r.pluginAPIRequestsTotal.WithLabelValues(source).Inc()
+	r.pluginAPIDuration.WithLabelValues(source).Observe(duration.Seconds())
+
+	if err != nil {
+		r.pluginAPIErrorsTotal.WithLabelValues(source).Inc()
+	}
+}
+
+func (r *PrometheusRecorder) RecordSolverRun(solverType string, err error, duration time.Duration) {
+	r.solverRunsTotal.WithLabelValues(solverType).Inc()
+	r.solverDuration.WithLabelValues(solverType).Observe(duration.Seconds())
+}
+
+func (r *PrometheusRecorder) RecordUpdate(_, _ string, success bool) {
+	result := "success"
+	if !success {
+		result = "failure"
+	}
+
+	r.updatesTotal.WithLabelValues(result).Inc()
 }
