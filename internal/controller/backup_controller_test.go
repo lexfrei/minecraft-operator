@@ -343,6 +343,66 @@ func TestBackupReconciler_ConnectFailurePersistsStatus(t *testing.T) {
 	assert.Equal(t, "manual", updatedServer.Status.Backup.LastBackup.Trigger)
 }
 
+func TestBackupReconciler_CronTriggeredBackup(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Schedule:  "0 */6 * * *",
+		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod("my-server", "minecraft"), newRCONSecret("my-server", "minecraft")).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	r := &BackupReconciler{
+		Client: fakeClient, Scheme: scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	// First reconcile — sets up cron, no backup yet
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+	assert.NotZero(t, result.RequeueAfter, "should requeue for cron schedule check")
+
+	// Simulate cron trigger
+	serverKey := "minecraft/my-server"
+	r.cronTriggerMu.Lock()
+	if r.cronTriggerTimes == nil {
+		r.cronTriggerTimes = make(map[string]time.Time)
+	}
+	r.cronTriggerTimes[serverKey] = now
+	r.cronTriggerMu.Unlock()
+
+	// Second reconcile — should detect cron trigger and run backup
+	_, err = r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// Verify backup was performed
+	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
+		context.Background(), "minecraft", "my-server")
+	require.NoError(t, err)
+	assert.Len(t, snapshots, 1, "cron trigger should create a VolumeSnapshot")
+	assert.Equal(t, "scheduled", snapshots[0].Labels[backup.LabelTrigger])
+
+	verifyRCONBackupCommands(t, mockRCON)
+}
+
 func TestBackupReconciler_InvalidCronSchedule(t *testing.T) {
 	scheme := newBackupTestScheme()
 	server := newTestServer(&mcv1beta1.BackupSpec{

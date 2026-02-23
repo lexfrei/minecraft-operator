@@ -71,6 +71,10 @@ type BackupReconciler struct {
 	// Track cron entries per server
 	cronEntriesMu sync.RWMutex
 	cronEntries   map[string]cronEntryInfo
+
+	// Track cron trigger times per server for scheduled backups
+	cronTriggerMu    sync.RWMutex
+	cronTriggerTimes map[string]time.Time
 }
 
 //+kubebuilder:rbac:groups=snapshot.storage.k8s.io,resources=volumesnapshots,verbs=get;list;watch;create;delete
@@ -91,13 +95,21 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}()
 
-	// Initialize cronEntries if nil
+	// Initialize maps if nil
 	if r.cronEntries == nil {
 		r.cronEntriesMu.Lock()
 		if r.cronEntries == nil {
 			r.cronEntries = make(map[string]cronEntryInfo)
 		}
 		r.cronEntriesMu.Unlock()
+	}
+
+	if r.cronTriggerTimes == nil {
+		r.cronTriggerMu.Lock()
+		if r.cronTriggerTimes == nil {
+			r.cronTriggerTimes = make(map[string]time.Time)
+		}
+		r.cronTriggerMu.Unlock()
 	}
 
 	// Fetch the PaperMCServer resource
@@ -149,6 +161,22 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 			return ctrl.Result{}, err
 		}
+	}
+
+	// Check for scheduled backup trigger (cron fired since last backup)
+	if r.shouldRunScheduledBackup(req.String(), &server) {
+		slog.InfoContext(ctx, "Scheduled backup triggered", "server", server.Name)
+
+		if err := r.performBackup(ctx, &server, "scheduled"); err != nil {
+			slog.ErrorContext(ctx, "Scheduled backup failed", "error", err, "server", server.Name)
+
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Requeue periodically to check for cron triggers
+	if server.Spec.Backup.Schedule != "" {
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -417,8 +445,11 @@ func (r *BackupReconciler) manageBackupCronSchedule(
 		r.removeBackupCronJob(serverKey)
 	}
 
-	// Add new cron job
+	// Add new cron job — callback records trigger time for Reconcile to pick up
 	entryID, err := r.cron.AddFunc(cronSpec, func() {
+		r.cronTriggerMu.Lock()
+		r.cronTriggerTimes[serverKey] = time.Now()
+		r.cronTriggerMu.Unlock()
 		slog.InfoContext(ctx, "Backup cron triggered", "server", serverKey)
 	})
 
@@ -468,6 +499,34 @@ func (r *BackupReconciler) removeBackupCronJob(serverKey string) {
 		r.cron.Remove(entry.ID)
 		delete(r.cronEntries, serverKey)
 	}
+}
+
+// shouldRunScheduledBackup checks if the cron has fired since the last backup.
+func (r *BackupReconciler) shouldRunScheduledBackup(
+	serverKey string,
+	server *mcv1beta1.PaperMCServer,
+) bool {
+	r.cronTriggerMu.RLock()
+	triggerTime, triggered := r.cronTriggerTimes[serverKey]
+	r.cronTriggerMu.RUnlock()
+
+	if !triggered {
+		return false
+	}
+
+	// Check if we already have a backup after this trigger
+	if server.Status.Backup != nil && server.Status.Backup.LastBackup != nil {
+		if !server.Status.Backup.LastBackup.StartedAt.Time.Before(triggerTime) {
+			return false
+		}
+	}
+
+	// Clear the trigger time after consuming it
+	r.cronTriggerMu.Lock()
+	delete(r.cronTriggerTimes, serverKey)
+	r.cronTriggerMu.Unlock()
+
+	return true
 }
 
 // shouldBackupNow checks if the backup-now annotation is present and valid.
