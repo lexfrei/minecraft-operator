@@ -28,10 +28,14 @@ type MockClient struct {
 
 	// Call tracking
 	ConnectCalled          bool
+	SendCommandCalled      bool
 	GracefulShutdownCalled bool
 	CloseCalled            bool
 
-	// Commands received
+	// Commands received via SendCommand
+	SentCommands []string
+
+	// Commands received (GracefulShutdown simulation)
 	Commands []string
 
 	// Warnings received during graceful shutdown
@@ -39,6 +43,8 @@ type MockClient struct {
 
 	// Behavior control
 	ConnectError          error
+	SendCommandError      error
+	SendCommandResponses  map[string]string
 	GracefulShutdownError error
 	ConnectDelay          time.Duration
 	ShutdownDelay         time.Duration
@@ -47,8 +53,10 @@ type MockClient struct {
 // NewMockClient creates a new mock RCON client.
 func NewMockClient() *MockClient {
 	return &MockClient{
-		Commands: make([]string, 0),
-		Warnings: make([]string, 0),
+		SentCommands:         make([]string, 0),
+		Commands:             make([]string, 0),
+		Warnings:             make([]string, 0),
+		SendCommandResponses: make(map[string]string),
 	}
 }
 
@@ -75,6 +83,31 @@ func (m *MockClient) Connect(ctx context.Context) error {
 	}
 
 	return m.ConnectError
+}
+
+// SendCommand simulates sending a command to the server.
+func (m *MockClient) SendCommand(ctx context.Context, command string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
+	}
+
+	m.SendCommandCalled = true
+	m.SentCommands = append(m.SentCommands, command)
+
+	if m.SendCommandError != nil {
+		return "", m.SendCommandError
+	}
+
+	if resp, ok := m.SendCommandResponses[command]; ok {
+		return resp, nil
+	}
+
+	return "", nil
 }
 
 // GracefulShutdown simulates a graceful server shutdown with warnings.
@@ -118,11 +151,15 @@ func (m *MockClient) Reset() {
 	defer m.mu.Unlock()
 
 	m.ConnectCalled = false
+	m.SendCommandCalled = false
 	m.GracefulShutdownCalled = false
 	m.CloseCalled = false
+	m.SentCommands = make([]string, 0)
 	m.Commands = make([]string, 0)
 	m.Warnings = make([]string, 0)
 	m.ConnectError = nil
+	m.SendCommandError = nil
+	m.SendCommandResponses = make(map[string]string)
 	m.GracefulShutdownError = nil
 	m.ConnectDelay = 0
 	m.ShutdownDelay = 0
@@ -135,6 +172,16 @@ func (m *MockClient) GetCommands() []string {
 
 	commands := make([]string, len(m.Commands))
 	copy(commands, m.Commands)
+	return commands
+}
+
+// GetSentCommands returns a copy of commands sent via SendCommand (thread-safe).
+func (m *MockClient) GetSentCommands() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	commands := make([]string, len(m.SentCommands))
+	copy(commands, m.SentCommands)
 	return commands
 }
 
