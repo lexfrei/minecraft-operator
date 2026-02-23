@@ -52,11 +52,13 @@ import (
 	"github.com/lexfrei/minecraft-operator/internal/crdmanager"
 	"github.com/lexfrei/minecraft-operator/pkg/api"
 	mccron "github.com/lexfrei/minecraft-operator/pkg/cron"
+	mcmetrics "github.com/lexfrei/minecraft-operator/pkg/metrics"
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/registry"
 	"github.com/lexfrei/minecraft-operator/pkg/solver"
 	"github.com/lexfrei/minecraft-operator/pkg/webui"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -291,6 +293,9 @@ func main() {
 	// Initialize constraint solver
 	constraintSolver := solver.NewSimpleSolver()
 
+	// Initialize Prometheus metrics recorder
+	metricsRecorder := mcmetrics.NewPrometheusRecorder(ctrlmetrics.Registry)
+
 	// Initialize cron scheduler for update controller
 	cronScheduler := mccron.NewRealScheduler()
 
@@ -300,6 +305,7 @@ func main() {
 		Scheme:       mgr.GetScheme(),
 		PluginClient: pluginClient,
 		Solver:       constraintSolver,
+		Metrics:      metricsRecorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Plugin")
 		os.Exit(1)
@@ -313,6 +319,7 @@ func main() {
 		PaperClient:    paperClient,
 		Solver:         constraintSolver,
 		RegistryClient: registryClient,
+		Metrics:        metricsRecorder,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PaperMCServer")
 		os.Exit(1)
@@ -332,6 +339,7 @@ func main() {
 		PaperClient:  paperClient,
 		PluginClient: pluginClient,
 		PodExecutor:  podExecutor,
+		Metrics:      metricsRecorder,
 	}
 	updateReconciler.SetCron(cronScheduler)
 	if err := updateReconciler.SetupWithManager(mgr); err != nil {
