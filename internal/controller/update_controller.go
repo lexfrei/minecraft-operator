@@ -738,10 +738,10 @@ func (r *UpdateReconciler) performPluginOnlyUpdate(
 ) error {
 	slog.InfoContext(ctx, "Starting plugin-only update", "server", server.Name)
 
-	// Step 0: Pre-update backup (if enabled)
+	// Step 0: Pre-update backup (if enabled). Abort update on failure to
+	// avoid data loss — the user explicitly requested backup protection.
 	if err := r.backupBeforeUpdate(ctx, server); err != nil {
-		slog.ErrorContext(ctx, "Pre-update backup failed, continuing with update",
-			"error", err, "server", server.Name)
+		return errors.Wrap(err, "pre-update backup failed, aborting update")
 	}
 
 	// Step 1: Delete plugins marked for deletion (PendingDeletion=true)
@@ -835,10 +835,10 @@ func (r *UpdateReconciler) performCombinedUpdate(
 ) error {
 	slog.InfoContext(ctx, "Starting combined Paper and plugins update", "server", server.Name)
 
-	// Step 0: Pre-update backup (if enabled)
+	// Step 0: Pre-update backup (if enabled). Abort update on failure to
+	// avoid data loss — the user explicitly requested backup protection.
 	if err := r.backupBeforeUpdate(ctx, server); err != nil {
-		slog.ErrorContext(ctx, "Pre-update backup failed, continuing with update",
-			"error", err, "server", server.Name)
+		return errors.Wrap(err, "pre-update backup failed, aborting update")
 	}
 
 	// Step 1: Delete plugins marked for deletion (PendingDeletion=true)
