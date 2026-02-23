@@ -45,13 +45,17 @@ func PreSnapshotHook(ctx context.Context, rcon RCONCommander) error {
 	return nil
 }
 
-// PostSnapshotHook re-enables auto-save after a snapshot is taken.
-func PostSnapshotHook(ctx context.Context, rcon RCONCommander) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
+// saveOnTimeout is the maximum time to wait for the save-on command.
+const saveOnTimeout = 10 * time.Second
 
-	if _, err := rcon.SendCommand(ctx, "save-on"); err != nil {
+// PostSnapshotHook re-enables auto-save after a snapshot is taken.
+// This function always attempts to send save-on, even if the parent
+// context is cancelled. Leaving auto-save disabled would cause data loss.
+func PostSnapshotHook(_ context.Context, rcon RCONCommander) error {
+	saveOnCtx, cancel := context.WithTimeout(context.Background(), saveOnTimeout)
+	defer cancel()
+
+	if _, err := rcon.SendCommand(saveOnCtx, "save-on"); err != nil {
 		return errors.Wrap(err, "failed to execute save-on")
 	}
 

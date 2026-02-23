@@ -106,13 +106,16 @@ func TestPostSnapshotHook(t *testing.T) {
 		assert.Contains(t, err.Error(), "save-on")
 	})
 
-	t.Run("respects context cancellation", func(t *testing.T) {
+	t.Run("always sends save-on even when context is cancelled", func(t *testing.T) {
 		mock := newMockRCONClient()
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
 		err := backup.PostSnapshotHook(ctx, mock)
-		require.Error(t, err)
+		require.NoError(t, err, "PostSnapshotHook must succeed to re-enable auto-save")
+
+		require.Len(t, mock.commands, 1, "save-on must be sent even with cancelled context")
+		assert.Equal(t, "save-on", mock.commands[0])
 	})
 }
 
