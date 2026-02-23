@@ -1692,7 +1692,16 @@ func backupStatusEqual(a, b *mcv1beta1.BackupStatus) bool {
 	if a.LastBackup != nil && b.LastBackup != nil {
 		if a.LastBackup.SnapshotName != b.LastBackup.SnapshotName ||
 			a.LastBackup.Successful != b.LastBackup.Successful ||
-			a.LastBackup.Trigger != b.LastBackup.Trigger {
+			a.LastBackup.Trigger != b.LastBackup.Trigger ||
+			!a.LastBackup.StartedAt.Equal(&b.LastBackup.StartedAt) {
+			return false
+		}
+
+		if (a.LastBackup.CompletedAt == nil) != (b.LastBackup.CompletedAt == nil) {
+			return false
+		}
+
+		if a.LastBackup.CompletedAt != nil && !a.LastBackup.CompletedAt.Equal(b.LastBackup.CompletedAt) {
 			return false
 		}
 	}
