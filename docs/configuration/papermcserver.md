@@ -180,7 +180,7 @@ spec:
       maxCount: 10
 ```
 
-The operator uses RCON hooks (`save-all`, `save-off`, `save-on`) to ensure world data consistency before creating the VolumeSnapshot.
+When RCON is enabled, the operator uses RCON hooks (`save-all`, `save-off`, `save-on`) to ensure world data consistency before creating the VolumeSnapshot. Without RCON, snapshots are crash-consistent only — recent unsaved data may be lost.
 
 **Manual trigger:**
 

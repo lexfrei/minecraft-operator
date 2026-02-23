@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -1085,6 +1086,71 @@ func TestBackupReconciler_ManualBackupFailureRecordedInStatus(t *testing.T) {
 	require.NotNil(t, updatedServer.Status.Backup.LastBackup, "last backup record should exist")
 	assert.False(t, updatedServer.Status.Backup.LastBackup.Successful, "backup should be marked failed")
 	assert.Equal(t, "manual", updatedServer.Status.Backup.LastBackup.Trigger)
+}
+
+// crdMissingSnapshotter simulates a cluster where VolumeSnapshot CRD is not installed.
+type crdMissingSnapshotter struct{}
+
+func (m *crdMissingSnapshotter) CreateSnapshot(
+	_ context.Context, _ backup.SnapshotRequest,
+) (string, error) {
+	return "", &meta.NoKindMatchError{
+		GroupKind: schema.GroupKind{Group: "snapshot.storage.k8s.io", Kind: "VolumeSnapshot"},
+	}
+}
+
+func (m *crdMissingSnapshotter) ListSnapshots(
+	_ context.Context, _, _ string,
+) ([]volumesnapshotv1.VolumeSnapshot, error) {
+	return nil, &meta.NoKindMatchError{
+		GroupKind: schema.GroupKind{Group: "snapshot.storage.k8s.io", Kind: "VolumeSnapshot"},
+	}
+}
+
+func (m *crdMissingSnapshotter) DeleteOldSnapshots(
+	_ context.Context, _, _ string, _ int,
+) (int, error) {
+	return 0, nil
+}
+
+func TestBackupReconciler_VolumeSnapshotCRDUnavailable(t *testing.T) {
+	scheme := newBackupTestScheme()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:  true,
+		Schedule: "0 */6 * * *",
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: &crdMissingSnapshotter{},
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+	}
+
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{RequeueAfter: 5 * time.Minute}, result)
+
+	// Verify BackupReady condition is set
+	var updatedServer mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &updatedServer))
+
+	cond := meta.FindStatusCondition(updatedServer.Status.Conditions, "BackupReady")
+	require.NotNil(t, cond, "BackupReady condition should be set")
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, "VolumeSnapshotAPIUnavailable", cond.Reason)
+	assert.Contains(t, cond.Message, "snapshot.storage.k8s.io")
 }
 
 func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {

@@ -136,8 +136,9 @@ spec:
       maxCount: 10               # Keep last 10 snapshots
 ```
 
-The operator uses RCON hooks (`save-all`, `save-off`, `save-on`) to flush all
-data to disk and disable auto-save before creating a VolumeSnapshot.
+When RCON is enabled, the operator uses RCON hooks (`save-all`, `save-off`, `save-on`)
+to flush data to disk and disable auto-save before creating a VolumeSnapshot.
+Without RCON, snapshots are crash-consistent only.
 
 Trigger a manual backup:
 

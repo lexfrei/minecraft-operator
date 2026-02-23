@@ -110,7 +110,7 @@ spec:
       maxCount: 10
 ```
 
-Backups use RCON hooks (`save-all`/`save-off`/`save-on`) for data consistency.
+When RCON is enabled, backups use RCON hooks (`save-all`/`save-off`/`save-on`) for data consistency. Without RCON, snapshots are crash-consistent only.
 
 **Trigger a manual backup:**
 

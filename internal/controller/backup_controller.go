@@ -41,8 +41,13 @@ import (
 
 const (
 	conditionTypeBackupCronValid = "BackupCronValid"
+	conditionTypeBackupReady     = "BackupReady"
 	reasonBackupCronInvalid      = "InvalidBackupCronExpression"
 	reasonBackupCronValid        = "BackupCronScheduleConfigured"
+	reasonSnapshotAPIUnavailable = "VolumeSnapshotAPIUnavailable"
+
+	// snapshotAPIRetryInterval is the requeue interval when VolumeSnapshot CRD is missing.
+	snapshotAPIRetryInterval = 5 * time.Minute
 
 	// backupNowMaxAge is the maximum age for backup-now annotation.
 	backupNowMaxAge = 5 * time.Minute
@@ -134,6 +139,11 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		}
 	}
 
+	// Pre-flight: verify VolumeSnapshot API is available in the cluster
+	if r.isSnapshotAPIUnavailable(ctx, &server) {
+		return ctrl.Result{RequeueAfter: snapshotAPIRetryInterval}, nil
+	}
+
 	// Check for manual backup trigger
 	backupNow := r.shouldBackupNow(ctx, &server)
 	if backupNow {
@@ -182,6 +192,46 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// isSnapshotAPIUnavailable checks whether the VolumeSnapshot API is available.
+// Returns true (and sets a condition) if the CRD is not installed.
+func (r *BackupReconciler) isSnapshotAPIUnavailable(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+) bool {
+	_, err := r.Snapshotter.ListSnapshots(ctx, server.Namespace, server.Name)
+	if err == nil {
+		return false
+	}
+
+	var noKind *meta.NoKindMatchError
+	var noResource *meta.NoResourceMatchError
+
+	if errors.As(err, &noKind) || errors.As(err, &noResource) {
+		slog.WarnContext(ctx, "VolumeSnapshot API not available in cluster",
+			"error", err, "server", server.Name)
+
+		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
+			Type:               conditionTypeBackupReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             reasonSnapshotAPIUnavailable,
+			ObservedGeneration: server.Generation,
+			Message:            "VolumeSnapshot CRD (snapshot.storage.k8s.io) is not installed. Install the CSI snapshot controller and CRDs to enable backups.",
+		})
+
+		if updateErr := r.Status().Update(ctx, server); updateErr != nil {
+			slog.ErrorContext(ctx, "Failed to update status with snapshot API condition", "error", updateErr)
+		}
+
+		return true
+	}
+
+	// Non-API errors (network, etc.) — log but continue; backup attempt will produce a clearer error.
+	slog.WarnContext(ctx, "Pre-flight snapshot API check failed, will attempt backup anyway",
+		"error", err, "server", server.Name)
+
+	return false
 }
 
 // PerformBackup creates a VolumeSnapshot with RCON hooks for the given server.
