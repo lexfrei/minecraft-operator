@@ -320,8 +320,8 @@ status:
     backupCount: 5
     lastBackup:
       snapshotName: "survival-backup-1708742400"
-      startedAt: "2024-02-24T00:00:00Z"
-      completedAt: "2024-02-24T00:00:05Z"
+      startedAt: "2026-02-24T00:00:00Z"
+      completedAt: "2026-02-24T00:00:05Z"
       successful: true
       trigger: "scheduled"
 ```

@@ -332,7 +332,7 @@ spec:
         - name: EULA
           value: "TRUE"`, serverName, namespace, serverName)
 
-			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd = exec.Command("kubectl", "apply", "--filename", "-")
 			cmd.Stdin = strings.NewReader(serverYAML)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -410,7 +410,7 @@ spec:
         - name: EULA
           value: "TRUE"`, serverName, namespace, serverName)
 
-			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd = exec.Command("kubectl", "apply", "--filename", "-")
 			cmd.Stdin = strings.NewReader(serverYAML)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -503,7 +503,7 @@ spec:
         - name: EULA
           value: "TRUE"`, badCronServer, namespace, badCronServer)
 
-			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd = exec.Command("kubectl", "apply", "--filename", "-")
 			cmd.Stdin = strings.NewReader(serverYAML)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -746,7 +746,7 @@ func serviceAccountToken() (string, error) {
 			"/api/v1/namespaces/%s/serviceaccounts/%s/token",
 			namespace,
 			serviceAccountName,
-		), "-f", tokenRequestFile)
+		), "--filename", tokenRequestFile)
 
 		output, err := cmd.CombinedOutput()
 		g.Expect(err).NotTo(HaveOccurred())
