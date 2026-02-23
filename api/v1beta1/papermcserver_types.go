@@ -145,7 +145,7 @@ type BackupRecord struct {
 	// Successful indicates if the backup completed successfully.
 	Successful bool `json:"successful"`
 
-	// Trigger describes what triggered the backup (scheduled, pre-update, manual).
+	// Trigger describes what triggered the backup (scheduled, before-update, manual).
 	Trigger string `json:"trigger"`
 }
 

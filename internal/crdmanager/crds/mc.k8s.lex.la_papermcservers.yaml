@@ -8750,7 +8750,7 @@ spec:
                         type: boolean
                       trigger:
                         description: Trigger describes what triggered the backup (scheduled,
-                          pre-update, manual).
+                          before-update, manual).
                         type: string
                     required:
                     - snapshotName

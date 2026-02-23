@@ -81,7 +81,7 @@ func TestCreateSnapshot(t *testing.T) { //nolint:funlen
 			Namespace:  "minecraft",
 			PVCName:    "data-my-server-0",
 			ServerName: "my-server",
-			Trigger:    "pre-update",
+			Trigger:    "before-update",
 		})
 
 		require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestCreateSnapshot(t *testing.T) { //nolint:funlen
 		snap := snapshots[0]
 		assert.Equal(t, name, snap.Name)
 		assert.Equal(t, "my-server", snap.Labels[backup.LabelServerName])
-		assert.Equal(t, "pre-update", snap.Labels[backup.LabelTrigger])
+		assert.Equal(t, "before-update", snap.Labels[backup.LabelTrigger])
 		assert.Equal(t, "minecraft-operator", snap.Labels[backup.LabelManagedBy])
 	})
 }
