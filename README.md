@@ -113,7 +113,7 @@ See [Update Strategies Guide](docs/configuration/update-strategies.md) for detai
 
 ## Architecture
 
-Three controllers work together:
+Four controllers work together:
 
 1. **Plugin Controller** — Fetches plugin metadata from Hangar, runs compatibility solver, updates Plugin status
 2. **PaperMCServer Controller** — Manages StatefulSet and Service, resolves Paper version based on update strategy

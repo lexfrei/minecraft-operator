@@ -115,7 +115,7 @@ Backups use RCON hooks (`save-all`/`save-off`/`save-on`) for data consistency.
 **Trigger a manual backup:**
 
 ```bash
-kubectl annotate papermcserver survival mc.k8s.lex.la/backup-now=true
+kubectl annotate papermcserver survival mc.k8s.lex.la/backup-now="$(date +%s)"
 ```
 
 **List existing snapshots:**
