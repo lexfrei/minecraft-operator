@@ -40,6 +40,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+const testServerKey = "minecraft/my-server"
+
 func newBackupTestScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(s)
@@ -384,7 +386,7 @@ func TestBackupReconciler_CronTriggeredBackup(t *testing.T) {
 	assert.NotZero(t, result.RequeueAfter, "should requeue for cron schedule check")
 
 	// Simulate cron trigger
-	serverKey := "minecraft/my-server"
+	serverKey := testServerKey
 	r.cronTriggerMu.Lock()
 	if r.cronTriggerTimes == nil {
 		r.cronTriggerTimes = make(map[string]time.Time)
@@ -808,16 +810,125 @@ func TestBackupReconciler_ShouldBackupNow_FutureTimestamp(t *testing.T) {
 	assert.False(t, reconciler.shouldBackupNow(context.Background(), server))
 }
 
+func TestBackupReconciler_ScheduledBackupFailurePreservesTrigger(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Schedule:  "0 */6 * * *",
+		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	// RCON connect fails — backup will fail
+	mockRCON.ConnectError = fmt.Errorf("connection refused")
+
+	r := &BackupReconciler{
+		Client: fakeClient, Scheme: scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	// First reconcile — sets up cron
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// Simulate cron trigger
+	serverKey := testServerKey
+	r.cronTriggerMu.Lock()
+	r.cronTriggerTimes[serverKey] = now
+	r.cronTriggerMu.Unlock()
+
+	// Second reconcile — backup fails due to RCON connect error
+	_, err = r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.Error(t, err, "backup should fail due to RCON connect error")
+
+	// Critical: trigger must be preserved so the next reconcile retries the backup
+	r.cronTriggerMu.RLock()
+	_, triggerExists := r.cronTriggerTimes[serverKey]
+	r.cronTriggerMu.RUnlock()
+	assert.True(t, triggerExists, "cron trigger should be preserved after failed backup for retry")
+}
+
+func TestBackupReconciler_ScheduledBackupSuccessConsumesTrigger(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Schedule:  "0 */6 * * *",
+		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	r := &BackupReconciler{
+		Client: fakeClient, Scheme: scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	// First reconcile — sets up cron
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// Simulate cron trigger
+	serverKey := testServerKey
+	r.cronTriggerMu.Lock()
+	r.cronTriggerTimes[serverKey] = now
+	r.cronTriggerMu.Unlock()
+
+	// Second reconcile — backup succeeds
+	_, err = r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// Trigger should be consumed after successful backup
+	r.cronTriggerMu.RLock()
+	_, triggerExists := r.cronTriggerTimes[serverKey]
+	r.cronTriggerMu.RUnlock()
+	assert.False(t, triggerExists, "cron trigger should be consumed after successful backup")
+}
+
 func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {
 	reconciler := &BackupReconciler{
 		cronEntries: map[string]cronEntryInfo{
-			"minecraft/my-server": {ID: 1, Spec: "0 */6 * * *"},
+			testServerKey: {ID: 1, Spec: "0 */6 * * *"},
 		},
 	}
 
 	// Should not panic when r.cron is nil
 	assert.NotPanics(t, func() {
-		reconciler.removeBackupCronJob("minecraft/my-server")
+		reconciler.removeBackupCronJob(testServerKey)
 	})
 
 	// Entry should still be cleaned up from the map

@@ -87,7 +87,7 @@ type BackupReconciler struct {
 // Reconcile handles backup scheduling and execution for PaperMCServer resources.
 //
 //nolint:funlen,cyclop // Complex backup orchestration logic
-func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	r.initOnce.Do(r.initMaps)
 	start := time.Now()
 
@@ -95,7 +95,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	defer func() {
 		if r.Metrics != nil && !skipMetrics {
-			r.Metrics.RecordReconcile("backup", nil, time.Since(start))
+			r.Metrics.RecordReconcile("backup", retErr, time.Since(start))
 		}
 	}()
 
@@ -139,6 +139,10 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if backupNow {
 		slog.InfoContext(ctx, "Manual backup triggered", "server", server.Name)
 
+		// Remove annotation BEFORE performing backup to prevent duplicate backups
+		// from concurrent reconciliations. Trade-off: if backup fails, user must
+		// re-apply the annotation to retry. This is preferable to risking two
+		// simultaneous VolumeSnapshots from the same trigger.
 		if err := r.removeBackupNowAnnotation(ctx, &server); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to remove backup-now annotation")
 		}
@@ -156,9 +160,13 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 		if err := r.performBackup(ctx, &server, "scheduled"); err != nil {
 			slog.ErrorContext(ctx, "Scheduled backup failed", "error", err, "server", server.Name)
+			// Trigger is intentionally NOT consumed on failure so the next reconcile retries.
 
 			return ctrl.Result{}, err
 		}
+
+		// Consume the trigger only after a successful backup
+		r.consumeCronTrigger(req.String())
 	}
 
 	// Requeue periodically to check for cron triggers
@@ -519,12 +527,14 @@ func (r *BackupReconciler) shouldRunScheduledBackup(
 		}
 	}
 
-	// Clear the trigger time after consuming it
+	return true
+}
+
+// consumeCronTrigger removes the cron trigger for a server after a successful backup.
+func (r *BackupReconciler) consumeCronTrigger(serverKey string) {
 	r.cronTriggerMu.Lock()
 	delete(r.cronTriggerTimes, serverKey)
 	r.cronTriggerMu.Unlock()
-
-	return true
 }
 
 // shouldBackupNow checks if the backup-now annotation is present and valid.

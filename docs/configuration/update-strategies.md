@@ -835,6 +835,19 @@ updateSchedule:
 - `maintenanceWindow.cron`: When to actually apply updates
 - Allows discovery without immediate application
 
+### Pre-Update Backups
+
+When `spec.backup.beforeUpdate` is `true` (the default), the operator automatically creates a VolumeSnapshot before applying any server or plugin update. If the backup fails, the update is aborted to prevent data loss.
+
+```yaml
+spec:
+  backup:
+    enabled: true
+    beforeUpdate: true  # Default — backup before every update
+```
+
+This ensures you always have a recovery point before any change.
+
 ### Graceful Shutdown
 
 All updates use graceful shutdown via RCON:
