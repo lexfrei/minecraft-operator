@@ -647,3 +647,44 @@ func TestUpdateReconciler_BackupBeforeUpdateNilBackupReconciler(t *testing.T) {
 	err := updateReconciler.backupBeforeUpdate(context.Background(), server)
 	require.NoError(t, err)
 }
+
+func TestBackupReconciler_ShouldBackupNow_NonNumericAnnotation(t *testing.T) {
+	now := time.Now()
+	reconciler := &BackupReconciler{
+		nowFunc: func() time.Time { return now },
+	}
+
+	server := &mcv1beta1.PaperMCServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-server",
+			Namespace: "minecraft",
+			Annotations: map[string]string{
+				"mc.k8s.lex.la/backup-now": "true",
+			},
+		},
+	}
+
+	// "true" is not a valid Unix timestamp — should return false
+	assert.False(t, reconciler.shouldBackupNow(context.Background(), server))
+}
+
+func TestBackupReconciler_ShouldBackupNow_StaleAnnotation(t *testing.T) {
+	now := time.Now()
+	reconciler := &BackupReconciler{
+		nowFunc: func() time.Time { return now },
+	}
+
+	staleTimestamp := now.Add(-10 * time.Minute).Unix()
+	server := &mcv1beta1.PaperMCServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-server",
+			Namespace: "minecraft",
+			Annotations: map[string]string{
+				"mc.k8s.lex.la/backup-now": fmt.Sprintf("%d", staleTimestamp),
+			},
+		},
+	}
+
+	// Annotation is 10 minutes old (max age is 5 min) — should return false
+	assert.False(t, reconciler.shouldBackupNow(context.Background(), server))
+}
