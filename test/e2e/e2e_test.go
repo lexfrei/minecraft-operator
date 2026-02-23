@@ -79,7 +79,7 @@ var _ = Describe("Manager", Ordered, func() {
 	// and deleting the namespace.
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
-		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
+		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "--namespace", namespace)
 		_, _ = utils.Run(cmd)
 
 		By("undeploying the controller-manager")
@@ -98,7 +98,7 @@ var _ = Describe("Manager", Ordered, func() {
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
 			By("Fetching controller manager pod logs")
-			cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
+			cmd := exec.Command("kubectl", "logs", controllerPodName, "--namespace", namespace)
 			controllerLogs, err := utils.Run(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Controller logs:\n %s", controllerLogs)
@@ -107,7 +107,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("Fetching Kubernetes events")
-			cmd = exec.Command("kubectl", "get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
+			cmd = exec.Command("kubectl", "get", "events", "--namespace", namespace, "--sort-by=.lastTimestamp")
 			eventsOutput, err := utils.Run(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Kubernetes events:\n%s", eventsOutput)
@@ -116,7 +116,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("Fetching curl-metrics logs")
-			cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
+			cmd = exec.Command("kubectl", "logs", "curl-metrics", "--namespace", namespace)
 			metricsOutput, err := utils.Run(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Metrics logs:\n %s", metricsOutput)
@@ -125,7 +125,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("Fetching controller manager pod description")
-			cmd = exec.Command("kubectl", "describe", "pod", controllerPodName, "-n", namespace)
+			cmd = exec.Command("kubectl", "describe", "pod", controllerPodName, "--namespace", namespace)
 			podDescription, err := utils.Run(cmd)
 			if err == nil {
 				fmt.Println("Pod description:\n", podDescription)
@@ -144,12 +144,12 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyControllerUp := func(g Gomega) {
 				// Get the name of the controller-manager pod
 				cmd := exec.Command("kubectl", "get",
-					"pods", "-l", "control-plane=controller-manager",
-					"-o", "go-template={{ range .items }}"+
+					"pods", "--selector", "control-plane=controller-manager",
+					"--output", "go-template={{ range .items }}"+
 						"{{ if not .metadata.deletionTimestamp }}"+
 						"{{ .metadata.name }}"+
 						"{{ \"\\n\" }}{{ end }}{{ end }}",
-					"-n", namespace,
+					"--namespace", namespace,
 				)
 
 				podOutput, err := utils.Run(cmd)
@@ -161,8 +161,8 @@ var _ = Describe("Manager", Ordered, func() {
 
 				// Validate the pod's status
 				cmd = exec.Command("kubectl", "get",
-					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
-					"-n", namespace,
+					"pods", controllerPodName, "--output", "jsonpath={.status.phase}",
+					"--namespace", namespace,
 				)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -181,7 +181,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
 
 			By("validating that the metrics service is available")
-			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
+			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "--namespace", namespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
 
@@ -192,7 +192,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for the metrics endpoint to be ready")
 			verifyMetricsEndpointReady := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace)
+				cmd := exec.Command("kubectl", "get", "endpoints", metricsServiceName, "--namespace", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("8443"), "Metrics endpoint is not ready")
@@ -201,7 +201,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("verifying that the controller manager is serving the metrics server")
 			verifyMetricsServerStarted := func(g Gomega) {
-				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
+				cmd := exec.Command("kubectl", "logs", controllerPodName, "--namespace", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("Serving metrics server"),
@@ -243,8 +243,8 @@ var _ = Describe("Manager", Ordered, func() {
 			By("waiting for the curl-metrics pod to complete.")
 			verifyCurlUp := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "pods", "curl-metrics",
-					"-o", "jsonpath={.status.phase}",
-					"-n", namespace)
+					"--output", "jsonpath={.status.phase}",
+					"--namespace", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
@@ -270,17 +270,17 @@ var _ = Describe("Manager", Ordered, func() {
 		AfterEach(func() {
 			// Clean up CR and associated resources
 			cmd := exec.Command("kubectl", "delete", "papermcserver", serverName,
-				"-n", namespace, "--ignore-not-found")
+				"--namespace", namespace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 
 			cmd = exec.Command("kubectl", "delete", "secret", serverName+"-rcon",
-				"-n", namespace, "--ignore-not-found")
+				"--namespace", namespace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 
 			// Wait for cleanup to complete
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
-					"-n", namespace)
+					"--namespace", namespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred(), "StatefulSet should be deleted")
 			}, 60*time.Second).Should(Succeed())
@@ -291,7 +291,7 @@ var _ = Describe("Manager", Ordered, func() {
 			cmd := exec.Command("kubectl", "create", "secret", "generic",
 				serverName+"-rcon",
 				"--from-literal=password=test-pass",
-				"-n", namespace)
+				"--namespace", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -340,7 +340,7 @@ spec:
 			By("verifying StatefulSet is created")
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
-					"-n", namespace, "-o", "jsonpath={.metadata.name}")
+					"--namespace", namespace, "--output", "jsonpath={.metadata.name}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal(serverName))
@@ -349,7 +349,7 @@ spec:
 			By("verifying Service is created")
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "service", serverName,
-					"-n", namespace, "-o", "jsonpath={.metadata.name}")
+					"--namespace", namespace, "--output", "jsonpath={.metadata.name}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal(serverName))
@@ -357,8 +357,8 @@ spec:
 
 			By("verifying StatefulSet has correct image (not :latest)")
 			cmd = exec.Command("kubectl", "get", "statefulset", serverName,
-				"-n", namespace,
-				"-o", "jsonpath={.spec.template.spec.containers[0].image}")
+				"--namespace", namespace,
+				"--output", "jsonpath={.spec.template.spec.containers[0].image}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).NotTo(ContainSubstring(":latest"),
@@ -372,7 +372,7 @@ spec:
 			cmd := exec.Command("kubectl", "create", "secret", "generic",
 				serverName+"-rcon",
 				"--from-literal=password=test-pass",
-				"-n", namespace)
+				"--namespace", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -418,21 +418,21 @@ spec:
 			By("waiting for StatefulSet to appear")
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
-					"-n", namespace)
+					"--namespace", namespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 			}, 60*time.Second).Should(Succeed())
 
 			By("deleting the PaperMCServer CR")
 			cmd = exec.Command("kubectl", "delete", "papermcserver", serverName,
-				"-n", namespace)
+				"--namespace", namespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying StatefulSet is removed via owner reference cascade")
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
-					"-n", namespace)
+					"--namespace", namespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred(), "StatefulSet should be deleted")
 			}, 60*time.Second).Should(Succeed())
@@ -440,7 +440,7 @@ spec:
 			By("verifying Service is removed")
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "service", serverName,
-					"-n", namespace)
+					"--namespace", namespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred(), "Service should be deleted")
 			}, 30*time.Second).Should(Succeed())
@@ -452,11 +452,11 @@ spec:
 
 		AfterEach(func() {
 			cmd := exec.Command("kubectl", "delete", "papermcserver", badCronServer,
-				"-n", namespace, "--ignore-not-found")
+				"--namespace", namespace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 
 			cmd = exec.Command("kubectl", "delete", "secret", badCronServer+"-rcon",
-				"-n", namespace, "--ignore-not-found")
+				"--namespace", namespace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 		})
 
@@ -465,7 +465,7 @@ spec:
 			cmd := exec.Command("kubectl", "create", "secret", "generic",
 				badCronServer+"-rcon",
 				"--from-literal=password=test-pass",
-				"-n", namespace)
+				"--namespace", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -511,8 +511,8 @@ spec:
 			By("verifying CronScheduleValid condition is set to False")
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "papermcserver", badCronServer,
-					"-n", namespace,
-					"-o", "jsonpath={.status.conditions[?(@.type=='CronScheduleValid')].status}")
+					"--namespace", namespace,
+					"--output", "jsonpath={.status.conditions[?(@.type=='CronScheduleValid')].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("False"),
@@ -520,8 +520,8 @@ spec:
 			}, 60*time.Second).Should(Succeed())
 
 			By("verifying operator pod is still running (not crash-looping)")
-			cmd = exec.Command("kubectl", "get", "pods", "-l", "control-plane=controller-manager",
-				"-n", namespace, "-o", "jsonpath={.items[0].status.phase}")
+			cmd = exec.Command("kubectl", "get", "pods", "--selector", "control-plane=controller-manager",
+				"--namespace", namespace, "--output", "jsonpath={.items[0].status.phase}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("Running"),
@@ -536,22 +536,22 @@ spec:
 			// Clean up VolumeSnapshots
 			cmd := exec.Command("kubectl", "delete", "volumesnapshot",
 				"--selector=mc.k8s.lex.la/server-name="+backupServer,
-				"-n", namespace, "--ignore-not-found")
+				"--namespace", namespace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 
 			// Clean up CR and associated resources
 			cmd = exec.Command("kubectl", "delete", "papermcserver", backupServer,
-				"-n", namespace, "--ignore-not-found")
+				"--namespace", namespace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 
 			cmd = exec.Command("kubectl", "delete", "secret", backupServer+"-rcon",
-				"-n", namespace, "--ignore-not-found")
+				"--namespace", namespace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 
 			// Wait for cleanup
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "statefulset", backupServer,
-					"-n", namespace)
+					"--namespace", namespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred(), "StatefulSet should be deleted")
 			}, 60*time.Second).Should(Succeed())
@@ -562,7 +562,7 @@ spec:
 			cmd := exec.Command("kubectl", "create", "secret", "generic",
 				backupServer+"-rcon",
 				"--from-literal=password=test-pass",
-				"-n", namespace)
+				"--namespace", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -617,7 +617,7 @@ spec:
 			By("waiting for StatefulSet to appear")
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "statefulset", backupServer,
-					"-n", namespace)
+					"--namespace", namespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 			}, 60*time.Second).Should(Succeed())
@@ -626,8 +626,8 @@ spec:
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "volumesnapshot",
 					"--selector=mc.k8s.lex.la/server-name="+backupServer,
-					"-n", namespace,
-					"-o", "jsonpath={.items[0].metadata.labels.mc\\.k8s\\.lex\\.la/backup-trigger}")
+					"--namespace", namespace,
+					"--output", "jsonpath={.items[0].metadata.labels.mc\\.k8s\\.lex\\.la/backup-trigger}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("manual"),
@@ -637,8 +637,8 @@ spec:
 			By("verifying backup-now annotation was removed")
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "papermcserver", backupServer,
-					"-n", namespace,
-					"-o", "jsonpath={.metadata.annotations.mc\\.k8s\\.lex\\.la/backup-now}")
+					"--namespace", namespace,
+					"--output", "jsonpath={.metadata.annotations.mc\\.k8s\\.lex\\.la/backup-now}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(BeEmpty(),
@@ -648,8 +648,8 @@ spec:
 			By("verifying backup status is updated")
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "papermcserver", backupServer,
-					"-n", namespace,
-					"-o", "jsonpath={.status.backup.lastBackup.trigger}")
+					"--namespace", namespace,
+					"--output", "jsonpath={.status.backup.lastBackup.trigger}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("manual"),
@@ -662,7 +662,7 @@ spec:
 			cmd := exec.Command("kubectl", "create", "secret", "generic",
 				backupServer+"-rcon",
 				"--from-literal=password=test-pass",
-				"-n", namespace)
+				"--namespace", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -711,8 +711,8 @@ spec:
 			By("verifying BackupCronValid condition is set to False")
 			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "papermcserver", backupServer,
-					"-n", namespace,
-					"-o", "jsonpath={.status.conditions[?(@.type=='BackupCronValid')].status}")
+					"--namespace", namespace,
+					"--output", "jsonpath={.status.conditions[?(@.type=='BackupCronValid')].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("False"),
@@ -766,7 +766,7 @@ func serviceAccountToken() (string, error) {
 // getMetricsOutput retrieves and returns the logs from the curl pod used to access the metrics endpoint.
 func getMetricsOutput() (string, error) {
 	By("getting the curl-metrics logs")
-	cmd := exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
+	cmd := exec.Command("kubectl", "logs", "curl-metrics", "--namespace", namespace)
 	return utils.Run(cmd)
 }
 

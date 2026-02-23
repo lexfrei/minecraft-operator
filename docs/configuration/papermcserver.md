@@ -329,7 +329,7 @@ status:
 | Field | Description |
 | --- | --- |
 | `backupCount` | Current number of retained VolumeSnapshots |
-| `lastBackup.snapshotName` | Name of the VolumeSnapshot resource |
+| `lastBackup.snapshotName` | Name of the VolumeSnapshot resource (empty when backup failed before snapshot creation) |
 | `lastBackup.startedAt` | When the backup process started |
 | `lastBackup.completedAt` | When the backup completed |
 | `lastBackup.successful` | Whether the backup succeeded |
