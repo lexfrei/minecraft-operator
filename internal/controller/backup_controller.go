@@ -271,6 +271,7 @@ func (r *BackupReconciler) performBackup(
 		ServerName:              server.Name,
 		VolumeSnapshotClassName: snapshotClass,
 		Trigger:                 trigger,
+		Timestamp:               r.now(),
 		OwnerReferences: []metav1.OwnerReference{
 			*metav1.NewControllerRef(server, mcv1beta1.GroupVersion.WithKind("PaperMCServer")),
 		},
@@ -459,7 +460,7 @@ func (r *BackupReconciler) manageBackupCronSchedule(
 		r.cronTriggerMu.Lock()
 		r.cronTriggerTimes[serverKey] = time.Now()
 		r.cronTriggerMu.Unlock()
-		slog.InfoContext(ctx, "Backup cron triggered", "server", serverKey)
+		slog.InfoContext(context.Background(), "Backup cron triggered", "server", serverKey)
 	})
 
 	if err != nil {
@@ -500,7 +501,10 @@ func (r *BackupReconciler) removeBackupCronJob(serverKey string) {
 	defer r.cronEntriesMu.Unlock()
 
 	if entry, exists := r.cronEntries[serverKey]; exists {
-		r.cron.Remove(entry.ID)
+		if r.cron != nil {
+			r.cron.Remove(entry.ID)
+		}
+
 		delete(r.cronEntries, serverKey)
 	}
 }

@@ -648,6 +648,51 @@ func TestUpdateReconciler_BackupBeforeUpdateNilBackupReconciler(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestUpdateReconciler_BackupBeforeUpdateFailureAbortsUpdate(t *testing.T) {
+	scheme := newBackupTestScheme()
+
+	now := time.Now()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:      true,
+		BeforeUpdate: boolPtr(true),
+		Retention: mcv1beta1.BackupRetention{
+			MaxCount: 10,
+		},
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	mockRCON.ConnectError = fmt.Errorf("connection refused")
+
+	backupReconciler := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	updateReconciler := &UpdateReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		BackupReconciler: backupReconciler,
+	}
+
+	// Backup failure should abort the update
+	err := updateReconciler.backupBeforeUpdate(context.Background(), server)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to connect to RCON")
+}
+
 func TestBackupReconciler_ShouldBackupNow_NonNumericAnnotation(t *testing.T) {
 	now := time.Now()
 	reconciler := &BackupReconciler{
@@ -687,4 +732,42 @@ func TestBackupReconciler_ShouldBackupNow_StaleAnnotation(t *testing.T) {
 
 	// Annotation is 10 minutes old (max age is 5 min) — should return false
 	assert.False(t, reconciler.shouldBackupNow(context.Background(), server))
+}
+
+func TestBackupReconciler_ShouldBackupNow_FutureTimestamp(t *testing.T) {
+	now := time.Now()
+	reconciler := &BackupReconciler{
+		nowFunc: func() time.Time { return now },
+	}
+
+	futureTimestamp := now.Add(1 * time.Hour).Unix()
+	server := &mcv1beta1.PaperMCServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-server",
+			Namespace: "minecraft",
+			Annotations: map[string]string{
+				"mc.k8s.lex.la/backup-now": fmt.Sprintf("%d", futureTimestamp),
+			},
+		},
+	}
+
+	// Future timestamps are accepted — negative age is within max age window.
+	// This is acceptable for manual triggers since the user explicitly requested a backup.
+	assert.True(t, reconciler.shouldBackupNow(context.Background(), server))
+}
+
+func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {
+	reconciler := &BackupReconciler{
+		cronEntries: map[string]cronEntryInfo{
+			"minecraft/my-server": {ID: 1, Spec: "0 */6 * * *"},
+		},
+	}
+
+	// Should not panic when r.cron is nil
+	assert.NotPanics(t, func() {
+		reconciler.removeBackupCronJob("minecraft/my-server")
+	})
+
+	// Entry should still be cleaned up from the map
+	assert.Empty(t, reconciler.cronEntries)
 }
