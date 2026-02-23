@@ -110,8 +110,10 @@ type PaperMCServerReconciler struct {
 func (r *PaperMCServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	start := time.Now()
 
+	var skipMetrics bool
+
 	defer func() {
-		if r.Metrics != nil {
+		if r.Metrics != nil && !skipMetrics {
 			r.Metrics.RecordReconcile("papermcserver", retErr, time.Since(start))
 		}
 	}()
@@ -120,6 +122,7 @@ func (r *PaperMCServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	var server mcv1beta1.PaperMCServer
 	if err := r.Get(ctx, req.NamespacedName, &server); err != nil {
 		if apierrors.IsNotFound(err) {
+			skipMetrics = true
 			slog.InfoContext(ctx, "PaperMCServer resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}

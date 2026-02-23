@@ -73,8 +73,10 @@ type PluginReconciler struct {
 func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	start := time.Now()
 
+	var skipMetrics bool
+
 	defer func() {
-		if r.Metrics != nil {
+		if r.Metrics != nil && !skipMetrics {
 			r.Metrics.RecordReconcile("plugin", retErr, time.Since(start))
 		}
 	}()
@@ -83,6 +85,7 @@ func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	var plugin mcv1beta1.Plugin
 	if err := r.Get(ctx, req.NamespacedName, &plugin); err != nil {
 		if apierrors.IsNotFound(err) {
+			skipMetrics = true
 			slog.InfoContext(ctx, "Plugin resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}

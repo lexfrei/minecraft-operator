@@ -73,6 +73,21 @@ metrics:
     scrapeTimeout: ""
     # Additional labels for ServiceMonitor (e.g., for Prometheus selector matching)
     labels: {}
+    # Authentication configuration for the metrics endpoint.
+    # The operator's metrics endpoint requires bearer token authentication.
+    # Configure based on your Prometheus Operator version:
+    #
+    # Modern (Prometheus Operator >= 0.52):
+    #   endpointAuth:
+    #     authorization:
+    #       credentials:
+    #         name: prometheus-token-secret
+    #         key: token
+    #
+    # Legacy (still functional but deprecated):
+    #   endpointAuth:
+    #     bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    endpointAuth: {}
 
 # Health probe configuration
 health:

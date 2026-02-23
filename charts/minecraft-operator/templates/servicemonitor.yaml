@@ -21,8 +21,9 @@ spec:
     {{- if .Values.metrics.serviceMonitor.scrapeTimeout }}
     scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
     {{- end }}
-    authorization:
-      type: Bearer
+    {{- with .Values.metrics.serviceMonitor.endpointAuth }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   namespaceSelector:
     matchNames:
     - {{ .Release.Namespace }}

@@ -22,6 +22,13 @@ type Recorder interface {
 	RecordUpdate(success bool)
 }
 
+// Histogram bucket definitions tuned for each domain's latency profile.
+var (
+	reconcileBuckets = []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
+	pluginAPIBuckets = []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
+	solverBuckets    = []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1}
+)
+
 // PrometheusRecorder implements Recorder using Prometheus metrics.
 type PrometheusRecorder struct {
 	reconcileTotal       *prometheus.CounterVec
@@ -52,10 +59,10 @@ func NewPrometheusRecorder(reg prometheus.Registerer) *PrometheusRecorder {
 			Help: "Total number of failed reconciliation loops.",
 		}, []string{"controller"}),
 		reconcileDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name: "minecraft_operator_reconcile_duration_seconds",
-			Help: "Duration of reconciliation loops in seconds.",
+			Name:    "minecraft_operator_reconcile_duration_seconds",
+			Help:    "Duration of reconciliation loops in seconds.",
+			Buckets: reconcileBuckets,
 		}, []string{"controller"}),
-
 		pluginAPIRequestsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "minecraft_operator_plugin_api_requests_total",
 			Help: "Total number of plugin repository API requests.",
@@ -65,10 +72,10 @@ func NewPrometheusRecorder(reg prometheus.Registerer) *PrometheusRecorder {
 			Help: "Total number of failed plugin repository API requests.",
 		}, []string{"source"}),
 		pluginAPIDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name: "minecraft_operator_plugin_api_duration_seconds",
-			Help: "Duration of plugin repository API requests in seconds.",
+			Name:    "minecraft_operator_plugin_api_duration_seconds",
+			Help:    "Duration of plugin repository API requests in seconds.",
+			Buckets: pluginAPIBuckets,
 		}, []string{"source"}),
-
 		solverRunsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "minecraft_operator_solver_runs_total",
 			Help: "Total number of constraint solver invocations.",
@@ -78,10 +85,10 @@ func NewPrometheusRecorder(reg prometheus.Registerer) *PrometheusRecorder {
 			Help: "Total number of failed constraint solver invocations.",
 		}, []string{"type"}),
 		solverDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name: "minecraft_operator_solver_duration_seconds",
-			Help: "Duration of constraint solver runs in seconds.",
+			Name:    "minecraft_operator_solver_duration_seconds",
+			Help:    "Duration of constraint solver runs in seconds.",
+			Buckets: solverBuckets,
 		}, []string{"type"}),
-
 		updatesTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "minecraft_operator_updates_total",
 			Help: "Total number of server update attempts.",

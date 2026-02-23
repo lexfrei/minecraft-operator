@@ -83,3 +83,25 @@ tests:
       - contains:
           path: spec.namespaceSelector.matchNames
           content: NAMESPACE
+
+  - it: should not include auth config by default
+    set:
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - notExists:
+          path: spec.endpoints[0].authorization
+      - notExists:
+          path: spec.endpoints[0].bearerTokenFile
+
+  - it: should include authorization when endpointAuth is configured
+    set:
+      metrics.serviceMonitor.enabled: true
+      metrics.serviceMonitor.endpointAuth:
+        authorization:
+          credentials:
+            name: prometheus-token
+            key: token
+    asserts:
+      - equal:
+          path: spec.endpoints[0].authorization.credentials.name
+          value: prometheus-token

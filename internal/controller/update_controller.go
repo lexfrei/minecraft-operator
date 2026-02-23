@@ -95,8 +95,10 @@ type cronEntryInfo struct {
 func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	start := time.Now()
 
+	var skipMetrics bool
+
 	defer func() {
-		if r.Metrics != nil {
+		if r.Metrics != nil && !skipMetrics {
 			r.Metrics.RecordReconcile("update", retErr, time.Since(start))
 		}
 	}()
@@ -114,6 +116,7 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	var server mcv1beta1.PaperMCServer
 	if err := r.Get(ctx, req.NamespacedName, &server); err != nil {
 		if apierrors.IsNotFound(err) {
+			skipMetrics = true
 			// Resource deleted - remove cron job if exists
 			r.removeCronJob(req.String())
 			slog.InfoContext(ctx, "PaperMCServer resource not found, removed cron job if existed")

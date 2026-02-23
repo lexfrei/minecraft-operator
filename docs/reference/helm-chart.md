@@ -89,6 +89,7 @@ helm install minecraft-operator \
 | `metrics.serviceMonitor.interval` | Scrape interval (e.g., `30s`) | `""` |
 | `metrics.serviceMonitor.scrapeTimeout` | Scrape timeout (e.g., `10s`) | `""` |
 | `metrics.serviceMonitor.labels` | Additional labels for ServiceMonitor | `{}` |
+| `metrics.serviceMonitor.endpointAuth` | Endpoint auth config (e.g., `authorization` or `bearerTokenFile`) | `{}` |
 
 ### Health Probes
 
