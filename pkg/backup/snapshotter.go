@@ -63,11 +63,11 @@ func (s *VolumeSnapshotSnapshotter) CreateSnapshot(ctx context.Context, req Snap
 		now = time.Now()
 	}
 
-	name := fmt.Sprintf("%s-backup-%d", req.ServerName, now.Unix())
+	namePrefix := fmt.Sprintf("%s-backup-%d-", req.ServerName, now.Unix())
 
 	snapshot := &volumesnapshotv1.VolumeSnapshot{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:              name,
+			GenerateName:      namePrefix,
 			Namespace:         req.Namespace,
 			CreationTimestamp: metav1.NewTime(now),
 			Labels: map[string]string{
@@ -92,7 +92,7 @@ func (s *VolumeSnapshotSnapshotter) CreateSnapshot(ctx context.Context, req Snap
 		return "", errors.Wrap(err, "failed to create VolumeSnapshot")
 	}
 
-	return name, nil
+	return snapshot.Name, nil
 }
 
 // ListSnapshots returns all VolumeSnapshots managed by this operator for the given server.
