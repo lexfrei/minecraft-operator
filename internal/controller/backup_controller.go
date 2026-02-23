@@ -313,50 +313,21 @@ func (r *BackupReconciler) persistBackupStatus(
 	server.ResourceVersion = latestServer.ResourceVersion
 }
 
-// createBackupRCONClient creates an RCON client for backup hooks.
-func (r *BackupReconciler) createBackupRCONClient(
+// rconConnInfo holds the connection details for an RCON client.
+type rconConnInfo struct {
+	host     string
+	password string
+	port     int
+}
+
+// getRCONConnInfo retrieves RCON connection details from the pod and secret.
+func (r *BackupReconciler) getRCONConnInfo(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
-) (rcon.Client, error) {
-	// Use factory if provided (for testing)
-	if r.rconClientFactory != nil {
-		podName := server.Name + "-0"
-		namespace := server.Namespace
-
-		var pod corev1.Pod
-		if err := r.Get(ctx, client.ObjectKey{
-			Name:      podName,
-			Namespace: namespace,
-		}, &pod); err != nil {
-			return nil, errors.Wrap(err, "failed to get pod for RCON connection")
-		}
-
-		var secret corev1.Secret
-		if err := r.Get(ctx, client.ObjectKey{
-			Name:      server.Spec.RCON.PasswordSecret.Name,
-			Namespace: namespace,
-		}, &secret); err != nil {
-			return nil, errors.Wrap(err, "failed to get RCON password secret")
-		}
-
-		password := string(secret.Data[server.Spec.RCON.PasswordSecret.Key])
-		port := int(server.Spec.RCON.Port)
-
-		if port == 0 {
-			port = 25575
-		}
-
-		return r.rconClientFactory(pod.Status.PodIP, password, port)
-	}
-
-	// Production path
-	podName := server.Name + "-0"
-	namespace := server.Namespace
-
+) (*rconConnInfo, error) {
 	var pod corev1.Pod
 	if err := r.Get(ctx, client.ObjectKey{
-		Name:      podName,
-		Namespace: namespace,
+		Name: server.Name + "-0", Namespace: server.Namespace,
 	}, &pod); err != nil {
 		return nil, errors.Wrap(err, "failed to get pod for RCON connection")
 	}
@@ -367,8 +338,7 @@ func (r *BackupReconciler) createBackupRCONClient(
 
 	var secret corev1.Secret
 	if err := r.Get(ctx, client.ObjectKey{
-		Name:      server.Spec.RCON.PasswordSecret.Name,
-		Namespace: namespace,
+		Name: server.Spec.RCON.PasswordSecret.Name, Namespace: server.Namespace,
 	}, &secret); err != nil {
 		return nil, errors.Wrap(err, "failed to get RCON password secret")
 	}
@@ -376,16 +346,32 @@ func (r *BackupReconciler) createBackupRCONClient(
 	passwordBytes, exists := secret.Data[server.Spec.RCON.PasswordSecret.Key]
 	if !exists {
 		return nil, errors.Newf("key %s not found in secret %s",
-			server.Spec.RCON.PasswordSecret.Key,
-			server.Spec.RCON.PasswordSecret.Name)
+			server.Spec.RCON.PasswordSecret.Key, server.Spec.RCON.PasswordSecret.Name)
 	}
 
-	port := server.Spec.RCON.Port
+	port := int(server.Spec.RCON.Port)
 	if port == 0 {
 		port = 25575
 	}
 
-	rconClient, err := rcon.NewRCONClient(pod.Status.PodIP, int(port), string(passwordBytes))
+	return &rconConnInfo{host: pod.Status.PodIP, password: string(passwordBytes), port: port}, nil
+}
+
+// createBackupRCONClient creates an RCON client for backup hooks.
+func (r *BackupReconciler) createBackupRCONClient(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+) (rcon.Client, error) {
+	info, err := r.getRCONConnInfo(ctx, server)
+	if err != nil {
+		return nil, err
+	}
+
+	if r.rconClientFactory != nil {
+		return r.rconClientFactory(info.host, info.password, info.port)
+	}
+
+	rconClient, err := rcon.NewRCONClient(info.host, info.port, info.password)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create RCON client")
 	}

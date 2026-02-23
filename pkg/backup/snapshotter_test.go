@@ -21,7 +21,7 @@ func newTestScheme() *runtime.Scheme {
 	return s
 }
 
-func TestCreateSnapshot(t *testing.T) {
+func TestCreateSnapshot(t *testing.T) { //nolint:funlen
 	t.Run("creates VolumeSnapshot with correct fields", func(t *testing.T) {
 		scheme := newTestScheme()
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -108,7 +108,7 @@ func TestListSnapshots(t *testing.T) {
 					Namespace: "minecraft",
 					Labels: map[string]string{
 						backup.LabelServerName: "server-a",
-						backup.LabelManagedBy: "minecraft-operator",
+						backup.LabelManagedBy:  "minecraft-operator",
 					},
 				},
 			},
@@ -118,7 +118,7 @@ func TestListSnapshots(t *testing.T) {
 					Namespace: "minecraft",
 					Labels: map[string]string{
 						backup.LabelServerName: "server-b",
-						backup.LabelManagedBy: "minecraft-operator",
+						backup.LabelManagedBy:  "minecraft-operator",
 					},
 				},
 			},
@@ -150,7 +150,7 @@ func TestListSnapshots(t *testing.T) {
 	})
 }
 
-func TestDeleteOldSnapshots(t *testing.T) {
+func TestDeleteOldSnapshots(t *testing.T) { //nolint:funlen
 	t.Run("deletes oldest snapshots when count exceeds maxCount", func(t *testing.T) {
 		scheme := newTestScheme()
 
@@ -163,7 +163,7 @@ func TestDeleteOldSnapshots(t *testing.T) {
 					CreationTimestamp: metav1.NewTime(now.Add(-3 * time.Hour)),
 					Labels: map[string]string{
 						backup.LabelServerName: "my-server",
-						backup.LabelManagedBy: "minecraft-operator",
+						backup.LabelManagedBy:  "minecraft-operator",
 					},
 				},
 			},
@@ -174,7 +174,7 @@ func TestDeleteOldSnapshots(t *testing.T) {
 					CreationTimestamp: metav1.NewTime(now.Add(-2 * time.Hour)),
 					Labels: map[string]string{
 						backup.LabelServerName: "my-server",
-						backup.LabelManagedBy: "minecraft-operator",
+						backup.LabelManagedBy:  "minecraft-operator",
 					},
 				},
 			},
@@ -185,7 +185,7 @@ func TestDeleteOldSnapshots(t *testing.T) {
 					CreationTimestamp: metav1.NewTime(now.Add(-1 * time.Hour)),
 					Labels: map[string]string{
 						backup.LabelServerName: "my-server",
-						backup.LabelManagedBy: "minecraft-operator",
+						backup.LabelManagedBy:  "minecraft-operator",
 					},
 				},
 			},
@@ -223,7 +223,7 @@ func TestDeleteOldSnapshots(t *testing.T) {
 					Namespace: "minecraft",
 					Labels: map[string]string{
 						backup.LabelServerName: "my-server",
-						backup.LabelManagedBy: "minecraft-operator",
+						backup.LabelManagedBy:  "minecraft-operator",
 					},
 				},
 			},
