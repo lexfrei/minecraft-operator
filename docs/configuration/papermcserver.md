@@ -157,6 +157,38 @@ spec:
     loadBalancerIP: "192.168.1.100"
 ```
 
+### backup
+
+**Optional** — Configures VolumeSnapshot-based backups with RCON consistency hooks.
+
+| Field | Description | Default |
+| --- | --- | --- |
+| `enabled` | Enable backups | — |
+| `schedule` | Cron schedule for periodic backups | — |
+| `beforeUpdate` | Create backup before any server update | `true` |
+| `volumeSnapshotClassName` | VolumeSnapshotClass to use | cluster default |
+| `retention.maxCount` | Maximum snapshots to retain per server | `10` |
+
+```yaml
+spec:
+  backup:
+    enabled: true
+    schedule: "0 */6 * * *"        # Every 6 hours
+    beforeUpdate: true              # Backup before updates
+    volumeSnapshotClassName: csi-hostpath-snapclass
+    retention:
+      maxCount: 10
+```
+
+The operator uses RCON hooks (`save-all`, `save-off`, `save-on`) to ensure world data consistency before creating the VolumeSnapshot.
+
+**Manual trigger:**
+
+```bash
+kubectl annotate papermcserver my-server \
+  mc.k8s.lex.la/backup-now="$(date +%s)"
+```
+
 ### podTemplate
 
 **Required** — Template for the StatefulSet pod.
@@ -278,12 +310,37 @@ status:
         - "1.20.6"
 ```
 
+### backup (status)
+
+Observed backup state for the server.
+
+```yaml
+status:
+  backup:
+    backupCount: 5
+    lastBackup:
+      snapshotName: "survival-backup-1708742400"
+      startedAt: "2024-02-24T00:00:00Z"
+      completedAt: "2024-02-24T00:00:05Z"
+      successful: true
+      trigger: "scheduled"
+```
+
+| Field | Description |
+| --- | --- |
+| `backupCount` | Current number of retained VolumeSnapshots |
+| `lastBackup.snapshotName` | Name of the VolumeSnapshot resource |
+| `lastBackup.startedAt` | When the backup process started |
+| `lastBackup.completedAt` | When the backup completed |
+| `lastBackup.successful` | Whether the backup succeeded |
+| `lastBackup.trigger` | What triggered the backup (`scheduled`, `before-update`, `manual`) |
+
 ### conditions
 
 Standard Kubernetes conditions.
 
 | Type | Description |
-|------|-------------|
+| --- | --- |
 | `Ready` | Server reconciled successfully |
 | `StatefulSetReady` | StatefulSet has ready replicas |
 | `UpdateAvailable` | New Paper version/build available |
@@ -291,6 +348,7 @@ Standard Kubernetes conditions.
 | `Updating` | Update currently in progress |
 | `SolverRunning` | Constraint solver is executing |
 | `CronScheduleValid` | Maintenance window cron is valid |
+| `BackupCronValid` | Backup cron schedule is valid |
 
 ## Complete Example
 
