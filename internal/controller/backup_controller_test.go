@@ -98,6 +98,15 @@ func newRCONSecret() *corev1.Secret {
 	}
 }
 
+func newServerPVC() *corev1.PersistentVolumeClaim {
+	return &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "data-my-server-0",
+			Namespace: "minecraft",
+		},
+	}
+}
+
 func newServerPod() *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -192,7 +201,7 @@ func TestBackupReconciler_ManualBackupTrigger(t *testing.T) { //nolint:funlen
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -270,7 +279,7 @@ func TestBackupReconciler_RetentionCleanup(t *testing.T) { //nolint:funlen
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret(),
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC(),
 			&existingSnapshots[0], &existingSnapshots[1]).
 		WithStatusSubresource(server).
 		Build()
@@ -316,7 +325,7 @@ func TestBackupReconciler_ConnectFailurePersistsStatus(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -365,7 +374,7 @@ func TestBackupReconciler_CronTriggeredBackup(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -495,7 +504,7 @@ func TestBackupReconciler_PreSnapshotHookFailureStillSendsSaveOn(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -547,7 +556,7 @@ func TestUpdateReconciler_BackupBeforeUpdate(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, pod, secret).
+		WithObjects(server, pod, secret, newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -600,7 +609,7 @@ func TestUpdateReconciler_BackupBeforeUpdateNilDefaultsToTrue(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -717,7 +726,7 @@ func TestBackupReconciler_RCONDisabledCreatesSnapshotWithoutHooks(t *testing.T) 
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -766,7 +775,7 @@ func TestUpdateReconciler_BackupBeforeUpdateFailureAbortsUpdate(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -872,7 +881,7 @@ func TestBackupReconciler_ManualBackupConsumesPendingCronTrigger(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -940,7 +949,7 @@ func TestBackupReconciler_ScheduledBackupFailurePreservesTrigger(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -996,7 +1005,7 @@ func TestBackupReconciler_ScheduledBackupSuccessConsumesTrigger(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -1051,7 +1060,7 @@ func TestBackupReconciler_ManualBackupFailureRecordedInStatus(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithObjects(server, newServerPod(), newRCONSecret(), newServerPVC()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -1151,6 +1160,103 @@ func TestBackupReconciler_VolumeSnapshotCRDUnavailable(t *testing.T) {
 	assert.Equal(t, metav1.ConditionFalse, cond.Status)
 	assert.Equal(t, "VolumeSnapshotAPIUnavailable", cond.Reason)
 	assert.Contains(t, cond.Message, "snapshot.storage.k8s.io")
+}
+
+func TestBackupReconciler_BackupReadyRecoveryAfterCRDInstall(t *testing.T) {
+	scheme := newBackupTestScheme()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:  true,
+		Schedule: "0 */6 * * *",
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	// First reconcile: CRD is missing → BackupReady=False
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: &crdMissingSnapshotter{},
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	var updatedServer mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &updatedServer))
+	cond := meta.FindStatusCondition(updatedServer.Status.Conditions, "BackupReady")
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+
+	// Second reconcile: CRD is now installed → BackupReady should recover to True
+	r.Snapshotter = backup.NewSnapshotter(fakeClient)
+
+	_, err = r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &updatedServer))
+	cond = meta.FindStatusCondition(updatedServer.Status.Conditions, "BackupReady")
+	require.NotNil(t, cond, "BackupReady condition should still exist")
+	assert.Equal(t, metav1.ConditionTrue, cond.Status, "BackupReady should recover to True")
+}
+
+func TestBackupReconciler_PVCNotFoundClearError(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
+	})
+	// Disable RCON to simplify — focus on PVC check
+	server.Spec.RCON.Enabled = false
+	server.Annotations = map[string]string{
+		AnnotationBackupNow: fmt.Sprintf("%d", now.Unix()),
+	}
+
+	// Note: no PVC created in the fake client
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+	}
+
+	// Manual backup — error swallowed but status should reflect failure with clear message
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+
+	var updatedServer mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &updatedServer))
+
+	require.NotNil(t, updatedServer.Status.Backup)
+	require.NotNil(t, updatedServer.Status.Backup.LastBackup)
+	assert.False(t, updatedServer.Status.Backup.LastBackup.Successful)
 }
 
 func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {

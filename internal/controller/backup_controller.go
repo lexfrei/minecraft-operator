@@ -144,6 +144,22 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		return ctrl.Result{RequeueAfter: snapshotAPIRetryInterval}, nil
 	}
 
+	// Clear stale BackupReady=False condition after CRD becomes available
+	if cond := meta.FindStatusCondition(server.Status.Conditions, conditionTypeBackupReady); cond != nil &&
+		cond.Status == metav1.ConditionFalse {
+		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
+			Type:               conditionTypeBackupReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "VolumeSnapshotAPIAvailable",
+			ObservedGeneration: server.Generation,
+			Message:            "VolumeSnapshot API is available in the cluster.",
+		})
+
+		if updateErr := r.Status().Update(ctx, &server); updateErr != nil {
+			slog.ErrorContext(ctx, "Failed to update BackupReady condition", "error", updateErr)
+		}
+	}
+
 	// Check for manual backup trigger
 	backupNow := r.shouldBackupNow(ctx, &server)
 	if backupNow {
@@ -314,6 +330,25 @@ func (r *BackupReconciler) performBackup(
 	// The PaperMCServer controller always uses "data" as the volume claim template name,
 	// and we only snapshot the first replica (ordinal 0).
 	pvcName := fmt.Sprintf("data-%s-0", server.Name)
+
+	// Verify PVC exists before creating snapshot
+	var pvc corev1.PersistentVolumeClaim
+	if pvcErr := r.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: server.Namespace}, &pvc); pvcErr != nil {
+		r.persistBackupStatus(ctx, server, &mcv1beta1.BackupRecord{
+			StartedAt:  startedAt,
+			Successful: false,
+			Trigger:    trigger,
+		}, 0)
+
+		if apierrors.IsNotFound(pvcErr) {
+			return errors.Newf(
+				"PVC %s not found in namespace %s; ensure the StatefulSet has created its volume",
+				pvcName, server.Namespace)
+		}
+
+		return errors.Wrap(pvcErr, "failed to check PVC existence before backup")
+	}
+
 	snapshotClass := ""
 
 	if server.Spec.Backup != nil {
