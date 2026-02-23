@@ -4,7 +4,7 @@
 
 # CRDs management
 crds:
-  # Operator applies embedded CRDs at startup via server-side apply.
+  # -- Operator manages CRDs at startup via server-side apply.
   # Set to false to disable CRD management (e.g. if CRDs are managed externally).
   manage: true
 
@@ -14,7 +14,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/lexfrei/minecraft-operator
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
+  # -- Overrides the image tag whose default is the chart appVersion
   tag: ""
 
 imagePullSecrets: []
@@ -22,14 +22,14 @@ nameOverride: ""
 fullnameOverride: ""
 
 serviceAccount:
-  # Specifies whether a service account should be created
+  # -- Specifies whether a service account should be created
   create: true
-  # Automatically mount a ServiceAccount's API credentials?
+  # -- Automatically mount a ServiceAccount's API credentials
   automountServiceAccountToken: true
-  # Annotations to add to the service account
+  # -- Annotations to add to the service account
   annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
+  # -- The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template.
   name: ""
 
 podAnnotations: {}
@@ -65,16 +65,15 @@ metrics:
   enabled: true
   port: 8080
   serviceMonitor:
-    # Enable ServiceMonitor for Prometheus Operator auto-discovery
+    # -- Enable ServiceMonitor for Prometheus Operator auto-discovery
     enabled: false
-    # Scrape interval (e.g., "30s"). Uses Prometheus default if empty
+    # -- Scrape interval (e.g., "30s"). Uses Prometheus default if empty
     interval: ""
-    # Scrape timeout (e.g., "10s"). Uses Prometheus default if empty
+    # -- Scrape timeout (e.g., "10s"). Uses Prometheus default if empty
     scrapeTimeout: ""
-    # Additional labels for ServiceMonitor (e.g., for Prometheus selector matching)
+    # -- Additional labels for ServiceMonitor (e.g., for Prometheus selector matching)
     labels: {}
-    # Authentication configuration for the metrics endpoint.
-    # The operator's metrics endpoint requires bearer token authentication.
+    # -- Endpoint authentication configuration.
     # Configure based on your Prometheus Operator version:
     #
     # Modern (Prometheus Operator >= 0.52):
