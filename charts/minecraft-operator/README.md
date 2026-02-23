@@ -40,7 +40,7 @@ CRDs are embedded in the operator binary and applied automatically at startup vi
 ```bash
 helm install minecraft-operator \
   oci://ghcr.io/lexfrei/minecraft-operator \
-  --version 0.4.3 \
+  --version 0.0.0-dev \
   --namespace minecraft-operator-system \
   --create-namespace
 ```
@@ -50,7 +50,7 @@ helm install minecraft-operator \
 Charts are signed with cosign. Verify before installing:
 
 ```bash
-cosign verify ghcr.io/lexfrei/minecraft-operator:0.4.3 \
+cosign verify ghcr.io/lexfrei/minecraft-operator:0.0.0-dev \
   --certificate-identity-regexp="https://github.com/lexfrei/minecraft-operator" \
   --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
 ```
@@ -145,16 +145,21 @@ Open http://localhost:8082/ui
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
-| crds.manage | bool | `true` | Operator manages CRDs at startup via server-side apply |
+| crds.manage | bool | `true` | Operator manages CRDs at startup via server-side apply. Set to false to disable CRD management (e.g. if CRDs are managed externally). |
 | fullnameOverride | string | `""` |  |
 | health.port | int | `8081` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"ghcr.io/lexfrei/minecraft-operator"` |  |
-| image.tag | string | `""` |  |
+| image.tag | string | `""` | Overrides the image tag whose default is the chart appVersion |
 | imagePullSecrets | list | `[]` |  |
 | leaderElection.enabled | bool | `true` |  |
 | metrics.enabled | bool | `true` |  |
 | metrics.port | int | `8080` |  |
+| metrics.serviceMonitor.enabled | bool | `false` | Enable ServiceMonitor for Prometheus Operator auto-discovery |
+| metrics.serviceMonitor.endpointAuth | object | `{}` | Endpoint authentication configuration. Configure based on your Prometheus Operator version:  Modern (Prometheus Operator >= 0.52):   endpointAuth:     authorization:       credentials:         name: prometheus-token-secret         key: token  Legacy (still functional but deprecated):   endpointAuth:     bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token |
+| metrics.serviceMonitor.interval | string | `""` | Scrape interval (e.g., "30s"). Uses Prometheus default if empty |
+| metrics.serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor (e.g., for Prometheus selector matching) |
+| metrics.serviceMonitor.scrapeTimeout | string | `""` | Scrape timeout (e.g., "10s"). Uses Prometheus default if empty |
 | nameOverride | string | `""` |  |
 | nodeSelector | object | `{}` |  |
 | podAnnotations | object | `{}` |  |
@@ -170,10 +175,10 @@ Open http://localhost:8082/ui
 | securityContext.allowPrivilegeEscalation | bool | `false` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |
-| serviceAccount.annotations | object | `{}` |  |
-| serviceAccount.automount | bool | `true` |  |
-| serviceAccount.create | bool | `true` |  |
-| serviceAccount.name | string | `""` |  |
+| serviceAccount.annotations | object | `{}` | Annotations to add to the service account |
+| serviceAccount.automountServiceAccountToken | bool | `true` | Automatically mount a ServiceAccount's API credentials |
+| serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
+| serviceAccount.name | string | `""` | The name of the service account to use. If not set and create is true, a name is generated using the fullname template. |
 | tolerations | list | `[]` |  |
 | webui.enabled | bool | `true` |  |
 | webui.httproute.annotations | object | `{}` |  |
