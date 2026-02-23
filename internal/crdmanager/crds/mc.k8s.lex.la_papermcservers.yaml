@@ -39,6 +39,40 @@ spec:
           spec:
             description: spec defines the desired state of PaperMCServer
             properties:
+              backup:
+                description: Backup configures VolumeSnapshot-based backups.
+                properties:
+                  beforeUpdate:
+                    default: true
+                    description: BeforeUpdate creates a backup before any server update
+                      is applied.
+                    type: boolean
+                  enabled:
+                    description: Enabled determines if backups are enabled.
+                    type: boolean
+                  retention:
+                    description: Retention defines how many backup snapshots to keep.
+                    properties:
+                      maxCount:
+                        default: 10
+                        description: |-
+                          MaxCount is the maximum number of VolumeSnapshots to retain per server.
+                          Oldest snapshots are deleted first when the limit is exceeded.
+                        minimum: 1
+                        type: integer
+                    type: object
+                  schedule:
+                    description: Schedule is the cron schedule for periodic backups
+                      (e.g., "0 */6 * * *").
+                    type: string
+                  volumeSnapshotClassName:
+                    description: |-
+                      VolumeSnapshotClassName is the VolumeSnapshotClass to use for creating snapshots.
+                      If empty, the cluster default VolumeSnapshotClass is used.
+                    type: string
+                required:
+                - enabled
+                type: object
               build:
                 description: |-
                   Build specifies the target Paper build number (required for build-pin strategy, optional for pin).
@@ -8688,6 +8722,44 @@ spec:
                 - plugins
                 - releasedAt
                 - version
+                type: object
+              backup:
+                description: Backup represents the observed backup state.
+                properties:
+                  backupCount:
+                    description: BackupCount is the current number of retained VolumeSnapshots.
+                    type: integer
+                  lastBackup:
+                    description: LastBackup records the most recent backup attempt.
+                    properties:
+                      completedAt:
+                        description: CompletedAt is when the backup process completed.
+                        format: date-time
+                        type: string
+                      snapshotName:
+                        description: SnapshotName is the name of the VolumeSnapshot
+                          resource.
+                        type: string
+                      startedAt:
+                        description: StartedAt is when the backup process started.
+                        format: date-time
+                        type: string
+                      successful:
+                        description: Successful indicates if the backup completed
+                          successfully.
+                        type: boolean
+                      trigger:
+                        description: Trigger describes what triggered the backup (scheduled,
+                          pre-update, manual).
+                        type: string
+                    required:
+                    - snapshotName
+                    - startedAt
+                    - successful
+                    - trigger
+                    type: object
+                required:
+                - backupCount
                 type: object
               conditions:
                 description: Conditions represent the current state of the PaperMCServer
