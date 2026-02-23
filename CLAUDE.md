@@ -17,11 +17,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Core Components
 
-Three main controllers work together:
+Four main controllers work together:
 
 1. **Plugin Controller**: Watches Plugin CRDs, fetches metadata from plugin repositories (Hangar/Modrinth), runs constraint solver to find best compatible version for ALL matched servers, updates Plugin.status
 2. **PaperMCServer Controller**: Watches PaperMCServer CRDs, finds all matched Plugins via selectors, ensures StatefulSet exists, runs solver for Paper version upgrades
 3. **Update Controller**: Triggers on cron schedule, performs graceful RCON shutdown, downloads JARs to `plugins/update/`, deletes pod for StatefulSet recreation
+4. **Backup Controller**: Manages VolumeSnapshot-based backups with RCON hooks (`save-all`/`save-off`/`save-on`) for data consistency. Supports scheduled (cron), pre-update, and manual (annotation) triggers with configurable retention
 
 ### Critical Relationships
 

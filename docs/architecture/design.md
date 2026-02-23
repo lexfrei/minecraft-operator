@@ -16,7 +16,7 @@ This document covers the system architecture and design decisions of Minecraft O
 ## Non-Goals
 
 - **High Availability** — 5-10 minute downtime during updates is acceptable
-- World backups (separate tooling)
+- Full backup/restore management (operator creates VolumeSnapshots but does not handle restore)
 - Update rollbacks (world format changes are destructive)
 - Performance monitoring (TPS, lag)
 - Horizontal scaling
