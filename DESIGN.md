@@ -1042,27 +1042,46 @@ spec:
 
 ### Metrics (Prometheus)
 
-**Plugin metrics:**
+The operator exposes custom metrics at `/metrics` via controller-runtime's metrics server.
+Metrics are registered with `sigs.k8s.io/controller-runtime/pkg/metrics.Registry`.
+
+**Reconciliation metrics:**
 
 ```text
-minecraft_operator_plugin_reconcile_duration_seconds{plugin="essentialsx"}
-minecraft_operator_plugin_matched_servers_total{plugin="essentialsx"}
-minecraft_operator_plugin_resolved_version_info{plugin="essentialsx", version="2.20.1"}
-minecraft_operator_plugin_repository_status{plugin="essentialsx", status="available"}
-minecraft_operator_plugin_api_fetch_errors_total{plugin="essentialsx", source="hangar"}
+minecraft_operator_reconcile_total{controller="plugin|papermcserver|update"}
+minecraft_operator_reconcile_errors_total{controller="plugin|papermcserver|update"}
+minecraft_operator_reconcile_duration_seconds{controller="plugin|papermcserver|update"}
 ```
 
-**PaperMCServer metrics:**
+**Plugin API metrics:**
 
 ```text
-minecraft_operator_server_reconcile_duration_seconds{server="survival-server"}
-minecraft_operator_server_solver_duration_seconds{server="survival-server"}
-minecraft_operator_server_update_success_total{server="survival-server"}
-minecraft_operator_server_update_failure_total{server="survival-server"}
-minecraft_operator_server_paper_version_info{server="survival-server", version="1.21.0"}
-minecraft_operator_server_plugins_total{server="survival-server"}
-minecraft_operator_server_rcon_connection_status{server="survival-server"}
+minecraft_operator_plugin_api_requests_total{source="hangar"}
+minecraft_operator_plugin_api_errors_total{source="hangar"}
+minecraft_operator_plugin_api_duration_seconds{source="hangar"}
 ```
+
+**Solver metrics:**
+
+```text
+minecraft_operator_solver_runs_total{type="plugin_version|paper_version"}
+minecraft_operator_solver_duration_seconds{type="plugin_version|paper_version"}
+```
+
+**Update metrics:**
+
+```text
+minecraft_operator_updates_total{result="success|failure"}
+```
+
+A Helm-managed `ServiceMonitor` is available for Prometheus Operator auto-discovery
+(disabled by default, enable via `metrics.serviceMonitor.enabled`).
+
+**Future metrics (not yet implemented):**
+
+- `minecraft_operator_pending_updates` (gauge) — pending update count
+- `minecraft_operator_webui_requests_total` — Web UI HTTP requests
+- `minecraft_operator_webui_sse_connections_total` — SSE live connections
 
 ### Events (K8s Events)
 

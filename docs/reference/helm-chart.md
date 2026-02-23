@@ -85,6 +85,10 @@ helm install minecraft-operator \
 |-------|-------------|---------|
 | `metrics.enabled` | Enable metrics | `true` |
 | `metrics.port` | Metrics port | `8080` |
+| `metrics.serviceMonitor.enabled` | Create ServiceMonitor for Prometheus Operator | `false` |
+| `metrics.serviceMonitor.interval` | Scrape interval (e.g., `30s`) | `""` |
+| `metrics.serviceMonitor.scrapeTimeout` | Scrape timeout (e.g., `10s`) | `""` |
+| `metrics.serviceMonitor.labels` | Additional labels for ServiceMonitor | `{}` |
 
 ### Health Probes
 

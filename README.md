@@ -138,9 +138,23 @@ leaderElection:
 metrics:
   enabled: true         # Enable Prometheus metrics (default: true)
   port: 8080
+  serviceMonitor:
+    enabled: false      # Enable ServiceMonitor for Prometheus Operator
 ```
 
 See [charts/minecraft-operator/values.yaml](charts/minecraft-operator/values.yaml) for all options.
+
+## Monitoring
+
+The operator exposes Prometheus metrics at `/metrics` (port 8080 by default):
+
+- **Reconciliation**: duration, total count, and error count per controller
+- **Plugin API**: request count, error count, and latency per source
+- **Solver**: invocation count and duration per solver type
+- **Updates**: success/failure count per server update
+
+Enable `metrics.serviceMonitor.enabled` in Helm values for automatic
+Prometheus Operator discovery.
 
 ## Web UI
 
