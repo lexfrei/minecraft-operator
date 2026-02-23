@@ -459,30 +459,13 @@ func (r *BackupReconciler) manageBackupCronSchedule(
 	if err != nil {
 		slog.WarnContext(ctx, "Invalid backup cron expression",
 			"error", err, "cronSpec", cronSpec)
-
-		condition := metav1.Condition{
-			Type:               conditionTypeBackupCronValid,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: server.Generation,
-			LastTransitionTime: metav1.Now(),
-			Reason:             reasonBackupCronInvalid,
-			Message:            err.Error(),
-		}
-		meta.SetStatusCondition(&server.Status.Conditions, condition)
+		setBackupCronCondition(server, metav1.ConditionFalse, reasonBackupCronInvalid, err.Error())
 
 		return false
 	}
 
-	// Valid cron
-	condition := metav1.Condition{
-		Type:               conditionTypeBackupCronValid,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: server.Generation,
-		LastTransitionTime: metav1.Now(),
-		Reason:             reasonBackupCronValid,
-		Message:            "Backup cron schedule configured: " + cronSpec,
-	}
-	meta.SetStatusCondition(&server.Status.Conditions, condition)
+	setBackupCronCondition(server, metav1.ConditionTrue, reasonBackupCronValid,
+		"Backup cron schedule configured: "+cronSpec)
 
 	r.cronEntriesMu.Lock()
 	r.cronEntries[serverKey] = cronEntryInfo{ID: entryID, Spec: cronSpec}
@@ -491,6 +474,18 @@ func (r *BackupReconciler) manageBackupCronSchedule(
 	slog.InfoContext(ctx, "Added backup cron job", "server", serverKey, "spec", cronSpec)
 
 	return true
+}
+
+// setBackupCronCondition sets the BackupCronValid condition on the server.
+func setBackupCronCondition(server *mcv1beta1.PaperMCServer, status metav1.ConditionStatus, reason, message string) {
+	meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
+		Type:               conditionTypeBackupCronValid,
+		Status:             status,
+		ObservedGeneration: server.Generation,
+		LastTransitionTime: metav1.Now(),
+		Reason:             reason,
+		Message:            message,
+	})
 }
 
 // removeBackupCronJob removes the backup cron job for a server.

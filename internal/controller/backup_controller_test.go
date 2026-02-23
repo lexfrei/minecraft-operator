@@ -83,11 +83,11 @@ func newTestServer(backupSpec *mcv1beta1.BackupSpec) *mcv1beta1.PaperMCServer {
 	}
 }
 
-func newRCONSecret(name, namespace string) *corev1.Secret {
+func newRCONSecret() *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name + "-rcon",
-			Namespace: namespace,
+			Name:      "my-server-rcon",
+			Namespace: "minecraft",
 		},
 		Data: map[string][]byte{
 			"password": []byte("test-password"),
@@ -95,11 +95,11 @@ func newRCONSecret(name, namespace string) *corev1.Secret {
 	}
 }
 
-func newServerPod(name, namespace string) *corev1.Pod {
+func newServerPod() *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name + "-0",
-			Namespace: namespace,
+			Name:      "my-server-0",
+			Namespace: "minecraft",
 		},
 		Status: corev1.PodStatus{
 			PodIP: "10.0.0.1",
@@ -189,7 +189,7 @@ func TestBackupReconciler_ManualBackupTrigger(t *testing.T) { //nolint:funlen
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod("my-server", "minecraft"), newRCONSecret("my-server", "minecraft")).
+		WithObjects(server, newServerPod(), newRCONSecret()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -267,7 +267,7 @@ func TestBackupReconciler_RetentionCleanup(t *testing.T) { //nolint:funlen
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod("my-server", "minecraft"), newRCONSecret("my-server", "minecraft"),
+		WithObjects(server, newServerPod(), newRCONSecret(),
 			&existingSnapshots[0], &existingSnapshots[1]).
 		WithStatusSubresource(server).
 		Build()
@@ -313,7 +313,7 @@ func TestBackupReconciler_ConnectFailurePersistsStatus(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod("my-server", "minecraft"), newRCONSecret("my-server", "minecraft")).
+		WithObjects(server, newServerPod(), newRCONSecret()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -360,7 +360,7 @@ func TestBackupReconciler_CronTriggeredBackup(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(server, newServerPod("my-server", "minecraft"), newRCONSecret("my-server", "minecraft")).
+		WithObjects(server, newServerPod(), newRCONSecret()).
 		WithStatusSubresource(server).
 		Build()
 
@@ -485,8 +485,8 @@ func TestUpdateReconciler_BackupBeforeUpdate(t *testing.T) {
 		},
 	})
 
-	pod := newServerPod("my-server", "minecraft")
-	secret := newRCONSecret("my-server", "minecraft")
+	pod := newServerPod()
+	secret := newRCONSecret()
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
