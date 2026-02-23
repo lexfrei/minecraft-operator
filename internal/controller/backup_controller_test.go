@@ -648,6 +648,59 @@ func TestUpdateReconciler_BackupBeforeUpdateNilBackupReconciler(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestBackupReconciler_RCONDisabledCreatesSnapshotWithoutHooks(t *testing.T) {
+	scheme := newBackupTestScheme()
+
+	now := time.Now()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled: true,
+		Retention: mcv1beta1.BackupRetention{
+			MaxCount: 10,
+		},
+	})
+
+	server.Spec.RCON.Enabled = false
+	server.Annotations = map[string]string{
+		"mc.k8s.lex.la/backup-now": fmt.Sprintf("%d", now.Unix()),
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	reconciler := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+
+	// Verify snapshot was created
+	snapshots, listErr := backup.NewSnapshotter(fakeClient).ListSnapshots(
+		context.Background(), "minecraft", "my-server")
+	require.NoError(t, listErr)
+	assert.Len(t, snapshots, 1)
+
+	// Verify NO RCON commands were sent (RCON disabled)
+	sentCmds := mockRCON.GetSentCommands()
+	assert.Empty(t, sentCmds, "No RCON commands should be sent when RCON is disabled")
+}
+
 func TestUpdateReconciler_BackupBeforeUpdateFailureAbortsUpdate(t *testing.T) {
 	scheme := newBackupTestScheme()
 
@@ -751,9 +804,8 @@ func TestBackupReconciler_ShouldBackupNow_FutureTimestamp(t *testing.T) {
 		},
 	}
 
-	// Future timestamps are accepted — negative age is within max age window.
-	// This is acceptable for manual triggers since the user explicitly requested a backup.
-	assert.True(t, reconciler.shouldBackupNow(context.Background(), server))
+	// Future timestamps (>5min ahead) are rejected to guard against typos
+	assert.False(t, reconciler.shouldBackupNow(context.Background(), server))
 }
 
 func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {

@@ -75,6 +75,9 @@ type BackupReconciler struct {
 	// Track cron trigger times per server for scheduled backups
 	cronTriggerMu    sync.RWMutex
 	cronTriggerTimes map[string]time.Time
+
+	// initOnce ensures maps are initialized exactly once.
+	initOnce sync.Once
 }
 
 //+kubebuilder:rbac:groups=snapshot.storage.k8s.io,resources=volumesnapshots,verbs=get;list;watch;create;delete
@@ -85,6 +88,7 @@ type BackupReconciler struct {
 //
 //nolint:funlen,cyclop // Complex backup orchestration logic
 func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	r.initOnce.Do(r.initMaps)
 	start := time.Now()
 
 	var skipMetrics bool
@@ -94,23 +98,6 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			r.Metrics.RecordReconcile("backup", nil, time.Since(start))
 		}
 	}()
-
-	// Initialize maps if nil
-	if r.cronEntries == nil {
-		r.cronEntriesMu.Lock()
-		if r.cronEntries == nil {
-			r.cronEntries = make(map[string]cronEntryInfo)
-		}
-		r.cronEntriesMu.Unlock()
-	}
-
-	if r.cronTriggerTimes == nil {
-		r.cronTriggerMu.Lock()
-		if r.cronTriggerTimes == nil {
-			r.cronTriggerTimes = make(map[string]time.Time)
-		}
-		r.cronTriggerMu.Unlock()
-	}
 
 	// Fetch the PaperMCServer resource
 	var server mcv1beta1.PaperMCServer
@@ -559,8 +546,8 @@ func (r *BackupReconciler) shouldBackupNow(ctx context.Context, server *mcv1beta
 	annotationTime := time.Unix(ts, 0)
 	age := r.now().Sub(annotationTime)
 
-	if age > backupNowMaxAge {
-		slog.InfoContext(ctx, "Ignoring stale backup-now annotation",
+	if age > backupNowMaxAge || age < -backupNowMaxAge {
+		slog.InfoContext(ctx, "Ignoring stale or future backup-now annotation",
 			"age", age, "maxAge", backupNowMaxAge, "server", server.Name)
 
 		return false
@@ -582,9 +569,10 @@ func (r *BackupReconciler) removeBackupNowAnnotation(
 		return errors.Wrap(err, "failed to get server for annotation removal")
 	}
 
+	patch := client.MergeFrom(currentServer.DeepCopy())
 	delete(currentServer.Annotations, AnnotationBackupNow)
 
-	if err := r.Update(ctx, &currentServer); err != nil {
+	if err := r.Patch(ctx, &currentServer, patch); err != nil {
 		return errors.Wrap(err, "failed to remove backup-now annotation")
 	}
 
@@ -609,11 +597,20 @@ func (r *BackupReconciler) SetCron(scheduler mccron.Scheduler) {
 	r.cron = scheduler
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *BackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
+// initMaps initializes internal maps. Called via sync.Once.
+func (r *BackupReconciler) initMaps() {
 	if r.cronEntries == nil {
 		r.cronEntries = make(map[string]cronEntryInfo)
 	}
+
+	if r.cronTriggerTimes == nil {
+		r.cronTriggerTimes = make(map[string]time.Time)
+	}
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *BackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.initMaps()
 
 	if r.cron != nil {
 		r.cron.Start()
