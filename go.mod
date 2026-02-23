@@ -8,6 +8,7 @@ require (
 	github.com/cockroachdb/errors v1.12.0
 	github.com/go-logr/logr v1.4.3
 	github.com/gorcon/rcon v1.4.0
+	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.4.0
 	github.com/lexfrei/go-hangar v0.0.0-20251031132727-083bf84be6ba
 	github.com/lexfrei/goPaperMC v0.0.3
 	github.com/oapi-codegen/runtime v1.1.2
@@ -36,7 +37,6 @@ require (
 	github.com/cockroachdb/redact v1.1.6 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
-	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
