@@ -52,12 +52,14 @@ func NewSnapshotter(c client.Client) *VolumeSnapshotSnapshotter {
 
 // CreateSnapshot creates a VolumeSnapshot from the specified PVC.
 func (s *VolumeSnapshotSnapshotter) CreateSnapshot(ctx context.Context, req SnapshotRequest) (string, error) {
-	name := fmt.Sprintf("%s-backup-%d", req.ServerName, time.Now().Unix())
+	now := time.Now()
+	name := fmt.Sprintf("%s-backup-%d", req.ServerName, now.Unix())
 
 	snapshot := &volumesnapshotv1.VolumeSnapshot{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: req.Namespace,
+			Name:              name,
+			Namespace:         req.Namespace,
+			CreationTimestamp: metav1.NewTime(now),
 			Labels: map[string]string{
 				LabelServerName: req.ServerName,
 				LabelTrigger:    req.Trigger,
