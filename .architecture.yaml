@@ -64,6 +64,11 @@ technical_stack:
       version: "v1.3.5"
       purpose: "RCON protocol implementation for graceful server shutdown"
 
+    external-snapshotter:
+      package: "github.com/kubernetes-csi/external-snapshotter/client/v8"
+      version: "v8.4.0"
+      purpose: "VolumeSnapshot API types for backup functionality"
+
     errors:
       package: "github.com/cockroachdb/errors"
       version: "v1.11.3"
@@ -183,6 +188,7 @@ structure:
       - "internal/controller/plugin_controller.go - Plugin reconciliation"
       - "internal/controller/papermcserver_controller.go - PaperMCServer reconciliation"
       - "internal/controller/update_controller.go - Maintenance window updates"
+      - "internal/controller/backup_controller.go - VolumeSnapshot backup scheduling and execution"
 
     pkg:
       - "pkg/solver/ - Constraint solver implementation"
@@ -197,6 +203,9 @@ structure:
       - "pkg/registry/ - Docker Hub Registry API client"
       - "pkg/registry/client.go - Docker Hub tag listing and verification"
       - "pkg/registry/types.go - Docker Hub API response types"
+      - "pkg/backup/ - VolumeSnapshot backup functionality"
+      - "pkg/backup/snapshotter.go - VolumeSnapshot creation and retention"
+      - "pkg/backup/hooks.go - RCON pre/post snapshot hooks"
       - "pkg/rcon/ - RCON integration"
       - "pkg/rcon/client.go - RCON client wrapper"
       - "pkg/selector/ - Label selector matching"
@@ -1218,7 +1227,6 @@ phases:
     features:
       - "Multi-cluster federation"
       - "GitOps integration (Flux/ArgoCD)"
-      - "Backup/restore integration"
       - "Advanced scheduling (blue-green)"
       - "Plugin dependency graph visualization"
 

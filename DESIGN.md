@@ -14,7 +14,6 @@ Minecraft Operator is a Kubernetes operator for managing PaperMC servers with a 
 ### Non-Goals (Out of Scope)
 
 - **High Availability**: This is NOT a HA system. 5-10 minute downtime during updates is normal for Minecraft servers. We do not promise "five nines" (99.999% uptime)
-- World backups (this is a task for separate tools)
 - Update rollbacks (world format updates are destructive)
 - Performance monitoring (TPS, lag)
 - Horizontal scaling
@@ -62,6 +61,15 @@ Minecraft Operator is a Kubernetes operator for managing PaperMC servers with a 
 │  │   - Graceful shutdown via RCON           │   │
 │  │   - Update JARs                          │   │
 │  │   - Restart pod                          │   │
+│  └─────────────────────────────────────────┘   │
+│                                                   │
+│  ┌─────────────────────────────────────────┐   │
+│  │   Backup Controller                      │   │
+│  │   - VolumeSnapshot-based backups         │   │
+│  │   - RCON save hooks (consistency)        │   │
+│  │   - Cron scheduling + manual trigger     │   │
+│  │   - Retention policy (cleanup old snaps) │   │
+│  │   - Pre-update backups (via Update Ctrl) │   │
 │  └─────────────────────────────────────────┘   │
 └────────────────┬────────────┬───────────────────┘
                  │            │
@@ -848,11 +856,13 @@ minecraft-operator/
 │   │   ├── constants.go              # Shared constants (strategies, finalizers, annotations)
 │   │   ├── plugin_controller.go      # Reconciliation for Plugin
 │   │   ├── papermcserver_controller.go # Reconciliation for PaperMCServer
-│   │   └── update_controller.go      # Maintenance window updates
+│   │   ├── update_controller.go      # Maintenance window updates
+│   │   └── backup_controller.go      # VolumeSnapshot backup scheduling and execution
 │   └── crdmanager/                   # CRD lifecycle management
 │       └── crds/                     # Generated CRDs (controller-gen output, embedded via Go embed.FS)
 ├── pkg/
 │   ├── api/                          # API utilities
+│   ├── backup/                       # VolumeSnapshot snapshotter and RCON hooks
 │   ├── cron/                         # Cron scheduler abstraction
 │   ├── paper/                        # Paper API client for versions
 │   ├── plugins/
@@ -1150,6 +1160,14 @@ rules:
   resources: ["secrets"]
   verbs: ["get", "list", "watch"]
 
+# VolumeSnapshot management (backups)
+- apiGroups: ["snapshot.storage.k8s.io"]
+  resources: ["volumesnapshots"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: ["snapshot.storage.k8s.io"]
+  resources: ["volumesnapshotclasses"]
+  verbs: ["get", "list", "watch"]
+
 # Events
 - apiGroups: [""]
   resources: ["events"]
@@ -1198,7 +1216,6 @@ rules:
 
 - Multi-cluster management (federation)
 - GitOps integration (Flux/ArgoCD support)
-- Backup/restore integration for world data
 - Advanced scheduling (blue-green updates, per-server maintenance windows)
 - Plugin dependency graph visualization
 
@@ -1305,6 +1322,15 @@ As of 2026-02, all core components described in the design are fully implemented
   - Plugin deletion (PendingDeletion cleanup)
   - Update history tracking in server status
 
+- ✅ **Backup Controller**: Complete
+  - VolumeSnapshot-based backups with RCON save hooks
+  - Cron-scheduled and manual (annotation-triggered) backups
+  - RCON pre-snapshot hooks (save-all, save-off) for data consistency
+  - RCON post-snapshot hooks (save-on) to resume auto-save
+  - Retention policy with configurable max snapshot count
+  - Pre-update backups integrated with Update Controller
+  - Backup status tracking in PaperMCServer status
+
 - ✅ **Cross-Resource Triggers**: Fully implemented
   - Plugin changes trigger PaperMCServer reconciliation
   - PaperMCServer label changes trigger Plugin reconciliation
@@ -1317,6 +1343,7 @@ As of 2026-02, all core components described in the design are fully implemented
   - `pkg/registry/` - Docker registry API client
   - `pkg/selector/` - Label selector matching
   - `pkg/version/` - Minecraft version comparison
+  - `pkg/backup/` - VolumeSnapshot snapshotter and RCON hooks
   - `pkg/cron/` - Cron scheduler abstraction
   - `pkg/webui/` - Web UI for server status
 
