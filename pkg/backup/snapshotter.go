@@ -32,6 +32,9 @@ type SnapshotRequest struct {
 	VolumeSnapshotClassName string
 	Trigger                 string
 
+	// Timestamp for the snapshot name. If zero, time.Now() is used.
+	Timestamp time.Time
+
 	// OwnerReferences to set on the VolumeSnapshot for cascade deletion.
 	OwnerReferences []metav1.OwnerReference
 }
@@ -55,7 +58,11 @@ func NewSnapshotter(c client.Client) *VolumeSnapshotSnapshotter {
 
 // CreateSnapshot creates a VolumeSnapshot from the specified PVC.
 func (s *VolumeSnapshotSnapshotter) CreateSnapshot(ctx context.Context, req SnapshotRequest) (string, error) {
-	now := time.Now()
+	now := req.Timestamp
+	if now.IsZero() {
+		now = time.Now()
+	}
+
 	name := fmt.Sprintf("%s-backup-%d", req.ServerName, now.Unix())
 
 	snapshot := &volumesnapshotv1.VolumeSnapshot{

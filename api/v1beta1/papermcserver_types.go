@@ -133,7 +133,9 @@ type BackupStatus struct {
 // BackupRecord records information about a single backup.
 type BackupRecord struct {
 	// SnapshotName is the name of the VolumeSnapshot resource.
-	SnapshotName string `json:"snapshotName"`
+	// Empty when the backup failed before snapshot creation.
+	// +optional
+	SnapshotName string `json:"snapshotName,omitempty"`
 
 	// StartedAt is when the backup process started.
 	StartedAt metav1.Time `json:"startedAt"`

@@ -8737,8 +8737,9 @@ spec:
                         format: date-time
                         type: string
                       snapshotName:
-                        description: SnapshotName is the name of the VolumeSnapshot
-                          resource.
+                        description: |-
+                          SnapshotName is the name of the VolumeSnapshot resource.
+                          Empty when the backup failed before snapshot creation.
                         type: string
                       startedAt:
                         description: StartedAt is when the backup process started.
@@ -8753,7 +8754,6 @@ spec:
                           before-update, manual).
                         type: string
                     required:
-                    - snapshotName
                     - startedAt
                     - successful
                     - trigger
