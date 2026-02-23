@@ -379,3 +379,125 @@ func TestBackupReconciler_ServerNotFound(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ctrl.Result{}, result)
 }
+
+func TestUpdateReconciler_BackupBeforeUpdate(t *testing.T) {
+	scheme := newBackupTestScheme()
+
+	now := time.Now()
+	server := newTestServer("my-server", "minecraft", &mcv1beta1.BackupSpec{
+		Enabled:      true,
+		BeforeUpdate: true,
+		Retention: mcv1beta1.BackupRetention{
+			MaxCount: 10,
+		},
+	})
+
+	pod := newServerPod("my-server", "minecraft")
+	secret := newRCONSecret("my-server", "minecraft")
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, pod, secret).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	backupReconciler := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	updateReconciler := &UpdateReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		BackupReconciler: backupReconciler,
+	}
+
+	// Should perform backup before update
+	err := updateReconciler.backupBeforeUpdate(context.Background(), server)
+	require.NoError(t, err)
+
+	// Verify RCON commands were sent (save-all, save-off, save-on)
+	sentCmds := mockRCON.GetSentCommands()
+	assert.Contains(t, sentCmds, "save-all")
+	assert.Contains(t, sentCmds, "save-off")
+	assert.Contains(t, sentCmds, "save-on")
+
+	// Verify VolumeSnapshot was created with "before-update" trigger
+	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
+		context.Background(), "minecraft", "my-server")
+	require.NoError(t, err)
+	assert.Len(t, snapshots, 1)
+	assert.Equal(t, "before-update", snapshots[0].Labels[backup.LabelTrigger])
+}
+
+func TestUpdateReconciler_BackupBeforeUpdateDisabled(t *testing.T) {
+	scheme := newBackupTestScheme()
+
+	server := newTestServer("my-server", "minecraft", &mcv1beta1.BackupSpec{
+		Enabled:      true,
+		BeforeUpdate: false,
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	backupReconciler := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+	}
+
+	updateReconciler := &UpdateReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		BackupReconciler: backupReconciler,
+	}
+
+	// Should skip backup when beforeUpdate=false
+	err := updateReconciler.backupBeforeUpdate(context.Background(), server)
+	require.NoError(t, err)
+
+	// Verify no snapshots were created
+	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
+		context.Background(), "minecraft", "my-server")
+	require.NoError(t, err)
+	assert.Len(t, snapshots, 0)
+}
+
+func TestUpdateReconciler_BackupBeforeUpdateNilBackupReconciler(t *testing.T) {
+	scheme := newBackupTestScheme()
+
+	server := newTestServer("my-server", "minecraft", &mcv1beta1.BackupSpec{
+		Enabled:      true,
+		BeforeUpdate: true,
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	updateReconciler := &UpdateReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		// No BackupReconciler set
+	}
+
+	// Should not error when BackupReconciler is nil
+	err := updateReconciler.backupBeforeUpdate(context.Background(), server)
+	require.NoError(t, err)
+}

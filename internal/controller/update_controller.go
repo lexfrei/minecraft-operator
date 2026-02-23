@@ -59,12 +59,13 @@ const (
 // UpdateReconciler reconciles PaperMCServer resources for scheduled updates.
 type UpdateReconciler struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	PaperClient  PaperAPI
-	PluginClient plugins.PluginClient
-	PodExecutor  PodExecutor
-	Metrics      metrics.Recorder
-	cron         mccron.Scheduler
+	Scheme           *runtime.Scheme
+	PaperClient      PaperAPI
+	PluginClient     plugins.PluginClient
+	PodExecutor      PodExecutor
+	Metrics          metrics.Recorder
+	BackupReconciler *BackupReconciler
+	cron             mccron.Scheduler
 
 	// nowFunc returns current time; override in tests for deterministic behavior.
 	nowFunc func() time.Time
@@ -711,11 +712,36 @@ func (r *UpdateReconciler) createRCONClient(
 }
 
 // performPluginOnlyUpdate handles updates when only plugins changed (Paper version unchanged).
+// backupBeforeUpdate creates a VolumeSnapshot backup before applying updates.
+// Silently skips if BackupReconciler is nil, backup is not enabled, or beforeUpdate is false.
+func (r *UpdateReconciler) backupBeforeUpdate(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+) error {
+	if r.BackupReconciler == nil {
+		return nil
+	}
+
+	if server.Spec.Backup == nil || !server.Spec.Backup.Enabled || !server.Spec.Backup.BeforeUpdate {
+		return nil
+	}
+
+	slog.InfoContext(ctx, "Creating pre-update backup", "server", server.Name)
+
+	return r.BackupReconciler.PerformBackup(ctx, server, "before-update")
+}
+
 func (r *UpdateReconciler) performPluginOnlyUpdate(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
 ) error {
 	slog.InfoContext(ctx, "Starting plugin-only update", "server", server.Name)
+
+	// Step 0: Pre-update backup (if enabled)
+	if err := r.backupBeforeUpdate(ctx, server); err != nil {
+		slog.ErrorContext(ctx, "Pre-update backup failed, continuing with update",
+			"error", err, "server", server.Name)
+	}
 
 	// Step 1: Delete plugins marked for deletion (PendingDeletion=true)
 	if err := r.deleteMarkedPlugins(ctx, server); err != nil {
@@ -807,6 +833,12 @@ func (r *UpdateReconciler) performCombinedUpdate(
 	server *mcv1beta1.PaperMCServer,
 ) error {
 	slog.InfoContext(ctx, "Starting combined Paper and plugins update", "server", server.Name)
+
+	// Step 0: Pre-update backup (if enabled)
+	if err := r.backupBeforeUpdate(ctx, server); err != nil {
+		slog.ErrorContext(ctx, "Pre-update backup failed, continuing with update",
+			"error", err, "server", server.Name)
+	}
 
 	// Step 1: Delete plugins marked for deletion (PendingDeletion=true)
 	if err := r.deleteMarkedPlugins(ctx, server); err != nil {
