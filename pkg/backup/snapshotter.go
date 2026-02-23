@@ -67,8 +67,10 @@ func (s *VolumeSnapshotSnapshotter) CreateSnapshot(ctx context.Context, req Snap
 
 	snapshot := &volumesnapshotv1.VolumeSnapshot{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName:      namePrefix,
-			Namespace:         req.Namespace,
+			GenerateName: namePrefix,
+			Namespace:    req.Namespace,
+			// CreationTimestamp is set here for fake client compatibility in tests.
+			// The real API server overwrites this with the server-side value.
 			CreationTimestamp: metav1.NewTime(now),
 			Labels: map[string]string{
 				LabelServerName: req.ServerName,

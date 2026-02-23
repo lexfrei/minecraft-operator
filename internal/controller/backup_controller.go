@@ -258,7 +258,7 @@ func (r *BackupReconciler) performBackup(
 		ServerName:              server.Name,
 		VolumeSnapshotClassName: snapshotClass,
 		Trigger:                 trigger,
-		Timestamp:               r.now(),
+		Timestamp:               now,
 		OwnerReferences: []metav1.OwnerReference{
 			*metav1.NewControllerRef(server, mcv1beta1.GroupVersion.WithKind("PaperMCServer")),
 		},
@@ -317,6 +317,9 @@ func (r *BackupReconciler) performBackup(
 
 // persistBackupStatus re-fetches the server to get the latest ResourceVersion,
 // sets the backup status, and performs a single Status().Update().
+// Errors are intentionally logged and swallowed: status persistence is best-effort.
+// The backup itself may have succeeded, and a status update failure should not
+// cause the controller to report a failed backup when the snapshot exists.
 func (r *BackupReconciler) persistBackupStatus(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
