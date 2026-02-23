@@ -1919,6 +1919,57 @@ var _ = Describe("PaperMCServerController helpers", func() {
 		})
 	})
 
+	Context("serverStatusEqual backup comparison", func() {
+		It("should detect Backup field differences", func() {
+			completedAt := metav1.Now()
+			a := &mck8slexlav1beta1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				Backup: &mck8slexlav1beta1.BackupStatus{
+					BackupCount: 3,
+					LastBackup: &mck8slexlav1beta1.BackupRecord{
+						SnapshotName: "server-backup-100",
+						Successful:   true,
+						Trigger:      "manual",
+						CompletedAt:  &completedAt,
+					},
+				},
+			}
+			b := &mck8slexlav1beta1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				Backup:         nil,
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeFalse(),
+				"serverStatusEqual should detect Backup nil vs non-nil")
+		})
+
+		It("should detect Backup content differences", func() {
+			a := &mck8slexlav1beta1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				Backup: &mck8slexlav1beta1.BackupStatus{
+					BackupCount: 3,
+				},
+			}
+			b := &mck8slexlav1beta1.PaperMCServerStatus{
+				CurrentVersion: "1.21.1",
+				Backup: &mck8slexlav1beta1.BackupStatus{
+					BackupCount: 5,
+				},
+			}
+
+			Expect(serverStatusEqual(a, b)).To(BeFalse(),
+				"serverStatusEqual should detect Backup content changes")
+		})
+
+		It("should consider equal when both Backup are nil", func() {
+			a := &mck8slexlav1beta1.PaperMCServerStatus{CurrentVersion: "1.21.1"}
+			b := &mck8slexlav1beta1.PaperMCServerStatus{CurrentVersion: "1.21.1"}
+
+			Expect(serverStatusEqual(a, b)).To(BeTrue(),
+				"serverStatusEqual should be equal when both Backup are nil")
+		})
+	})
+
 	Context("buildPluginVersionPairs handles empty AvailableVersions", func() {
 		It("should not panic when plugin has empty AvailableVersions", func() {
 			// PROOF: Suspected nil dereference at line 1438 accessing [0] on empty
