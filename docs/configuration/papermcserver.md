@@ -374,6 +374,14 @@ spec:
   gracefulShutdown:
     timeout: 300s
 
+  backup:
+    enabled: true
+    schedule: "0 */6 * * *"
+    beforeUpdate: true
+    volumeSnapshotClassName: "csi-hostpath-snapclass"
+    retention:
+      maxCount: 10
+
   rcon:
     enabled: true
     passwordSecret:

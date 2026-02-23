@@ -115,13 +115,15 @@ Backups use RCON hooks (`save-all`/`save-off`/`save-on`) for data consistency.
 **Trigger a manual backup:**
 
 ```bash
-kubectl annotate papermcserver survival mc.k8s.lex.la/backup-now="$(date +%s)"
+kubectl annotate papermcserver survival mc.k8s.lex.la/backup-now="$(date +%s)" \
+  --namespace minecraft
 ```
 
 **List existing snapshots:**
 
 ```bash
-kubectl get volumesnapshots -l mc.k8s.lex.la/server-name=survival
+kubectl get volumesnapshots -l mc.k8s.lex.la/server-name=survival \
+  --namespace minecraft
 ```
 
 !!! tip "Pre-Update Backups"

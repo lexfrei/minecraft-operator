@@ -587,6 +587,53 @@ func TestUpdateReconciler_BackupBeforeUpdate(t *testing.T) {
 	assert.Equal(t, "before-update", snapshots[0].Labels[backup.LabelTrigger])
 }
 
+func TestUpdateReconciler_BackupBeforeUpdateNilDefaultsToTrue(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+
+	// BeforeUpdate is nil (not explicitly set) — should default to performing backup
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	backupReconciler := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	updateReconciler := &UpdateReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		BackupReconciler: backupReconciler,
+	}
+
+	// BeforeUpdate==nil should default to true — backup should be performed
+	err := updateReconciler.backupBeforeUpdate(context.Background(), server)
+	require.NoError(t, err)
+
+	// Verify VolumeSnapshot was created
+	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
+		context.Background(), "minecraft", "my-server")
+	require.NoError(t, err)
+	assert.Len(t, snapshots, 1, "backup should be performed when BeforeUpdate is nil (default true)")
+	assert.Equal(t, "before-update", snapshots[0].Labels[backup.LabelTrigger])
+}
+
 func TestUpdateReconciler_BackupBeforeUpdateDisabled(t *testing.T) {
 	scheme := newBackupTestScheme()
 
@@ -811,6 +858,75 @@ func TestBackupReconciler_ShouldBackupNow_FutureTimestamp(t *testing.T) {
 	assert.False(t, reconciler.shouldBackupNow(context.Background(), server))
 }
 
+func TestBackupReconciler_ManualBackupConsumesPendingCronTrigger(t *testing.T) { //nolint:funlen
+	scheme := newBackupTestScheme()
+	now := time.Now()
+
+	// Create server WITHOUT annotation — first reconcile only sets up cron
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Schedule:  "0 */6 * * *",
+		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	r := &BackupReconciler{
+		Client: fakeClient, Scheme: scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	// First reconcile — sets up cron only (no annotation)
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// Add both manual trigger AND cron trigger simultaneously
+	var currentServer mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &currentServer))
+	currentServer.Annotations = map[string]string{
+		AnnotationBackupNow: fmt.Sprintf("%d", now.Unix()),
+	}
+	require.NoError(t, fakeClient.Update(context.Background(), &currentServer))
+
+	r.cronTriggerMu.Lock()
+	r.cronTriggerTimes[testServerKey] = now
+	r.cronTriggerMu.Unlock()
+
+	// Second reconcile — manual backup fires AND consumes cron trigger
+	_, err = r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// Only one snapshot should exist (manual), not two
+	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
+		context.Background(), "minecraft", "my-server")
+	require.NoError(t, err)
+	assert.Len(t, snapshots, 1, "only one snapshot should be created (manual consumes cron trigger)")
+	assert.Equal(t, "manual", snapshots[0].Labels[backup.LabelTrigger])
+
+	// Cron trigger should be consumed
+	r.cronTriggerMu.RLock()
+	_, triggerExists := r.cronTriggerTimes[testServerKey]
+	r.cronTriggerMu.RUnlock()
+	assert.False(t, triggerExists, "cron trigger should be consumed by manual backup")
+}
+
 func TestBackupReconciler_ScheduledBackupFailurePreservesTrigger(t *testing.T) {
 	scheme := newBackupTestScheme()
 	now := time.Now()
@@ -918,6 +1034,57 @@ func TestBackupReconciler_ScheduledBackupSuccessConsumesTrigger(t *testing.T) {
 	_, triggerExists := r.cronTriggerTimes[serverKey]
 	r.cronTriggerMu.RUnlock()
 	assert.False(t, triggerExists, "cron trigger should be consumed after successful backup")
+}
+
+func TestBackupReconciler_ManualBackupFailureRecordedInStatus(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
+	})
+	server.Annotations = map[string]string{
+		AnnotationBackupNow: fmt.Sprintf("%d", now.Unix()),
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	mockRCON.ConnectError = fmt.Errorf("connection refused")
+
+	r := &BackupReconciler{
+		Client: fakeClient, Scheme: scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	// Reconcile — manual backup fails but no error returned
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// The failed backup MUST be recorded in status for user visibility,
+	// since the annotation is already removed and there is no requeue.
+	var updatedServer mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &updatedServer))
+
+	require.NotNil(t, updatedServer.Status.Backup, "backup status should exist")
+	require.NotNil(t, updatedServer.Status.Backup.LastBackup, "last backup record should exist")
+	assert.False(t, updatedServer.Status.Backup.LastBackup.Successful, "backup should be marked failed")
+	assert.Equal(t, "manual", updatedServer.Status.Backup.LastBackup.Trigger)
 }
 
 func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {

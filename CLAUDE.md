@@ -69,6 +69,7 @@ Four main controllers work together:
 - `updateSchedule.maintenanceWindow.cron`: When to actually apply updates
 - `gracefulShutdown.timeout`: Must match StatefulSet `terminationGracePeriodSeconds`
 - `rcon`: RCON configuration for graceful shutdown
+- `backup`: VolumeSnapshot backup configuration (schedule, retention, beforeUpdate)
 - `podTemplate`: StatefulSet pod spec
 
 **Status:**
@@ -81,6 +82,7 @@ Four main controllers work together:
 - `availableUpdate`: Solver result for next possible update
 - `lastUpdate`: History of previous update attempt
 - `updateBlocked`: Indicates if updates are blocked due to compatibility issues
+- `backup`: Backup status (lastBackup record, backupCount)
 
 ## Constraint Solver
 

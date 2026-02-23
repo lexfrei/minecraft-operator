@@ -152,6 +152,12 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			// a requeue would be pointless (no trigger to retry). The failure is
 			// recorded in status.backup.lastBackup for user visibility.
 			slog.ErrorContext(ctx, "Manual backup failed", "error", err, "server", server.Name)
+		} else {
+			// A successful manual backup satisfies any pending cron trigger too,
+			// since the data is already snapshotted. Consuming it avoids either
+			// a redundant second backup or a stale trigger that never clears
+			// (when manual backup's StartedAt >= triggerTime).
+			r.consumeCronTrigger(req.String())
 		}
 	}
 
@@ -253,7 +259,10 @@ func (r *BackupReconciler) performBackup(
 		}
 	}
 
-	// Create VolumeSnapshot
+	// Create VolumeSnapshot.
+	// PVC name follows the StatefulSet convention: {claimTemplateName}-{statefulSetName}-{ordinal}.
+	// The PaperMCServer controller always uses "data" as the volume claim template name,
+	// and we only snapshot the first replica (ordinal 0).
 	pvcName := fmt.Sprintf("data-%s-0", server.Name)
 	snapshotClass := ""
 
