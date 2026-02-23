@@ -241,6 +241,12 @@ func (r *BackupReconciler) performBackup(
 
 		// Pre-snapshot hook: save-all + save-off
 		if err := backup.PreSnapshotHook(ctx, rconClient); err != nil {
+			// Always attempt save-on to re-enable auto-save, even if pre-hook failed.
+			// save-off may have executed on the server despite the RCON error.
+			if postErr := backup.PostSnapshotHook(ctx, rconClient); postErr != nil {
+				slog.ErrorContext(ctx, "Post-snapshot hook failed after pre-hook error", "error", postErr)
+			}
+
 			r.persistBackupStatus(ctx, server, &mcv1beta1.BackupRecord{
 				StartedAt:  startedAt,
 				Successful: false,

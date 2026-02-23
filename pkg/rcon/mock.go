@@ -44,6 +44,7 @@ type MockClient struct {
 	// Behavior control
 	ConnectError          error
 	SendCommandError      error
+	SendCommandErrors     map[string]error
 	SendCommandResponses  map[string]string
 	GracefulShutdownError error
 	ConnectDelay          time.Duration
@@ -56,6 +57,7 @@ func NewMockClient() *MockClient {
 		SentCommands:         make([]string, 0),
 		Commands:             make([]string, 0),
 		Warnings:             make([]string, 0),
+		SendCommandErrors:    make(map[string]error),
 		SendCommandResponses: make(map[string]string),
 	}
 }
@@ -98,6 +100,10 @@ func (m *MockClient) SendCommand(ctx context.Context, command string) (string, e
 
 	m.SendCommandCalled = true
 	m.SentCommands = append(m.SentCommands, command)
+
+	if cmdErr, ok := m.SendCommandErrors[command]; ok {
+		return "", cmdErr
+	}
 
 	if m.SendCommandError != nil {
 		return "", m.SendCommandError
@@ -159,6 +165,7 @@ func (m *MockClient) Reset() {
 	m.Warnings = make([]string, 0)
 	m.ConnectError = nil
 	m.SendCommandError = nil
+	m.SendCommandErrors = make(map[string]error)
 	m.SendCommandResponses = make(map[string]string)
 	m.GracefulShutdownError = nil
 	m.ConnectDelay = 0

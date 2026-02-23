@@ -473,6 +473,59 @@ func TestBackupReconciler_ServerNotFound(t *testing.T) {
 
 func boolPtr(b bool) *bool { return &b }
 
+func TestBackupReconciler_PreSnapshotHookFailureStillSendsSaveOn(t *testing.T) {
+	scheme := newBackupTestScheme()
+
+	now := time.Now()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled: true,
+		Retention: mcv1beta1.BackupRetention{
+			MaxCount: 10,
+		},
+	})
+
+	server.Annotations = map[string]string{
+		"mc.k8s.lex.la/backup-now": fmt.Sprintf("%d", now.Unix()),
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	// save-off returns an error (simulates network timeout after command was received)
+	mockRCON.SendCommandErrors["save-off"] = fmt.Errorf("network timeout")
+
+	reconciler := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+
+	// Should return error (pre-snapshot hook failed)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pre-snapshot hook failed")
+	assert.Equal(t, ctrl.Result{}, result)
+
+	// Critical: save-on MUST still be sent to re-enable auto-save
+	sentCmds := mockRCON.GetSentCommands()
+	assert.Contains(t, sentCmds, "save-all", "save-all should be sent before save-off")
+	assert.Contains(t, sentCmds, "save-off", "save-off should be attempted")
+	assert.Contains(t, sentCmds, "save-on", "save-on MUST be sent even when pre-snapshot hook fails")
+}
+
 func TestUpdateReconciler_BackupBeforeUpdate(t *testing.T) {
 	scheme := newBackupTestScheme()
 
