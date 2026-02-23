@@ -711,7 +711,6 @@ func (r *UpdateReconciler) createRCONClient(
 	return rconClient, nil
 }
 
-// performPluginOnlyUpdate handles updates when only plugins changed (Paper version unchanged).
 // backupBeforeUpdate creates a VolumeSnapshot backup before applying updates.
 // Silently skips if BackupReconciler is nil, backup is not enabled, or beforeUpdate is false.
 func (r *UpdateReconciler) backupBeforeUpdate(
@@ -732,6 +731,7 @@ func (r *UpdateReconciler) backupBeforeUpdate(
 	return r.BackupReconciler.PerformBackup(ctx, server, "before-update")
 }
 
+// performPluginOnlyUpdate handles updates when only plugins changed (Paper version unchanged).
 func (r *UpdateReconciler) performPluginOnlyUpdate(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
