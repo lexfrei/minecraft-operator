@@ -148,9 +148,10 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		}
 
 		if err := r.performBackup(ctx, &server, "manual"); err != nil {
+			// Log but do not return error: the annotation is already removed, so
+			// a requeue would be pointless (no trigger to retry). The failure is
+			// recorded in status.backup.lastBackup for user visibility.
 			slog.ErrorContext(ctx, "Manual backup failed", "error", err, "server", server.Name)
-
-			return ctrl.Result{}, err
 		}
 	}
 
@@ -302,8 +303,17 @@ func (r *BackupReconciler) performBackup(
 		slog.InfoContext(ctx, "Deleted old snapshots", "count", deleted, "server", server.Name)
 	}
 
-	// Count remaining snapshots
-	snapshots, _ := r.Snapshotter.ListSnapshots(ctx, server.Namespace, server.Name)
+	// Count remaining snapshots. On error, preserve existing count to avoid
+	// recording 0 when snapshots actually exist.
+	backupCount := -1
+
+	snapshots, listErr := r.Snapshotter.ListSnapshots(ctx, server.Namespace, server.Name)
+	if listErr != nil {
+		slog.ErrorContext(ctx, "Failed to count snapshots after backup", "error", listErr)
+	} else {
+		backupCount = len(snapshots)
+	}
+
 	completedAt := metav1.NewTime(r.now())
 
 	// Persist status with a single re-fetch + update to avoid resource version conflicts
@@ -313,7 +323,7 @@ func (r *BackupReconciler) performBackup(
 		CompletedAt:  &completedAt,
 		Successful:   true,
 		Trigger:      trigger,
-	}, len(snapshots))
+	}, backupCount)
 
 	slog.InfoContext(ctx, "Backup completed successfully",
 		"server", server.Name,
@@ -350,7 +360,12 @@ func (r *BackupReconciler) persistBackupStatus(
 	}
 
 	latestServer.Status.Backup.LastBackup = record
-	latestServer.Status.Backup.BackupCount = backupCount
+
+	// Only update BackupCount if we successfully counted snapshots (>= 0).
+	// A negative value means ListSnapshots failed and we should preserve the existing count.
+	if backupCount >= 0 {
+		latestServer.Status.Backup.BackupCount = backupCount
+	}
 
 	if updateErr := r.Status().Update(ctx, &latestServer); updateErr != nil {
 		slog.ErrorContext(ctx, "Failed to update backup status", "error", updateErr)

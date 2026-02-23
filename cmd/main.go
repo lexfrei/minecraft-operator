@@ -350,6 +350,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Register backup cron scheduler for graceful shutdown with the manager
+	if err := mgr.Add(mccron.NewCronRunnable(backupCronScheduler)); err != nil {
+		setupLog.Error(err, "unable to register backup cron scheduler runnable")
+		os.Exit(1)
+	}
+
 	// Setup Update controller with real cron scheduler
 	updateReconciler := &controller.UpdateReconciler{
 		Client:           mgr.GetClient(),
@@ -365,6 +371,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Update")
 		os.Exit(1)
 	}
+
+	// Register update cron scheduler for graceful shutdown with the manager
+	if err := mgr.Add(mccron.NewCronRunnable(cronScheduler)); err != nil {
+		setupLog.Error(err, "unable to register update cron scheduler runnable")
+		os.Exit(1)
+	}
+
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

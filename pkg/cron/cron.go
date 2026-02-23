@@ -18,6 +18,8 @@ limitations under the License.
 package cron
 
 import (
+	"context"
+
 	"github.com/robfig/cron/v3"
 )
 
@@ -51,4 +53,23 @@ func (r *RealScheduler) Start() {
 func (r *RealScheduler) Stop() {
 	ctx := r.Cron.Stop()
 	<-ctx.Done()
+}
+
+// CronRunnable adapts a Scheduler to the manager.Runnable interface.
+// It blocks until the context is cancelled, then stops the scheduler.
+type CronRunnable struct {
+	scheduler Scheduler
+}
+
+// NewCronRunnable creates a Runnable that stops the scheduler when the manager shuts down.
+func NewCronRunnable(s Scheduler) *CronRunnable {
+	return &CronRunnable{scheduler: s}
+}
+
+// Start blocks until ctx is done, then calls Stop on the scheduler.
+func (r *CronRunnable) Start(ctx context.Context) error {
+	<-ctx.Done()
+	r.scheduler.Stop()
+
+	return nil
 }

@@ -336,7 +336,9 @@ func TestBackupReconciler_ConnectFailurePersistsStatus(t *testing.T) {
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
 	})
-	require.Error(t, err)
+	// Manual backup failure does NOT return error (annotation already removed,
+	// requeue would be pointless). Failure is recorded in status only.
+	require.NoError(t, err)
 
 	var updatedServer mcv1beta1.PaperMCServer
 	getErr := fakeClient.Get(context.Background(), types.NamespacedName{
@@ -516,9 +518,8 @@ func TestBackupReconciler_PreSnapshotHookFailureStillSendsSaveOn(t *testing.T) {
 		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
 	})
 
-	// Should return error (pre-snapshot hook failed)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "pre-snapshot hook failed")
+	// Manual backup failure does NOT return error (annotation already removed).
+	require.NoError(t, err)
 	assert.Equal(t, ctrl.Result{}, result)
 
 	// Critical: save-on MUST still be sent to re-enable auto-save
