@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/errors"
 	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	mccron "github.com/lexfrei/minecraft-operator/pkg/cron"
+	"github.com/lexfrei/minecraft-operator/pkg/metrics"
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/rcon"
 	"github.com/robfig/cron/v3"
@@ -62,6 +63,7 @@ type UpdateReconciler struct {
 	PaperClient  PaperAPI
 	PluginClient plugins.PluginClient
 	PodExecutor  PodExecutor
+	Metrics      metrics.Recorder
 	cron         mccron.Scheduler
 
 	// nowFunc returns current time; override in tests for deterministic behavior.
@@ -90,7 +92,15 @@ type cronEntryInfo struct {
 // Reconcile reconciles PaperMCServer resources for update management.
 //
 //nolint:funlen // Complex update orchestration logic, hard to simplify further
-func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+	start := time.Now()
+
+	defer func() {
+		if r.Metrics != nil {
+			r.Metrics.RecordReconcile("update", retErr, time.Since(start))
+		}
+	}()
+
 	// Initialize cronEntries if nil
 	if r.cronEntries == nil {
 		r.cronEntriesMu.Lock()
@@ -194,6 +204,11 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Update status based on result
 	successful := updateErr == nil
+
+	if r.Metrics != nil {
+		r.Metrics.RecordUpdate(server.Name, server.Namespace, successful)
+	}
+
 	r.updateServerStatus(&server, successful)
 	r.setUpdatingCondition(&server, false, "Update completed")
 
