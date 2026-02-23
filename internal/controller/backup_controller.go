@@ -273,6 +273,29 @@ func (r *BackupReconciler) performBackup(
 
 	slog.InfoContext(ctx, "Starting backup", "server", server.Name, "trigger", trigger)
 
+	// Verify PVC exists BEFORE running RCON hooks.
+	// PVC name follows the StatefulSet convention: {claimTemplateName}-{statefulSetName}-{ordinal}.
+	// The PaperMCServer controller always uses "data" as the volume claim template name,
+	// and we only snapshot the first replica (ordinal 0).
+	pvcName := fmt.Sprintf("data-%s-0", server.Name)
+
+	var pvc corev1.PersistentVolumeClaim
+	if pvcErr := r.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: server.Namespace}, &pvc); pvcErr != nil {
+		r.persistBackupStatus(ctx, server, &mcv1beta1.BackupRecord{
+			StartedAt:  startedAt,
+			Successful: false,
+			Trigger:    trigger,
+		}, -1)
+
+		if apierrors.IsNotFound(pvcErr) {
+			return errors.Newf(
+				"PVC %s not found in namespace %s; ensure the StatefulSet has created its volume",
+				pvcName, server.Namespace)
+		}
+
+		return errors.Wrap(pvcErr, "failed to check PVC existence before backup")
+	}
+
 	// Create RCON client for hooks (only if RCON is enabled)
 	var rconClient rcon.Client
 
@@ -285,7 +308,7 @@ func (r *BackupReconciler) performBackup(
 				StartedAt:  startedAt,
 				Successful: false,
 				Trigger:    trigger,
-			}, 0)
+			}, -1)
 
 			return errors.Wrap(err, "failed to create RCON client for backup")
 		}
@@ -302,7 +325,7 @@ func (r *BackupReconciler) performBackup(
 				StartedAt:  startedAt,
 				Successful: false,
 				Trigger:    trigger,
-			}, 0)
+			}, -1)
 
 			return errors.Wrap(err, "failed to connect to RCON for backup")
 		}
@@ -319,34 +342,10 @@ func (r *BackupReconciler) performBackup(
 				StartedAt:  startedAt,
 				Successful: false,
 				Trigger:    trigger,
-			}, 0)
+			}, -1)
 
 			return errors.Wrap(err, "pre-snapshot hook failed")
 		}
-	}
-
-	// Create VolumeSnapshot.
-	// PVC name follows the StatefulSet convention: {claimTemplateName}-{statefulSetName}-{ordinal}.
-	// The PaperMCServer controller always uses "data" as the volume claim template name,
-	// and we only snapshot the first replica (ordinal 0).
-	pvcName := fmt.Sprintf("data-%s-0", server.Name)
-
-	// Verify PVC exists before creating snapshot
-	var pvc corev1.PersistentVolumeClaim
-	if pvcErr := r.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: server.Namespace}, &pvc); pvcErr != nil {
-		r.persistBackupStatus(ctx, server, &mcv1beta1.BackupRecord{
-			StartedAt:  startedAt,
-			Successful: false,
-			Trigger:    trigger,
-		}, 0)
-
-		if apierrors.IsNotFound(pvcErr) {
-			return errors.Newf(
-				"PVC %s not found in namespace %s; ensure the StatefulSet has created its volume",
-				pvcName, server.Namespace)
-		}
-
-		return errors.Wrap(pvcErr, "failed to check PVC existence before backup")
 	}
 
 	snapshotClass := ""
@@ -379,7 +378,7 @@ func (r *BackupReconciler) performBackup(
 			StartedAt:  startedAt,
 			Successful: false,
 			Trigger:    trigger,
-		}, 0)
+		}, -1)
 
 		return errors.Wrap(err, "failed to create VolumeSnapshot")
 	}

@@ -1259,6 +1259,100 @@ func TestBackupReconciler_PVCNotFoundClearError(t *testing.T) {
 	assert.False(t, updatedServer.Status.Backup.LastBackup.Successful)
 }
 
+func TestBackupReconciler_PVCNotFoundWithRCONStillSendsSaveOn(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
+	})
+	// RCON is enabled (default from newTestServer)
+	server.Annotations = map[string]string{
+		AnnotationBackupNow: fmt.Sprintf("%d", now.Unix()),
+	}
+
+	// No PVC created — only server, pod, and RCON secret
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	// Manual backup error is swallowed
+	require.NoError(t, err)
+
+	// Even though PVC is missing, save-on MUST be sent to re-enable auto-save
+	sentCmds := mockRCON.GetSentCommands()
+	assert.NotContains(t, sentCmds, "save-off",
+		"save-off should NOT be sent when PVC check fails before RCON hooks")
+}
+
+func TestBackupReconciler_FailurePreservesExistingBackupCount(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
+	})
+	server.Annotations = map[string]string{
+		AnnotationBackupNow: fmt.Sprintf("%d", now.Unix()),
+	}
+	// Pre-set backup count to 5
+	server.Status.Backup = &mcv1beta1.BackupStatus{
+		BackupCount: 5,
+	}
+
+	// No PVC = backup will fail
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newServerPod(), newRCONSecret()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	var updatedServer mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &updatedServer))
+
+	require.NotNil(t, updatedServer.Status.Backup)
+	assert.Equal(t, 5, updatedServer.Status.Backup.BackupCount,
+		"existing backup count should be preserved on failure, not reset to 0")
+}
+
 func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {
 	reconciler := &BackupReconciler{
 		cronEntries: map[string]cronEntryInfo{
