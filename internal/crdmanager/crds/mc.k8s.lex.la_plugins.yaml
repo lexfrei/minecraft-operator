@@ -118,6 +118,12 @@ spec:
               source:
                 description: Source specifies where to fetch the plugin.
                 properties:
+                  checksum:
+                    description: |-
+                      Checksum is the expected SHA256 hash of the JAR file (for type: url).
+                      If not provided, the operator logs a warning about unverified downloads.
+                    pattern: ^[a-f0-9]{64}$
+                    type: string
                   project:
                     description: Project is the plugin project identifier (for hangar/modrinth/spigot).
                     type: string

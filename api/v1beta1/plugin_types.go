@@ -33,6 +33,12 @@ type PluginSource struct {
 	// URL is the direct download URL (for type: url).
 	// +optional
 	URL string `json:"url,omitempty"`
+
+	// Checksum is the expected SHA256 hash of the JAR file (for type: url).
+	// If not provided, the operator logs a warning about unverified downloads.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[a-f0-9]{64}$`
+	Checksum string `json:"checksum,omitempty"`
 }
 
 // CompatibilityOverride allows manual compatibility specification.
