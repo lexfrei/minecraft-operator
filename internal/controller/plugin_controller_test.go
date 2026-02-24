@@ -2002,6 +2002,62 @@ var _ = Describe("Plugin Controller", func() {
 				"Metrics should record 'url' as source type")
 		})
 
+		It("should not re-download when spec.version differs from JAR version (cache by TTL)", func() {
+			pluginName := "test-url-version-stable"
+			downloadCount := 0
+			// JAR has version "2.0.0" in plugin.yml.
+			jarBytes := testutil.BuildTestJAR("plugin.yml",
+				"name: StablePlugin\nversion: \"2.0.0\"\n")
+
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				downloadCount++
+				w.Header().Set("Content-Type", "application/java-archive")
+				_, _ = w.Write(jarBytes)
+			}))
+			defer server.Close()
+
+			urlReconciler := &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: mockPlugin,
+				Solver:       solver.NewSimpleSolver(),
+				HTTPClient:   wrapTestClient(server),
+			}
+
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  testPluginURL,
+				},
+				// spec.version differs from JAR version. This is the fallback,
+				// but JAR metadata takes priority. Cache should remain valid.
+				Version:          "1.0.0",
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"stable-cache": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconciliation: adds finalizer.
+			_, err := urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconciliation: downloads JAR and caches metadata.
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			firstDownloadCount := downloadCount
+
+			// Third reconciliation: cache should be valid despite spec.version mismatch.
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(downloadCount).To(Equal(firstDownloadCount),
+				"Cache should remain valid when spec.version differs from JAR version; "+
+					"spec.version changes take effect on cache TTL expiry")
+		})
+
 		It("should use 0.0.0 as fallback version when JAR and spec have no version", func() {
 			pluginName := "test-url-no-version"
 			jarBytes := testutil.BuildTestJAR("plugin.yml", "name: NoVersionPlugin\n")

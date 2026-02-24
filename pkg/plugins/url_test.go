@@ -59,6 +59,8 @@ func TestValidateDownloadURL_BlockedHosts(t *testing.T) {
 		{"GCP metadata endpoint", "https://metadata.google.internal/computeMetadata/v1/"},
 		{"AWS metadata endpoint", "https://instance-data.ec2.internal/latest/meta-data/"},
 		{"IPv6 loopback", "https://[::1]/plugin.jar"},
+		{"IPv4-mapped loopback", "https://[::ffff:127.0.0.1]/plugin.jar"},
+		{"IPv4-mapped link-local", "https://[::ffff:169.254.169.254]/plugin.jar"},
 		{"unspecified address", "https://0.0.0.0/plugin.jar"},
 		{"loopback IP with port", "https://127.0.0.1:8080/plugin.jar"},
 	}

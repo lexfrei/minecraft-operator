@@ -1094,6 +1094,77 @@ var _ = Describe("UpdateController", func() {
 			Expect(mockExec.Calls[0].Command).To(ContainElement("curl"))
 		})
 
+		It("should block download for URL plugin with private/internal download URL", func() {
+			mockExec := &testutil.MockPodExecutor{}
+			reconciler := &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: mockExec,
+			}
+
+			// Create a Plugin with URL source and a blocked download URL in status.
+			pluginName := "test-ssrf-url-plugin"
+			plugin := &mcv1beta1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pluginName,
+					Namespace: testNamespace,
+				},
+				Spec: mcv1beta1.PluginSpec{
+					Source: mcv1beta1.PluginSource{
+						Type: "url",
+						URL:  "https://169.254.169.254/latest/meta-data/",
+					},
+					UpdateStrategy:   "latest",
+					InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"ssrf-test": "true"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, plugin) }()
+
+			// Set status with blocked download URL.
+			plugin.Status = mcv1beta1.PluginStatus{
+				AvailableVersions: []mcv1beta1.PluginVersionInfo{
+					{
+						Version:           "1.0.0",
+						DownloadURL:       "https://169.254.169.254/latest/meta-data/",
+						Hash:              "abc123",
+						MinecraftVersions: []string{"1.21"},
+						CachedAt:          metav1.Now(),
+						ReleasedAt:        metav1.Now(),
+					},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, plugin)).To(Succeed())
+
+			server := &mcv1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ssrf-server",
+					Namespace: testNamespace,
+				},
+				Status: mcv1beta1.PaperMCServerStatus{
+					Plugins: []mcv1beta1.ServerPluginStatus{
+						{
+							PluginRef: mcv1beta1.PluginRef{
+								Name:      pluginName,
+								Namespace: testNamespace,
+							},
+							ResolvedVersion: "1.0.0",
+						},
+					},
+				},
+			}
+
+			ctx := context.Background()
+			err := reconciler.applyPluginUpdates(ctx, server)
+			// The function should return an error because the download URL is blocked.
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("blocked"))
+
+			// PodExecutor should NOT have been called (download blocked before execution).
+			Expect(mockExec.Calls).To(BeEmpty(),
+				"PodExecutor should not be called for SSRF-blocked download URLs")
+		})
+
 		It("should use PodExecutor for deleting plugin JARs instead of kubectl", func() {
 			mockExec := &testutil.MockPodExecutor{}
 			reconciler := &UpdateReconciler{
