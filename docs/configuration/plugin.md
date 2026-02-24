@@ -82,6 +82,13 @@ spec:
     downloads the JAR, not from the plugin's actual release date. Validation happens
     at reconciliation time, not at CR creation time (webhook validation is planned).
 
+!!! note "URL Metadata Caching"
+
+    The operator caches URL plugin metadata for **1 hour** to avoid re-downloading
+    the JAR on every reconciliation cycle. The cache is invalidated when `spec.source.url`
+    or `spec.source.checksum` changes. Changes to `spec.version` (the fallback version)
+    take effect when the cache expires.
+
 ### updateStrategy
 
 **Optional** — Defines how plugin versions are managed. Default: `latest`.

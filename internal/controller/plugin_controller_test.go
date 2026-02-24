@@ -1866,6 +1866,44 @@ var _ = Describe("Plugin Controller", func() {
 				"Empty URL should not requeue (permanent user error)")
 		})
 
+		// CRD enum validation prevents creating plugins with unimplemented types at
+		// admission time. This test exercises the safety-net default case in
+		// syncPluginMetadata by constructing an in-memory Plugin, bypassing API
+		// server validation.
+		It("should set conditions and not requeue for unsupported source type via syncPluginMetadata", func() {
+			plugin := &mck8slexlav1beta1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-unsupported-sync",
+					Namespace: namespace,
+				},
+				Spec: mck8slexlav1beta1.PluginSpec{
+					Source:           mck8slexlav1beta1.PluginSource{Type: "spigot", Project: "FakePlugin"},
+					UpdateStrategy:   "latest",
+					InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"unsup": "true"}},
+				},
+			}
+
+			versions, result, err := reconciler.syncPluginMetadata(ctx, plugin)
+			Expect(err).NotTo(HaveOccurred(), "syncPluginMetadata should not return error for permanent user errors")
+			Expect(versions).To(BeNil())
+			Expect(result.RequeueAfter).To(BeZero(),
+				"Unsupported source type should not requeue (permanent user error)")
+
+			Expect(plugin.Status.RepositoryStatus).To(Equal("unavailable"))
+
+			repoCond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
+			Expect(repoCond).NotTo(BeNil())
+			Expect(repoCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(repoCond.Message).To(ContainSubstring("not yet implemented"),
+				"Error message should indicate source type is not implemented")
+
+			versionCond := findCondition(plugin.Status.Conditions, conditionTypeVersionResolved)
+			Expect(versionCond).NotTo(BeNil())
+			Expect(versionCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(versionCond.Message).To(ContainSubstring("unsupported source type"),
+				"VersionResolved message should mention unsupported source type")
+		})
+
 		It("should warn but succeed for URL plugin without checksum", func() {
 			pluginName := "test-url-no-checksum"
 			jarBytes := testutil.BuildTestJAR("plugin.yml",

@@ -1108,6 +1108,12 @@ var _ = Describe("UpdateController", func() {
 			Expect(dashDashIdx).To(BeNumerically(">", 0), "curl args must include -- separator")
 			Expect(urlIdx).To(BeNumerically(">", dashDashIdx),
 				"download URL must come after -- to prevent flag injection")
+
+			// Verify User-Agent header is set to identify the operator in server logs.
+			Expect(mockExec.Calls[0].Command).To(ContainElement("-A"),
+				"curl should set User-Agent header with -A flag")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("minecraft-operator"),
+				"curl User-Agent should identify as minecraft-operator")
 		})
 
 		It("should block download for URL plugin with private/internal download URL", func() {

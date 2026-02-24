@@ -246,7 +246,7 @@ custom_resources:
     scope: "Namespaced"
     description: "Plugin definition with source and versioning policy"
     key_fields:
-      - "source.type - hangar/modrinth/spigot/url"
+      - "source.type - hangar/url (modrinth/spigot planned)"
       - "source.project - Plugin project identifier"
       - "updateStrategy - latest or pinned (ADR-029: renamed from versionPolicy)"
       - "version - Specific version if pinned (ADR-029: renamed from pinnedVersion)"
@@ -398,7 +398,7 @@ security:
     operator_egress:
       - "Kubernetes API Server"
       - "Hangar API (hangar.papermc.io)"
-      - "Modrinth API (future)"
+      - "Modrinth API (planned, not yet implemented)"
       - "Paper API (papermc.io)"
       - "RCON port on managed pods (25575)"
 

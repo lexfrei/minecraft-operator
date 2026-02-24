@@ -79,8 +79,8 @@ The operator needs to access:
 | Endpoint | Purpose |
 |----------|---------|
 | `hub.docker.com` | Pull Paper server images |
-| `hangar.papermc.io` | Plugin metadata and downloads |
-| `api.modrinth.com` | (Future) Modrinth plugin support |
+| `hangar.papermc.io` | Plugin metadata and downloads (hangar source) |
+| User-specified HTTPS URLs | Plugin downloads (url source) |
 
 Ensure your cluster has outbound internet access or configure a proxy.
 

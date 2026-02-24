@@ -389,6 +389,10 @@ type PluginListResponse struct {
 
 // PluginSource Plugin source configuration
 type PluginSource struct {
+	// Checksum Expected SHA256 hash of the JAR file (for url type).
+	// If not provided, downloads will not be verified.
+	Checksum *string `json:"checksum,omitempty"`
+
 	// Project Project identifier in the repository.
 	// Required for hangar type.
 	Project *string `json:"project,omitempty"`

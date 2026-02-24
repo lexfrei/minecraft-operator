@@ -477,6 +477,7 @@ func (r *UpdateReconciler) downloadPluginToServer(
 		[]string{"curl", "-fsSL", "--proto", "=https",
 			"--max-redirs", strconv.Itoa(plugins.MaxRedirects),
 			"--max-filesize", strconv.Itoa(plugins.MaxJARSize),
+			"-A", "minecraft-operator",
 			"-o", outputPath, "--", downloadURL})
 	if err != nil {
 		return errors.Wrapf(err, "failed to download plugin %s", pluginName)

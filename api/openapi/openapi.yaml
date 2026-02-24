@@ -1242,6 +1242,13 @@ components:
             Direct download URL.
             Required for url type.
           example: "https://example.com/plugin.jar"
+        checksum:
+          type: string
+          pattern: "^[a-fA-F0-9]{64}$"
+          description: |
+            Expected SHA256 hash of the JAR file (for url type).
+            If not provided, downloads will not be verified.
+          example: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
     # ============================================================
     # COMMON SCHEMAS

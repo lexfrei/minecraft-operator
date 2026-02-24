@@ -61,6 +61,10 @@ var errChecksumMismatch = errors.New("checksum mismatch")
 // This is a permanent user error that should not trigger periodic requeue.
 var errInvalidURL = errors.New("invalid URL")
 
+// errUnsupportedSourceType is a sentinel error for unimplemented source types.
+// This is a permanent user error that should not trigger periodic requeue.
+var errUnsupportedSourceType = errors.New("unsupported source type")
+
 // PluginReconciler reconciles a Plugin object.
 // Note: URL-source plugins download entire JARs (up to MaxJARSize=100MB) into memory
 // during metadata extraction. The default MaxConcurrentReconciles=1 keeps this safe;
@@ -223,6 +227,20 @@ func (r *PluginReconciler) syncPluginMetadata(
 			return nil, ctrl.Result{}, nil
 		}
 
+		// Unsupported source type (e.g. modrinth, spigot) is a permanent user error.
+		// The user must change spec.source.type; the watch triggers re-reconciliation.
+		if errors.Is(repoErr, errUnsupportedSourceType) {
+			slog.ErrorContext(ctx, "Unsupported source type", "error", repoErr, "plugin", plugin.Name,
+				"sourceType", plugin.Spec.Source.Type)
+			plugin.Status.RepositoryStatus = repositoryStatusUnavailable
+			r.setCondition(plugin, conditionTypeRepositoryAvailable, metav1.ConditionFalse,
+				reasonUnavailable, repoErr.Error())
+			r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionFalse,
+				reasonUnavailable, "Cannot resolve version: unsupported source type")
+
+			return nil, ctrl.Result{}, nil
+		}
+
 		slog.ErrorContext(ctx, "Failed to fetch plugin metadata, using cached versions", "error", repoErr)
 
 		return r.handleRepositoryError(plugin, repoErr)
@@ -302,7 +320,7 @@ func (r *PluginReconciler) fetchPluginMetadata(
 	default:
 		return nil, false, errors.Mark(
 			errors.Newf("source type %q is not yet implemented", plugin.Spec.Source.Type),
-			errInvalidURL)
+			errUnsupportedSourceType)
 	}
 }
 
@@ -388,7 +406,9 @@ func (r *PluginReconciler) fetchURLMetadata(
 	// making updateDelay ineffective for URL plugins.
 	if len(plugin.Status.AvailableVersions) > 0 && len(versions) > 0 {
 		cached := plugin.Status.AvailableVersions[0]
-		if strings.EqualFold(cached.Hash, versions[0].Hash) && !cached.ReleasedAt.IsZero() {
+		// Only preserve ReleaseDate when both hashes are non-empty and match.
+		// Empty hashes indicate missing metadata and should not be treated as equal.
+		if cached.Hash != "" && strings.EqualFold(cached.Hash, versions[0].Hash) && !cached.ReleasedAt.IsZero() {
 			versions[0].ReleaseDate = cached.ReleasedAt.Time
 		}
 	}
