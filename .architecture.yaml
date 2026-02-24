@@ -1210,6 +1210,21 @@ decisions:
       post_snapshot_guarantee: "PostSnapshotHook (save-on) always runs via defer, even on panic or PreSnapshotHook failure, with a 10s timeout to prevent indefinite blocking"
       concurrent_backups: "Per-server mutex (sync.Map) serializes backup execution; no two backups for the same server run in parallel"
 
+  - id: ADR-032
+    date: 2026-02-24
+    status: accepted
+    decision: "Direct URL plugin source with JAR metadata extraction"
+    reasoning: "Some plugins are not published on marketplaces (GitHub releases, private repos, self-hosted). URL source type downloads JAR, extracts plugin.yml/paper-plugin.yml metadata (name, version, api-version), computes SHA256. Helper functions in pkg/plugins/url.go instead of PluginClient interface (GetVersions/GetCompatibility API mismatch for URLs). Optional checksum in PluginSource for integrity verification. Falls back to spec.version when JAR metadata extraction fails."
+    alternatives:
+      - "PluginClient interface for URL: API mismatch — no 'project' concept, no version listing"
+      - "HEAD request for URL validation: Unreliable, many CDNs don't support HEAD, wastes a request"
+      - "No metadata extraction: Loses version/compatibility info, solver cannot work properly"
+    impact: "New Checksum field in PluginSource, new pkg/plugins/url.go helpers, switch dispatch in fetchPluginMetadata, nil MinecraftVersions normalization in convertToPluginVersionInfo"
+    components:
+      url_helpers: "pkg/plugins/url.go - ValidateDownloadURL, FetchJARMetadata, BuildURLVersion, extractPluginYML"
+      controller_dispatch: "internal/controller/plugin_controller.go - fetchURLMetadata, fetchHangarMetadata switch"
+      api_field: "api/v1beta1/plugin_types.go - Checksum field with kubebuilder pattern validation"
+
 phases:
   phase_1_mvp:
     description: "Minimum viable product"

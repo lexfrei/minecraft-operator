@@ -27,10 +27,11 @@ spec:
 **Required** — Defines where to fetch the plugin.
 
 | Field | Description |
-|-------|-------------|
+| --- | --- |
 | `type` | Repository type (see supported sources below) |
 | `project` | Plugin identifier (for hangar) |
-| `url` | Direct download URL (planned) |
+| `url` | Direct download URL (for type: url) |
+| `checksum` | Optional SHA256 hash for integrity verification (for type: url) |
 
 ```yaml
 spec:
@@ -44,12 +45,34 @@ spec:
     **Currently implemented:**
 
     - `hangar` — PaperMC Hangar ([hangar.papermc.io](https://hangar.papermc.io))
+    - `url` — Direct URL download (GitHub releases, private repos, etc.)
 
     **Planned (not yet implemented):**
 
     - `modrinth` — [#2](https://github.com/lexfrei/minecraft-operator/issues/2)
     - `spigot` — [#3](https://github.com/lexfrei/minecraft-operator/issues/3)
-    - `url` — [#4](https://github.com/lexfrei/minecraft-operator/issues/4)
+
+#### URL Source
+
+For plugins not published on marketplaces, use `type: url` with a direct HTTPS download link.
+
+The operator downloads the JAR and extracts metadata (name, version, API version) from
+`plugin.yml` or `paper-plugin.yml` inside the archive. If extraction fails, `spec.version`
+is used as fallback.
+
+```yaml
+spec:
+  source:
+    type: url
+    url: "https://github.com/example/plugin/releases/download/v1.0.0/plugin-1.0.0.jar"
+    checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+```
+
+!!! info "Checksum Verification"
+
+    The `checksum` field accepts a SHA256 hex string (64 characters). If provided, the
+    operator verifies the downloaded JAR against this hash. If omitted, the operator
+    logs a warning but proceeds with the unverified download.
 
 ### updateStrategy
 
@@ -289,6 +312,25 @@ spec:
         values:
           - creative
           - build
+
+---
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: Plugin
+metadata:
+  name: custom-plugin
+  namespace: minecraft
+spec:
+  source:
+    type: url
+    url: "https://github.com/example/plugin/releases/download/v1.2.0/plugin-1.2.0.jar"
+    checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+  version: "1.2.0"  # Fallback if plugin.yml extraction fails
+  updateStrategy: "latest"
+
+  instanceSelector:
+    matchLabels:
+      environment: production
 ```
 
 ## Plugin Deletion

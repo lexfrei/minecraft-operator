@@ -1,0 +1,27 @@
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: Plugin
+metadata:
+  name: custom-plugin
+  namespace: default
+spec:
+  # Direct URL download — for plugins not published on marketplaces
+  # (GitHub releases, private repos, self-hosted, etc.)
+  source:
+    type: url
+    url: "https://github.com/example/my-plugin/releases/download/v1.2.0/my-plugin-1.2.0.jar"
+
+    # Optional SHA256 checksum for integrity verification.
+    # If omitted, the operator logs a warning but continues.
+    # Generate with: sha256sum my-plugin-1.2.0.jar
+    checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+  # Version is auto-extracted from plugin.yml inside the JAR.
+  # Specify here as fallback if JAR metadata extraction fails.
+  version: "1.2.0"
+
+  updateStrategy: latest
+
+  # Apply to all production servers
+  instanceSelector:
+    matchLabels:
+      environment: production
