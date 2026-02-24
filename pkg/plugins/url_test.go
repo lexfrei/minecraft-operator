@@ -63,6 +63,8 @@ func TestValidateDownloadURL_BlockedHosts(t *testing.T) {
 		{"IPv4-mapped link-local", "https://[::ffff:169.254.169.254]/plugin.jar"},
 		{"unspecified address", "https://0.0.0.0/plugin.jar"},
 		{"loopback IP with port", "https://127.0.0.1:8080/plugin.jar"},
+		{"mDNS .local domain", "https://myhost.local/plugin.jar"},
+		{"arbitrary .internal domain", "https://evil.internal/plugin.jar"},
 	}
 	for _, tc := range blocked {
 		t.Run("blocks "+tc.name, func(t *testing.T) {

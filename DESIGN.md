@@ -460,8 +460,8 @@ spec:
   source:
     type: url
     url: "https://github.com/user/repo/releases/download/v1.0/custom-plugin-1.0.jar"
-    checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-  updateStrategy: pinned
+    checksum: "aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344"
+  updateStrategy: pin
   instanceSelector:
     matchLabels:
       app: minecraft

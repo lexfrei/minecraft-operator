@@ -2058,6 +2058,108 @@ var _ = Describe("Plugin Controller", func() {
 					"spec.version changes take effect on cache TTL expiry")
 		})
 
+		It("should not refresh CachedAt or LastFetched on cache hit", func() {
+			pluginName := "test-url-cache-no-refresh"
+			serverName := "test-url-cache-server"
+			jarBytes := testutil.BuildTestJAR("plugin.yml", "name: CachePlugin\nversion: \"1.0.0\"\napi-version: \"1.21\"\n")
+
+			downloadCount := 0
+			httpServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				downloadCount++
+				w.Header().Set("Content-Type", "application/java-archive")
+				_, _ = w.Write(jarBytes)
+			}))
+			defer httpServer.Close()
+
+			urlReconciler := &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: mockPlugin,
+				Solver:       solver.NewSimpleSolver(),
+				HTTPClient:   wrapTestClient(httpServer),
+			}
+
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  testPluginURL,
+				},
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"cache-ttl": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconcile: downloads JAR, populates cache.
+			_, err := urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			// Second reconcile needed to persist status.
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(downloadCount).To(Equal(1), "First reconcile should download JAR once")
+
+			// Manually set CachedAt to 30 minutes ago (still within 1-hour TTL).
+			// This makes it distinguishable from "now" to detect unwanted refresh.
+			var plugin mck8slexlav1beta1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: pluginName, Namespace: namespace,
+			}, &plugin)).To(Succeed())
+			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
+
+			thirtyMinAgo := metav1.NewTime(time.Now().Add(-30 * time.Minute))
+			plugin.Status.AvailableVersions[0].CachedAt = thirtyMinAgo
+			plugin.Status.LastFetched = &thirtyMinAgo
+			Expect(k8sClient.Status().Update(ctx, &plugin)).To(Succeed())
+
+			// Create a matching PaperMCServer. This changes MatchedInstances,
+			// forcing a status write that would reveal CachedAt refresh.
+			mcServer := &mck8slexlav1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+					Labels:    map[string]string{"cache-ttl": "true"},
+				},
+				Spec: mck8slexlav1beta1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{
+								Name:  "papermc",
+								Image: "docker.io/lexfrei/papermc:1.21.1-1",
+							}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, mcServer)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, mcServer) }()
+
+			// Reconcile: cache is still valid (30 min < 1 hour TTL).
+			// MatchedInstances changes → status write → would persist refreshed CachedAt.
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var pluginAfterCache mck8slexlav1beta1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: pluginName, Namespace: namespace,
+			}, &pluginAfterCache)).To(Succeed())
+			Expect(pluginAfterCache.Status.AvailableVersions).To(HaveLen(1))
+
+			// CachedAt must NOT have been refreshed — otherwise TTL never expires.
+			Expect(pluginAfterCache.Status.AvailableVersions[0].CachedAt.Time.Unix()).To(
+				Equal(thirtyMinAgo.Unix()),
+				"CachedAt should NOT be refreshed on cache hit (would prevent TTL expiry)")
+
+			// LastFetched must NOT have been updated — no actual fetch occurred.
+			Expect(pluginAfterCache.Status.LastFetched.Time.Unix()).To(
+				Equal(thirtyMinAgo.Unix()),
+				"LastFetched should NOT be updated on cache hit (no actual fetch occurred)")
+
+			// Download count should still be 1 — no re-download.
+			Expect(downloadCount).To(Equal(1), "Cache hit should not trigger re-download")
+		})
+
 		It("should use 0.0.0 as fallback version when JAR and spec have no version", func() {
 			pluginName := "test-url-no-version"
 			jarBytes := testutil.BuildTestJAR("plugin.yml", "name: NoVersionPlugin\n")

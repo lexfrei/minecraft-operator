@@ -191,11 +191,18 @@ func (r *PluginReconciler) syncPluginMetadata(
 	ctx context.Context,
 	plugin *mcv1beta1.Plugin,
 ) ([]plugins.PluginVersion, ctrl.Result, error) {
-	allVersions, repoErr := r.fetchPluginMetadata(ctx, plugin)
+	allVersions, cacheHit, repoErr := r.fetchPluginMetadata(ctx, plugin)
 
 	if repoErr != nil {
 		slog.ErrorContext(ctx, "Failed to fetch plugin metadata, using cached versions", "error", repoErr)
 		return r.handleRepositoryError(plugin, repoErr)
+	}
+
+	// On cache hit, skip updating timestamps and version info —
+	// the status already contains the correct cached data.
+	// Refreshing CachedAt here would prevent TTL from ever expiring.
+	if cacheHit {
+		return allVersions, ctrl.Result{}, nil
 	}
 
 	// Repository available - update cache
@@ -248,17 +255,22 @@ func (r *PluginReconciler) findMatchedServers(
 }
 
 // fetchPluginMetadata fetches plugin metadata from the repository.
+// Returns the versions, a cacheHit flag (true if cached data was used without
+// re-downloading), and an error. When cacheHit is true, the caller should
+// skip updating LastFetched and AvailableVersions to preserve TTL correctness.
 func (r *PluginReconciler) fetchPluginMetadata(
 	ctx context.Context,
 	plugin *mcv1beta1.Plugin,
-) ([]plugins.PluginVersion, error) {
+) ([]plugins.PluginVersion, bool, error) {
 	switch plugin.Spec.Source.Type {
 	case "url":
-		return r.fetchURLMetadata(ctx, plugin)
+		versions, cacheHit, err := r.fetchURLMetadata(ctx, plugin)
+		return versions, cacheHit, err
 	case "hangar":
-		return r.fetchHangarMetadata(ctx, plugin)
+		versions, err := r.fetchHangarMetadata(ctx, plugin)
+		return versions, false, err
 	default:
-		return nil, errors.Newf("unsupported source type: %s", plugin.Spec.Source.Type)
+		return nil, false, errors.Newf("unsupported source type: %s", plugin.Spec.Source.Type)
 	}
 }
 
@@ -289,9 +301,9 @@ func (r *PluginReconciler) fetchHangarMetadata(
 func (r *PluginReconciler) fetchURLMetadata(
 	ctx context.Context,
 	plugin *mcv1beta1.Plugin,
-) ([]plugins.PluginVersion, error) {
+) ([]plugins.PluginVersion, bool, error) {
 	if err := plugins.ValidateDownloadURL(plugin.Spec.Source.URL); err != nil {
-		return nil, errors.Wrap(err, "invalid URL")
+		return nil, false, errors.Wrap(err, "invalid URL")
 	}
 
 	if plugin.Spec.Source.Checksum == "" {
@@ -304,7 +316,7 @@ func (r *PluginReconciler) fetchURLMetadata(
 		slog.DebugContext(ctx, "Using cached metadata for URL plugin",
 			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
 
-		return convertCachedVersions(plugin.Status.AvailableVersions), nil
+		return convertCachedVersions(plugin.Status.AvailableVersions), true, nil
 	}
 
 	// Phase 1: Download JAR. HTTP failure means the repo is unreachable.
@@ -317,7 +329,7 @@ func (r *PluginReconciler) fetchURLMetadata(
 	}
 
 	if downloadErr != nil {
-		return nil, errors.Wrap(downloadErr, "failed to download JAR")
+		return nil, false, errors.Wrap(downloadErr, "failed to download JAR")
 	}
 
 	// Compute SHA256 once for both checksum verification and metadata.
@@ -327,7 +339,7 @@ func (r *PluginReconciler) fetchURLMetadata(
 	if plugin.Spec.Source.Checksum != "" {
 		specChecksum := strings.ToLower(plugin.Spec.Source.Checksum)
 		if sha256Hex != specChecksum {
-			return nil, errors.Newf("checksum mismatch: expected %s, got %s",
+			return nil, false, errors.Newf("checksum mismatch: expected %s, got %s",
 				specChecksum, sha256Hex)
 		}
 	}
@@ -347,7 +359,7 @@ func (r *PluginReconciler) fetchURLMetadata(
 		}
 	}
 
-	return versions, nil
+	return versions, false, nil
 }
 
 // resolveURLVersion parses JAR metadata and builds the version info.

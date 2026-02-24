@@ -155,11 +155,19 @@ func isBlockedHost(host string) bool {
 		return true
 	}
 
+	// Block reserved TLDs per RFC 6761 (.local) and RFC 6762 (.internal).
+	// These are used for mDNS, cloud metadata, and internal service discovery.
+	if strings.HasSuffix(lower, ".local") || strings.HasSuffix(lower, ".internal") {
+		return true
+	}
+
 	return false
 }
 
 // DownloadJAR downloads a JAR from the given URL and returns the raw bytes.
 // Uses SafeHTTPClient if httpClient is nil.
+// Note: the entire JAR (up to maxJARSize) is held in memory. With concurrent
+// URL plugin reconciliations, memory usage scales with num_plugins * jar_size.
 func DownloadJAR(ctx context.Context, jarURL string, httpClient *http.Client) ([]byte, error) {
 	if httpClient == nil {
 		httpClient = SafeHTTPClient()
