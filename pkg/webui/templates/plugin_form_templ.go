@@ -227,124 +227,104 @@ func PluginForm(data PluginFormData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, ">Hangar (PaperMC)</option> <option value=\"modrinth\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, ">Hangar (PaperMC)</option> <option value=\"url\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if data.SourceType == "modrinth" {
+			if data.SourceType == "url" {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, " selected")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, ">Modrinth</option> <option value=\"spigot\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if data.SourceType == "spigot" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, " selected")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, ">SpigotMC</option> <option value=\"url\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if data.SourceType == "url" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, " selected")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, ">Direct URL</option></select></div><div><label for=\"project\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Project *</label> <input type=\"text\" id=\"project\" name=\"project\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, ">Direct URL</option></select></div><div><label for=\"project\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Project *</label> <input type=\"text\" id=\"project\" name=\"project\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(data.Project)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 97, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 95, Col: 27}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\" required style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"EssentialsX\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Project name or slug from the plugin repository</p></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateStrategy\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Strategy *</label> <select id=\"updateStrategy\" name=\"updateStrategy\" required style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" onchange=\"document.getElementById('version-field').style.display = this.value === 'pinned' ? 'block' : 'none';\"><option value=\"latest\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\" required style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"EssentialsX\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Project name or slug from the plugin repository</p></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateStrategy\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Strategy *</label> <select id=\"updateStrategy\" name=\"updateStrategy\" required style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" onchange=\"document.getElementById('version-field').style.display = this.value === 'pinned' ? 'block' : 'none';\"><option value=\"latest\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if data.Strategy == "latest" || data.Strategy == "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, " selected")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, " selected")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, ">Latest (auto-update)</option> <option value=\"pinned\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, ">Latest (auto-update)</option> <option value=\"pinned\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if data.Strategy == "pinned" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, " selected")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " selected")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, ">Pinned (specific version)</option></select></div><div id=\"version-field\" style=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, ">Pinned (specific version)</option></select></div><div id=\"version-field\" style=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(versionFieldStyle(data.Strategy))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 119, Col: 69}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 117, Col: 69}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\"><label for=\"version\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Version</label> <input type=\"text\" id=\"version\" name=\"version\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\"><label for=\"version\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Version</label> <input type=\"text\" id=\"version\" name=\"version\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(data.Version)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 125, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 123, Col: 27}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"1.0.0\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Required when using pinned strategy</p></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateDelay\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Delay</label> <input type=\"text\" id=\"updateDelay\" name=\"updateDelay\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"1.0.0\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Required when using pinned strategy</p></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateDelay\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Delay</label> <input type=\"text\" id=\"updateDelay\" name=\"updateDelay\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(data.UpdateDelay)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 139, Col: 31}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 137, Col: 31}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"168h\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Grace period before applying new releases (e.g., 168h for 7 days)</p></div></div><div style=\"display: flex; gap: 15px; margin-top: 10px;\"><button type=\"submit\" style=\"background-color: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 4px; font-size: 14px; cursor: pointer; font-weight: 600;\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"168h\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Grace period before applying new releases (e.g., 168h for 7 days)</p></div></div><div style=\"display: flex; gap: 15px; margin-top: 10px;\"><button type=\"submit\" style=\"background-color: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 4px; font-size: 14px; cursor: pointer; font-weight: 600;\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if data.IsEdit {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "Update Plugin")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "Update Plugin")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "Create Plugin")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "Create Plugin")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</button> <a href=\"/ui/plugins\" style=\"background-color: var(--bg-tertiary); color: var(--text-primary); padding: 12px 24px; border-radius: 4px; font-size: 14px; text-decoration: none; font-weight: 600;\">Cancel</a></div></form></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</button> <a href=\"/ui/plugins\" style=\"background-color: var(--bg-tertiary); color: var(--text-primary); padding: 12px 24px; border-radius: 4px; font-size: 14px; text-decoration: none; font-weight: 600;\">Cancel</a></div></form></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

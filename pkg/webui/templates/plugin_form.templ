@@ -83,8 +83,6 @@ templ PluginForm(data PluginFormData) {
 							style="width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;"
 						>
 							<option value="hangar" selected?={ data.SourceType == "hangar" || data.SourceType == "" }>Hangar (PaperMC)</option>
-							<option value="modrinth" selected?={ data.SourceType == "modrinth" }>Modrinth</option>
-							<option value="spigot" selected?={ data.SourceType == "spigot" }>SpigotMC</option>
 							<option value="url" selected?={ data.SourceType == "url" }>Direct URL</option>
 						</select>
 					</div>

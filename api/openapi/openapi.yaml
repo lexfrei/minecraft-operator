@@ -671,13 +671,9 @@ components:
         Type of plugin repository.
 
         - **hangar**: PaperMC Hangar repository (hangar.papermc.io)
-        - **modrinth**: Modrinth repository (modrinth.com)
-        - **spigot**: SpigotMC repository (spigotmc.org)
         - **url**: Direct URL download (no version management)
       enum:
         - hangar
-        - modrinth
-        - spigot
         - url
       example: hangar
 
@@ -1237,7 +1233,7 @@ components:
           type: string
           description: |
             Project identifier in the repository.
-            Required for hangar, modrinth, and spigot types.
+            Required for hangar type.
           example: BlueMap
         url:
           type: string
