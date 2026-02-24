@@ -29,7 +29,7 @@ Four main controllers work together:
 - **Plugin → PaperMCServer**: Many-to-many via `instanceSelector` (label selector)
 - **Selector Conflict Resolution**: When multiple Plugins with same `source.project` match same servers:
   - If any has `updateStrategy: latest`: constraint solver picks optimal version
-  - If all have `updateStrategy: pinned`: highest semver wins (with warning)
+  - If all have `updateStrategy: pin`: highest semver wins (with warning)
 
 ### Cross-Resource Triggers
 
@@ -519,7 +519,7 @@ All architectural decisions are documented as ADRs in `.architecture.yaml` (sing
 - **Datapack support**: Out of scope (no compatibility versions)
 - **Paid plugins**: Nice-to-have, not in MVP (would need auth via Secret)
 - **Manual approval**: Not implemented (fully automated updates with updateDelay)
-- **Selector conflicts**: Resolved via version priority (latest > pinned, highest semver for all-pinned) (ADR-019)
+- **Selector conflicts**: Resolved via version priority (latest > pin, highest semver for all-pin) (ADR-019)
 
 See `.architecture.yaml` for complete ADR history and technical stack details.
 

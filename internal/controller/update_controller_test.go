@@ -12,6 +12,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -1055,6 +1056,53 @@ var _ = Describe("UpdateController", func() {
 			err := reconciler.downloadFile(cancelCtx, downloadURL, targetPath)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("context"))
+		})
+	})
+
+	Context("httpClient fallback behavior", func() {
+		It("should use HTTPClient field when set", func() {
+			customClient := &http.Client{Timeout: 42 * time.Second}
+			reconciler := &UpdateReconciler{
+				Client:     k8sClient,
+				Scheme:     k8sClient.Scheme(),
+				HTTPClient: customClient,
+			}
+			Expect(reconciler.httpClient()).To(Equal(customClient))
+		})
+
+		It("should create default client with timeout when HTTPClient is nil", func() {
+			reconciler := &UpdateReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			defaultClient := reconciler.httpClient()
+			Expect(defaultClient).NotTo(BeNil())
+			Expect(defaultClient.Timeout).To(Equal(downloadTimeout))
+		})
+	})
+
+	Context("curl timeout flags", func() {
+		It("should include connect-timeout and max-time flags", func() {
+			mockExec := &testutil.MockPodExecutor{}
+			reconciler := &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: mockExec,
+			}
+
+			server := &mcv1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-timeout-server", Namespace: "default",
+				},
+			}
+			_ = reconciler.downloadPluginToServer(ctx, server, "test-plugin",
+				"https://example.com/plugin.jar", "")
+
+			Expect(mockExec.Calls).To(HaveLen(1))
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--connect-timeout"),
+				"curl should set connection timeout")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--max-time"),
+				"curl should set maximum transfer time")
 		})
 	})
 

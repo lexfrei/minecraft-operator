@@ -356,6 +356,7 @@ func main() {
 		PodExecutor:      podExecutor,
 		Metrics:          metricsRecorder,
 		BackupReconciler: backupReconciler,
+		HTTPClient:       plugins.SafeHTTPClient(),
 	}
 	updateReconciler.SetCron(cronScheduler)
 	if err := updateReconciler.SetupWithManager(mgr); err != nil {

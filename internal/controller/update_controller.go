@@ -48,6 +48,10 @@ const (
 
 	// downloadTimeout is the HTTP timeout for downloading Paper JAR files.
 	downloadTimeout = 5 * time.Minute
+
+	// maxPaperJARSize is the maximum allowed size for Paper server JARs (500MB).
+	// Paper JARs are larger than plugin JARs; use a generous limit.
+	maxPaperJARSize = 500 * 1024 * 1024
 )
 
 // UpdateReconciler reconciles PaperMCServer resources for scheduled updates.
@@ -418,7 +422,7 @@ func (r *UpdateReconciler) downloadFile(ctx context.Context, url, targetPath str
 	}()
 
 	// Limit read size to prevent PVC exhaustion.
-	limitedReader := io.LimitReader(resp.Body, int64(plugins.MaxJARSize))
+	limitedReader := io.LimitReader(resp.Body, maxPaperJARSize)
 	_, err = io.Copy(outFile, limitedReader)
 	if err != nil {
 		return errors.Wrap(err, "failed to write file")
@@ -494,6 +498,8 @@ func (r *UpdateReconciler) downloadPluginToServer(
 			"--proto", "=https",
 			"--max-redirs", strconv.Itoa(plugins.MaxRedirects),
 			"--max-filesize", strconv.Itoa(plugins.MaxJARSize),
+			"--connect-timeout", "30",
+			"--max-time", "300",
 			"--user-agent", "minecraft-operator",
 			"--output", outputPath, "--", downloadURL})
 	if err != nil {
