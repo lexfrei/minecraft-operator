@@ -57,6 +57,15 @@ func kubectlCmd(args ...string) *exec.Cmd {
 	return exec.Command("kubectl", fullArgs...)
 }
 
+// helmCmd creates a helm command with the Kind cluster kube-context.
+// All helm commands in e2e tests must specify --kube-context to prevent
+// accidentally targeting the wrong cluster.
+func helmCmd(args ...string) *exec.Cmd {
+	fullArgs := append([]string{"--kube-context", kindClusterContext()}, args...)
+
+	return exec.Command("helm", fullArgs...)
+}
+
 // serviceAccountName created for the project
 const serviceAccountName = "minecraft-operator-controller-manager"
 
@@ -86,7 +95,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 		By("deploying the controller-manager (CRDs are applied automatically at startup)")
 		imageRepo, imageTag := parseImage(projectImage)
-		cmd = exec.Command("helm", "install", "minecraft-operator",
+		cmd = helmCmd("install", "minecraft-operator",
 			"./charts/minecraft-operator",
 			"--namespace", namespace,
 			"--set", fmt.Sprintf("image.repository=%s", imageRepo),
@@ -103,7 +112,7 @@ var _ = Describe("Manager", Ordered, func() {
 		_, _ = utils.Run(cmd)
 
 		By("undeploying the controller-manager")
-		cmd = exec.Command("helm", "uninstall", "minecraft-operator",
+		cmd = helmCmd("uninstall", "minecraft-operator",
 			"--namespace", namespace)
 		_, _ = utils.Run(cmd)
 

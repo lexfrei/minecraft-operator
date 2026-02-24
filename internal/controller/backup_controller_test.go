@@ -1661,6 +1661,72 @@ func TestUpdateReconciler_BackupBeforeUpdateSkipsWhenCRDMissing(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestUpdateReconciler_BackupBeforeUpdateProceedsOnTransientError(t *testing.T) {
+	// When ListSnapshots returns a generic network error (not NoKindMatchError),
+	// isSnapshotAPIUnavailable returns false and the backup proceeds.
+	// If the backup then fails, the error propagates and aborts the update.
+	scheme := newBackupTestScheme()
+
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:      true,
+		BeforeUpdate: boolPtr(true),
+		Retention:    mcv1beta1.BackupRetention{MaxCount: 5},
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newRCONSecret(), newServerPod(), newServerPVC()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	backupR := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: &transientErrorSnapshotter{},
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     time.Now,
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+	backupR.initOnce.Do(backupR.initMaps)
+
+	updateR := &UpdateReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		BackupReconciler: backupR,
+	}
+
+	// Should error — transient errors mean "CRD exists but something is wrong",
+	// so backup proceeds and fails, aborting the update.
+	err := updateR.backupBeforeUpdate(context.Background(), server)
+	require.Error(t, err, "transient snapshot error should abort the update")
+}
+
+// transientErrorSnapshotter simulates a cluster where VolumeSnapshot CRD exists
+// but the API returns transient network errors.
+type transientErrorSnapshotter struct{}
+
+func (s *transientErrorSnapshotter) CreateSnapshot(
+	_ context.Context, _ backup.SnapshotRequest,
+) (string, error) {
+	return "", fmt.Errorf("connection refused")
+}
+
+func (s *transientErrorSnapshotter) ListSnapshots(
+	_ context.Context, _, _ string,
+) ([]volumesnapshotv1.VolumeSnapshot, error) {
+	return nil, fmt.Errorf("connection refused")
+}
+
+func (s *transientErrorSnapshotter) DeleteOldSnapshots(
+	_ context.Context, _, _ string, _ int,
+) (int, error) {
+	return 0, fmt.Errorf("connection refused")
+}
+
 func TestBackupReconciler_ValidCronPersistsBackupCronValidTrue(t *testing.T) {
 	scheme := newBackupTestScheme()
 	server := newTestServer(&mcv1beta1.BackupSpec{
