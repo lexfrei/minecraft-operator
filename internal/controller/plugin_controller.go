@@ -300,7 +300,9 @@ func (r *PluginReconciler) fetchPluginMetadata(
 		versions, err := r.fetchHangarMetadata(ctx, plugin)
 		return versions, false, err
 	default:
-		return nil, false, errors.Newf("source type %q is not yet implemented", plugin.Spec.Source.Type)
+		return nil, false, errors.Mark(
+			errors.Newf("source type %q is not yet implemented", plugin.Spec.Source.Type),
+			errInvalidURL)
 	}
 }
 

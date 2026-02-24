@@ -270,7 +270,13 @@ func DownloadJAR(ctx context.Context, jarURL string, httpClient *http.Client) ([
 		return nil, errors.Newf("HTTP %d downloading JAR from %s", resp.StatusCode, jarURL)
 	}
 
-	// Read body with size limit.
+	// Early rejection based on Content-Length header to avoid reading a large
+	// response body into memory when the server advertises a size exceeding our limit.
+	if resp.ContentLength > int64(MaxJARSize) {
+		return nil, errors.Newf("JAR exceeds maximum size of %d bytes (Content-Length: %d)", MaxJARSize, resp.ContentLength)
+	}
+
+	// Read body with size limit (Content-Length can be absent or lie).
 	limitedReader := io.LimitReader(resp.Body, MaxJARSize+1)
 
 	body, err := io.ReadAll(limitedReader)

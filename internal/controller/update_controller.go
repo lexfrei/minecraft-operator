@@ -497,8 +497,8 @@ func (r *UpdateReconciler) downloadPluginToServer(
 			return errors.Wrapf(execErr, "failed to verify checksum for plugin %s", pluginName)
 		}
 
-		actualHash := strings.TrimSpace(string(output))
-		if actualHash != expectedHash {
+		actualHash := strings.ToLower(strings.TrimSpace(string(output)))
+		if actualHash != strings.ToLower(expectedHash) {
 			return errors.Newf("checksum mismatch: expected %s, got %s",
 				expectedHash, actualHash)
 		}

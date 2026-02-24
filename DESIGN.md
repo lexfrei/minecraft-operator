@@ -475,7 +475,7 @@ For each Plugin resource, find the optimal plugin version that is compatible wit
 
 ### Input Data
 
-From platform APIs we receive (see `pkg/plugins/client.go`):
+From platform APIs and URL JAR metadata we receive (see `pkg/plugins/client.go`):
 
 ```go
 type PluginVersion struct {

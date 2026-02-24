@@ -228,6 +228,22 @@ func TestDownloadJAR_SizeLimitAndErrors(t *testing.T) {
 		assert.Contains(t, err.Error(), "exceeds maximum size")
 	})
 
+	t.Run("rejects early when Content-Length exceeds max size", func(t *testing.T) {
+		// Server advertises Content-Length larger than MaxJARSize.
+		// DownloadJAR should reject before reading the body.
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Length", "200000000") // 200MB > MaxJARSize
+			w.WriteHeader(http.StatusOK)
+			// Don't write any body — the client should reject based on Content-Length.
+		}))
+		defer server.Close()
+
+		_, err := plugins.DownloadJAR(context.Background(), server.URL+"/huge.jar", server.Client())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds maximum size")
+		assert.Contains(t, err.Error(), "Content-Length")
+	})
+
 	t.Run("returns error with HTTP status code on failure", func(t *testing.T) {
 		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
