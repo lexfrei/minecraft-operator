@@ -488,7 +488,9 @@ func (r *UpdateReconciler) downloadPluginToServer(
 		return errors.Wrapf(err, "failed to download plugin %s", pluginName)
 	}
 
-	// Verify checksum if provided
+	// Verify checksum if provided.
+	// pluginName is a Kubernetes resource name (RFC 1123: [a-z0-9.-]),
+	// safe for shell interpolation in sh -c strings.
 	if expectedHash != "" {
 		checksumCmd := fmt.Sprintf(
 			"sha256sum /data/plugins/update/%s.jar | awk '{print $1}'",

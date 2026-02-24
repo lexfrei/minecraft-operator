@@ -76,9 +76,11 @@ spec:
 
 !!! note "Update Strategy for URL Sources"
 
-    For URL sources, `updateStrategy` is accepted but largely irrelevant. A direct URL
-    points to a single file with no version history, so all strategies behave similarly.
-    Use `latest` for simplicity.
+    For URL sources, there is only one version (the JAR at the URL), so strategy
+    differences only affect how the solver processes compatibility. Use `latest` for
+    simplicity. Note that `updateDelay` is measured from the time the operator first
+    downloads the JAR, not from the plugin's actual release date. Validation happens
+    at reconciliation time, not at CR creation time (webhook validation is planned).
 
 ### updateStrategy
 

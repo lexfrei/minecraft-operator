@@ -597,6 +597,7 @@ func statusEqual(a, b *mcv1beta1.PluginStatus) bool {
 		if a.AvailableVersions[i].Version != b.AvailableVersions[i].Version ||
 			a.AvailableVersions[i].DownloadURL != b.AvailableVersions[i].DownloadURL ||
 			a.AvailableVersions[i].Hash != b.AvailableVersions[i].Hash ||
+			!a.AvailableVersions[i].CachedAt.Equal(&b.AvailableVersions[i].CachedAt) ||
 			!a.AvailableVersions[i].ReleasedAt.Equal(&b.AvailableVersions[i].ReleasedAt) ||
 			!minecraftVersionsEqual(a.AvailableVersions[i].MinecraftVersions, b.AvailableVersions[i].MinecraftVersions) {
 			return false

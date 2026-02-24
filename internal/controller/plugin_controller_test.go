@@ -2232,6 +2232,38 @@ var _ = Describe("Plugin Controller", func() {
 				"statusEqual should detect MinecraftVersions change")
 		})
 
+		It("should detect CachedAt change in AvailableVersions", func() {
+			now := metav1.Now()
+			later := metav1.NewTime(now.Add(1 * time.Hour))
+
+			a := &mck8slexlav1beta1.PluginStatus{
+				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
+					{
+						Version:           "1.0.0",
+						DownloadURL:       "https://example.com/v1.jar",
+						Hash:              "abc123",
+						MinecraftVersions: []string{"1.21"},
+						CachedAt:          now,
+						ReleasedAt:        now,
+					},
+				},
+			}
+			b := &mck8slexlav1beta1.PluginStatus{
+				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
+					{
+						Version:           "1.0.0",
+						DownloadURL:       "https://example.com/v1.jar",
+						Hash:              "abc123",
+						MinecraftVersions: []string{"1.21"},
+						CachedAt:          later,
+						ReleasedAt:        now,
+					},
+				},
+			}
+			Expect(statusEqual(a, b)).To(BeFalse(),
+				"statusEqual should detect CachedAt change to persist refreshed TTL")
+		})
+
 		It("should detect ReleasedAt change in AvailableVersions", func() {
 			now := metav1.Now()
 			later := metav1.NewTime(now.Add(24 * time.Hour))
@@ -2395,8 +2427,14 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func wrapTestClient(server *httptest.Server) *http.Client {
 	client := server.Client()
 	inner := client.Transport
+
+	// httptest.Server.URL is always valid, but handle parse error defensively.
+	testURL, err := url.Parse(server.URL)
+	if err != nil {
+		panic("httptest server URL is malformed: " + err.Error())
+	}
+
 	client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		testURL, _ := url.Parse(server.URL)
 		req.URL.Scheme = testURL.Scheme
 		req.URL.Host = testURL.Host
 

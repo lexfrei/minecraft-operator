@@ -40,7 +40,8 @@ const (
 	maxPluginYMLSize = 10 * 1024 * 1024
 
 	// safeHTTPTimeout is the default timeout for HTTP operations.
-	safeHTTPTimeout = 30 * time.Second
+	// Set to 120s to accommodate large JARs (up to maxJARSize=100MB) on slower connections.
+	safeHTTPTimeout = 120 * time.Second
 
 	// maxRedirects is the maximum number of HTTP redirects to follow.
 	maxRedirects = 10
