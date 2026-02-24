@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -1432,6 +1432,87 @@ func TestBackupReconciler_BackupReadyRecoveryRefreshesServer(t *testing.T) {
 	assert.Equal(t, metav1.ConditionTrue, cond.Status, "BackupReady should be True after CRD becomes available")
 	assert.Equal(t, "1.21.4", s2.Status.CurrentVersion,
 		"other status fields should be preserved")
+}
+
+func TestBackupReconciler_StaleAnnotationCleanedUp(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled: true,
+	})
+	// Stale annotation (10 minutes old, max age is 5 minutes)
+	staleTimestamp := now.Add(-10 * time.Minute).Unix()
+	server.Annotations = map[string]string{
+		AnnotationBackupNow: fmt.Sprintf("%d", staleTimestamp),
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// Stale annotation should be cleaned up so it doesn't persist indefinitely
+	var updatedServer mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &updatedServer))
+
+	_, exists := updatedServer.Annotations[AnnotationBackupNow]
+	assert.False(t, exists, "stale backup-now annotation should be removed")
+}
+
+func TestBackupReconciler_InvalidAnnotationCleanedUp(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled: true,
+	})
+	server.Annotations = map[string]string{
+		AnnotationBackupNow: "not-a-number",
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	var updatedServer mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &updatedServer))
+
+	_, exists := updatedServer.Annotations[AnnotationBackupNow]
+	assert.False(t, exists, "invalid backup-now annotation should be removed")
 }
 
 func TestBackupReconciler_ValidCronPersistsBackupCronValidTrue(t *testing.T) {

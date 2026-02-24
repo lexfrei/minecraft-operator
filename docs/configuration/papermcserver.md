@@ -22,7 +22,7 @@ spec:
 **Required** — Defines how Paper version updates are handled.
 
 | Value | Description |
-|-------|-------------|
+| --- | --- |
 | `latest` | Always use newest Paper version from Docker Hub (ignores plugin compatibility) |
 | `auto` | Constraint solver picks best version compatible with all plugins |
 | `pin` | Stay on specific version, auto-update to latest build |
@@ -73,7 +73,7 @@ spec:
 **Required** — Defines when to check and apply updates.
 
 | Field | Description |
-|-------|-------------|
+| --- | --- |
 | `checkCron` | Cron expression for checking updates |
 | `maintenanceWindow.enabled` | Enable scheduled updates |
 | `maintenanceWindow.cron` | Cron expression for applying updates |
@@ -96,7 +96,7 @@ spec:
 **Required** — Configures graceful server shutdown.
 
 | Field | Description |
-|-------|-------------|
+| --- | --- |
 | `timeout` | Shutdown timeout (should match `terminationGracePeriodSeconds`) |
 
 ```yaml
@@ -115,7 +115,7 @@ spec:
 **Required** — Configures RCON for graceful shutdown commands.
 
 | Field | Description | Default |
-|-------|-------------|---------|
+| --- | --- | --- |
 | `enabled` | Enable RCON | — |
 | `passwordSecret.name` | Secret name | — |
 | `passwordSecret.key` | Key in Secret | — |
@@ -143,7 +143,7 @@ kubectl create secret generic my-server-rcon \
 **Optional** — Configures the Kubernetes Service for the server.
 
 | Field | Description | Default |
-|-------|-------------|---------|
+| --- | --- | --- |
 | `type` | Service type | `LoadBalancer` |
 | `annotations` | Custom annotations | — |
 | `loadBalancerIP` | Static IP for LoadBalancer | — |
@@ -196,7 +196,7 @@ kubectl annotate papermcserver my-server \
 This is a standard Kubernetes `PodTemplateSpec`. Key fields:
 
 | Field | Description |
-|-------|-------------|
+| --- | --- |
 | `spec.containers[0].resources` | CPU/memory requests and limits |
 | `spec.containers[0].env` | Environment variables |
 | `spec.volumes` | Additional volumes |

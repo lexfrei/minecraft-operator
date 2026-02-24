@@ -75,13 +75,6 @@ type UpdateReconciler struct {
 	cronEntries   map[string]cronEntryInfo
 }
 
-// cronEntryInfo stores both the cron entry ID and the spec string
-// to avoid needing to retrieve the spec from the scheduler.
-type cronEntryInfo struct {
-	ID   cron.EntryID
-	Spec string
-}
-
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=plugins,verbs=get;list;watch

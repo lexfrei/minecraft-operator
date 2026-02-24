@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -129,20 +129,16 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// Manage backup cron schedule
 	if server.Spec.Backup.Schedule != "" {
-		if !r.manageBackupCronSchedule(ctx, &server) {
-			// Invalid cron — condition set, persist and return
-			if updateErr := r.Status().Update(ctx, &server); updateErr != nil {
-				slog.ErrorContext(ctx, "Failed to update status with cron condition", "error", updateErr)
+		cronValid := r.manageBackupCronSchedule(ctx, &server)
 
-				return ctrl.Result{}, errors.Wrap(updateErr, "failed to update status")
-			}
-
-			return ctrl.Result{}, nil
+		// Persist the BackupCronValid condition (True or False).
+		// Re-fetch to avoid resource version conflicts with concurrent controllers.
+		if err := r.persistCronCondition(ctx, req.NamespacedName, &server); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to persist cron condition")
 		}
 
-		// Valid cron — persist BackupCronValid=True condition
-		if updateErr := r.Status().Update(ctx, &server); updateErr != nil {
-			slog.ErrorContext(ctx, "Failed to persist BackupCronValid condition", "error", updateErr)
+		if !cronValid {
+			return ctrl.Result{}, nil
 		}
 	}
 
@@ -179,6 +175,16 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// Check for manual backup trigger
 	backupNow := r.shouldBackupNow(ctx, &server)
+	if !backupNow && server.Annotations != nil {
+		// Clean up stale or invalid backup-now annotation so it doesn't persist indefinitely.
+		// shouldBackupNow already logged the reason for rejection.
+		if _, hasAnnotation := server.Annotations[AnnotationBackupNow]; hasAnnotation {
+			if err := r.removeBackupNowAnnotation(ctx, &server); err != nil {
+				slog.ErrorContext(ctx, "Failed to remove stale backup-now annotation", "error", err)
+			}
+		}
+	}
+
 	if backupNow {
 		slog.InfoContext(ctx, "Manual backup triggered", "server", server.Name)
 
@@ -499,6 +505,35 @@ func (r *BackupReconciler) persistBackupStatus(
 	// Copy updated status back to caller's server object
 	server.Status = latestServer.Status
 	server.ResourceVersion = latestServer.ResourceVersion
+}
+
+// persistCronCondition re-fetches the server, copies the BackupCronValid condition, and persists it.
+func (r *BackupReconciler) persistCronCondition(
+	ctx context.Context,
+	key types.NamespacedName,
+	server *mcv1beta1.PaperMCServer,
+) error {
+	var latestServer mcv1beta1.PaperMCServer
+	if err := r.Get(ctx, key, &latestServer); err != nil {
+		return errors.Wrap(err, "failed to re-fetch server for cron condition")
+	}
+
+	// Copy the in-memory condition to the latest server
+	if cond := meta.FindStatusCondition(server.Status.Conditions, conditionTypeBackupCronValid); cond != nil {
+		meta.SetStatusCondition(&latestServer.Status.Conditions, *cond)
+	}
+
+	if updateErr := r.Status().Update(ctx, &latestServer); updateErr != nil {
+		slog.ErrorContext(ctx, "Failed to persist BackupCronValid condition", "error", updateErr)
+
+		return errors.Wrap(updateErr, "failed to update cron condition")
+	}
+
+	// Copy updated status back
+	server.Status = latestServer.Status
+	server.ResourceVersion = latestServer.ResourceVersion
+
+	return nil
 }
 
 // rconConnInfo holds the connection details for an RCON client.
