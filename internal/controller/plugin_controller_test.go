@@ -1,17 +1,7 @@
 /*
-Copyright 2025.
+Copyright 2026, Aleksei Sviridkin.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: BSD-3-Clause
 */
 
 package controller
@@ -1406,7 +1396,7 @@ var _ = Describe("Plugin Controller", func() {
 			repoCond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
 			Expect(repoCond).NotTo(BeNil())
 			Expect(repoCond.Status).To(Equal(metav1.ConditionFalse))
-			Expect(repoCond.Message).To(ContainSubstring("unsupported source type"))
+			Expect(repoCond.Message).To(ContainSubstring("not yet implemented"))
 		})
 
 		It("should return empty result for non-existent plugin", func() {
@@ -1772,7 +1762,7 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 		})
 
-		It("should set RepositoryAvailable=False for URL plugin with checksum mismatch", func() {
+		It("should set RepositoryAvailable=False for URL plugin with checksum mismatch without requeue", func() {
 			pluginName := "test-url-checksum-mismatch"
 			jarBytes := testutil.BuildTestJAR("plugin.yml", "name: ChecksumPlugin\nversion: \"1.0.0\"\n")
 
@@ -1805,7 +1795,7 @@ var _ = Describe("Plugin Controller", func() {
 			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
 			_, err := urlReconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = urlReconciler.Reconcile(ctx, req)
+			result, err := urlReconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 
 			var plugin mck8slexlav1beta1.Plugin
@@ -1817,6 +1807,11 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 			Expect(cond.Message).To(ContainSubstring("checksum"),
 				"Error message should indicate checksum mismatch")
+
+			// Checksum mismatch is a permanent user error — must not requeue frequently.
+			// User fixing the checksum triggers re-reconciliation via the watch.
+			Expect(result.RequeueAfter).To(BeZero(),
+				"Checksum mismatch should not requeue (permanent user error)")
 		})
 
 		It("should set RepositoryAvailable=False for URL plugin with HTTP URL", func() {

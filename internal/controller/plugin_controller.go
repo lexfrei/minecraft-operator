@@ -1,17 +1,7 @@
 /*
-Copyright 2025.
+Copyright 2026, Aleksei Sviridkin.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: BSD-3-Clause
 */
 
 package controller
@@ -59,7 +49,13 @@ const (
 
 	// urlCacheTTL is the maximum age of cached URL plugin metadata before re-fetching.
 	urlCacheTTL = 1 * time.Hour
+
+	reasonChecksumMismatch = "ChecksumMismatch"
 )
+
+// errChecksumMismatch is a sentinel error for checksum verification failures.
+// This is a permanent user error that should not trigger periodic requeue.
+var errChecksumMismatch = errors.New("checksum mismatch")
 
 // PluginReconciler reconciles a Plugin object.
 type PluginReconciler struct {
@@ -194,7 +190,19 @@ func (r *PluginReconciler) syncPluginMetadata(
 	allVersions, cacheHit, repoErr := r.fetchPluginMetadata(ctx, plugin)
 
 	if repoErr != nil {
+		// Checksum mismatch is a permanent user error — do not requeue periodically.
+		// The user must fix spec.source.checksum; the watch triggers re-reconciliation.
+		if errors.Is(repoErr, errChecksumMismatch) {
+			slog.ErrorContext(ctx, "Checksum verification failed", "error", repoErr, "plugin", plugin.Name)
+			plugin.Status.RepositoryStatus = repositoryStatusUnavailable
+			r.setCondition(plugin, conditionTypeRepositoryAvailable, metav1.ConditionFalse,
+				reasonChecksumMismatch, repoErr.Error())
+
+			return nil, ctrl.Result{}, nil
+		}
+
 		slog.ErrorContext(ctx, "Failed to fetch plugin metadata, using cached versions", "error", repoErr)
+
 		return r.handleRepositoryError(plugin, repoErr)
 	}
 
@@ -270,7 +278,7 @@ func (r *PluginReconciler) fetchPluginMetadata(
 		versions, err := r.fetchHangarMetadata(ctx, plugin)
 		return versions, false, err
 	default:
-		return nil, false, errors.Newf("unsupported source type: %s", plugin.Spec.Source.Type)
+		return nil, false, errors.Newf("source type %q is not yet implemented", plugin.Spec.Source.Type)
 	}
 }
 
@@ -339,8 +347,9 @@ func (r *PluginReconciler) fetchURLMetadata(
 	if plugin.Spec.Source.Checksum != "" {
 		specChecksum := strings.ToLower(plugin.Spec.Source.Checksum)
 		if sha256Hex != specChecksum {
-			return nil, false, errors.Newf("checksum mismatch: expected %s, got %s",
-				specChecksum, sha256Hex)
+			return nil, false, errors.Mark(
+				errors.Newf("checksum mismatch: expected %s, got %s", specChecksum, sha256Hex),
+				errChecksumMismatch)
 		}
 	}
 
