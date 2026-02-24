@@ -119,6 +119,38 @@ func TestPostSnapshotHook(t *testing.T) {
 	})
 }
 
+func TestPostSnapshotHookTimeout(t *testing.T) {
+	t.Run("returns error when save-on exceeds timeout", func(t *testing.T) {
+		// The mock blocks on save-on longer than the 10s saveOnTimeout.
+		// PostSnapshotHook should return a context deadline exceeded error.
+		mock := &blockingRCONClient{blockDuration: 15 * time.Second}
+
+		start := time.Now()
+		err := backup.PostSnapshotHook(context.Background(), mock)
+		elapsed := time.Since(start)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "save-on")
+		// Should have returned within ~10s (the saveOnTimeout), not 15s.
+		assert.Less(t, elapsed, 12*time.Second,
+			"PostSnapshotHook should timeout within saveOnTimeout, not block indefinitely")
+	})
+}
+
+// blockingRCONClient blocks SendCommand for a configured duration, respecting context.
+type blockingRCONClient struct {
+	blockDuration time.Duration
+}
+
+func (b *blockingRCONClient) SendCommand(ctx context.Context, _ string) (string, error) {
+	select {
+	case <-time.After(b.blockDuration):
+		return "", nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+}
+
 func TestPreSnapshotHookWithSaveWait(t *testing.T) {
 	t.Run("waits for save to flush before disabling autosave", func(t *testing.T) {
 		mock := newMockRCONClient()

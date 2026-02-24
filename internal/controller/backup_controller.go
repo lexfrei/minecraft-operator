@@ -130,6 +130,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// Check if backup is enabled
 	if server.Spec.Backup == nil || !server.Spec.Backup.Enabled {
 		r.removeBackupCronJob(req.String())
+		r.consumeCronTrigger(req.String())
 		r.backupMu.Delete(req.String())
 
 		return ctrl.Result{}, nil
@@ -148,6 +149,11 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		if !cronValid {
 			return ctrl.Result{}, nil
 		}
+	} else {
+		// Schedule was removed from spec — clean up any existing cron job
+		// to prevent orphaned goroutines and stale trigger times.
+		r.removeBackupCronJob(req.String())
+		r.consumeCronTrigger(req.String())
 	}
 
 	// Pre-flight: verify VolumeSnapshot API is available in the cluster

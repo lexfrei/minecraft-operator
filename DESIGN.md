@@ -19,6 +19,7 @@ Minecraft Operator is a Kubernetes operator for managing PaperMC servers with a 
 - Horizontal scaling
 - Network policies or ingress management
 - Zero-downtime updates
+- Full backup/restore management (operator creates VolumeSnapshots but does not handle restore)
 
 ## Architecture
 

@@ -1572,6 +1572,97 @@ func TestBackupReconciler_InvalidAnnotationCleanedUp(t *testing.T) {
 	assert.False(t, exists, "invalid backup-now annotation should be removed")
 }
 
+func TestBackupReconciler_ScheduleRemovedCleansCron(t *testing.T) {
+	// When the schedule is removed from spec, the cron job and trigger time
+	// must be cleaned up to prevent orphaned goroutines.
+	scheme := newBackupTestScheme()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled: true,
+		// No Schedule — simulates removal
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	mockCron := testutil.NewMockCronScheduler()
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        mockCron,
+		nowFunc:     time.Now,
+	}
+	r.initOnce.Do(r.initMaps)
+
+	key := testServerKey
+
+	// Simulate pre-existing cron entry and trigger from a previous reconciliation.
+	r.cronEntriesMu.Lock()
+	r.cronEntries[key] = cronEntryInfo{ID: 42, Spec: "0 */6 * * *"}
+	r.cronEntriesMu.Unlock()
+
+	r.cronTriggerMu.Lock()
+	r.cronTriggerTimes[key] = time.Now()
+	r.cronTriggerMu.Unlock()
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	r.cronEntriesMu.RLock()
+	_, hasCron := r.cronEntries[key]
+	r.cronEntriesMu.RUnlock()
+	assert.False(t, hasCron, "cron entry should be cleaned up when schedule is removed")
+
+	r.cronTriggerMu.RLock()
+	_, hasTrigger := r.cronTriggerTimes[key]
+	r.cronTriggerMu.RUnlock()
+	assert.False(t, hasTrigger, "cron trigger should be consumed when schedule is removed")
+}
+
+func TestBackupReconciler_DisableBackupConsumesCronTrigger(t *testing.T) {
+	// When backup is disabled, any pending cron trigger must be consumed
+	// to prevent stale triggers from firing when backup is re-enabled.
+	scheme := newBackupTestScheme()
+	server := newTestServer(nil) // backup disabled (nil spec)
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     time.Now,
+	}
+	r.initOnce.Do(r.initMaps)
+
+	key := testServerKey
+	r.cronTriggerMu.Lock()
+	r.cronTriggerTimes[key] = time.Now()
+	r.cronTriggerMu.Unlock()
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	r.cronTriggerMu.RLock()
+	_, hasTrigger := r.cronTriggerTimes[key]
+	r.cronTriggerMu.RUnlock()
+	assert.False(t, hasTrigger, "cron trigger should be consumed when backup is disabled")
+}
+
 func TestBackupReconciler_ScheduledBackupRunsAfterFailedManualBackup(t *testing.T) {
 	// A failed manual backup must not prevent a pending cron-triggered backup from running.
 	// The cron trigger check must consider Successful status, not just StartedAt.
@@ -1612,7 +1703,7 @@ func TestBackupReconciler_ScheduledBackupRunsAfterFailedManualBackup(t *testing.
 	r.initOnce.Do(r.initMaps)
 
 	// Simulate a cron trigger at a time BEFORE the failed manual backup.
-	serverKey := "minecraft/my-server"
+	serverKey := testServerKey
 	r.cronTriggerMu.Lock()
 	r.cronTriggerTimes[serverKey] = now.Add(-1 * time.Minute)
 	r.cronTriggerMu.Unlock()
@@ -1659,6 +1750,17 @@ func TestUpdateReconciler_BackupBeforeUpdateSkipsWhenCRDMissing(t *testing.T) {
 	// Should NOT error — instead skip backup silently.
 	err := updateR.backupBeforeUpdate(context.Background(), server)
 	require.NoError(t, err)
+
+	// Verify BackupReady condition was set to False.
+	var updatedServer mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &updatedServer))
+
+	cond := meta.FindStatusCondition(updatedServer.Status.Conditions, conditionTypeBackupReady)
+	require.NotNil(t, cond, "BackupReady condition should be set")
+	assert.Equal(t, metav1.ConditionFalse, cond.Status,
+		"BackupReady should be False when CRD is missing")
 }
 
 func TestUpdateReconciler_BackupBeforeUpdateProceedsOnTransientError(t *testing.T) {
