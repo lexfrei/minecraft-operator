@@ -23,8 +23,10 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -86,7 +88,8 @@ func SafeHTTPClient() *http.Client {
 	}
 }
 
-// ValidateDownloadURL checks that a URL is valid for plugin downloads.
+// ValidateDownloadURL checks that a URL is valid and safe for plugin downloads.
+// Blocks non-HTTPS URLs, missing hosts, and private/internal network addresses.
 func ValidateDownloadURL(rawURL string) error {
 	if rawURL == "" {
 		return errors.New("URL is required for url source type")
@@ -105,21 +108,50 @@ func ValidateDownloadURL(rawURL string) error {
 		return errors.New("URL must have a valid host")
 	}
 
+	if isBlockedHost(parsed.Host) {
+		return errors.Newf("URL host %s is blocked (private/internal address)", parsed.Hostname())
+	}
+
 	return nil
 }
 
-// BuildURLVersion constructs a PluginVersion from direct URL parameters.
-// Used as a fallback when JAR metadata extraction fails.
-func BuildURLVersion(downloadURL, version, checksum string) PluginVersion {
-	if version == "" {
-		version = "0.0.0"
+// isBlockedHost checks whether a host (with optional port) points to a private,
+// loopback, or otherwise restricted network address. This prevents SSRF attacks
+// where a malicious URL could probe internal cluster services or cloud metadata.
+func isBlockedHost(host string) bool {
+	hostname := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		hostname = h
 	}
 
-	return PluginVersion{
-		Version:     version,
-		DownloadURL: downloadURL,
-		Hash:        checksum,
+	// Strip IPv6 brackets (e.g., "[::1]" → "::1").
+	hostname = strings.TrimPrefix(hostname, "[")
+	hostname = strings.TrimSuffix(hostname, "]")
+
+	// Block literal IPs in restricted ranges.
+	if ip := net.ParseIP(hostname); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 	}
+
+	// Block known dangerous hostnames.
+	lower := strings.ToLower(hostname)
+
+	if lower == "localhost" {
+		return true
+	}
+
+	// Kubernetes internal DNS suffixes.
+	if strings.HasSuffix(lower, ".svc") || strings.HasSuffix(lower, ".svc.cluster.local") {
+		return true
+	}
+
+	// Cloud provider metadata endpoints.
+	if lower == "metadata.google.internal" {
+		return true
+	}
+
+	return false
 }
 
 // DownloadJAR downloads a JAR from the given URL and returns the raw bytes.

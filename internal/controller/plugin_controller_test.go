@@ -24,6 +24,7 @@ import (
 	"go/token"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"time"
 
@@ -1636,13 +1637,13 @@ var _ = Describe("Plugin Controller", func() {
 				Scheme:       k8sClient.Scheme(),
 				PluginClient: mockPlugin,
 				Solver:       solver.NewSimpleSolver(),
-				HTTPClient:   server.Client(),
+				HTTPClient:   wrapTestClient(server),
 			}
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
 					Type: "url",
-					URL:  server.URL + "/plugin.jar",
+					URL:  testPluginURL,
 				},
 				UpdateStrategy:   "latest",
 				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-jar": "true"}},
@@ -1662,7 +1663,7 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
 			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("1.5.0"))
 			Expect(plugin.Status.AvailableVersions[0].Hash).To(Equal(expectedHash))
-			Expect(plugin.Status.AvailableVersions[0].DownloadURL).To(Equal(server.URL + "/plugin.jar"))
+			Expect(plugin.Status.AvailableVersions[0].DownloadURL).To(Equal(testPluginURL))
 			Expect(plugin.Status.AvailableVersions[0].MinecraftVersions).To(ContainElement("1.21"))
 
 			cond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
@@ -1685,13 +1686,13 @@ var _ = Describe("Plugin Controller", func() {
 				Scheme:       k8sClient.Scheme(),
 				PluginClient: mockPlugin,
 				Solver:       solver.NewSimpleSolver(),
-				HTTPClient:   server.Client(),
+				HTTPClient:   wrapTestClient(server),
 			}
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
 					Type: "url",
-					URL:  server.URL + "/plugin.jar",
+					URL:  testPluginURL,
 				},
 				Version:          "1.0.0",
 				UpdateStrategy:   "latest",
@@ -1730,13 +1731,13 @@ var _ = Describe("Plugin Controller", func() {
 				Scheme:       k8sClient.Scheme(),
 				PluginClient: mockPlugin,
 				Solver:       solver.NewSimpleSolver(),
-				HTTPClient:   server.Client(),
+				HTTPClient:   wrapTestClient(server),
 			}
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
 					Type: "url",
-					URL:  server.URL + "/missing.jar",
+					URL:  testPluginURL,
 				},
 				Version:          "1.0.0",
 				UpdateStrategy:   "latest",
@@ -1775,14 +1776,14 @@ var _ = Describe("Plugin Controller", func() {
 				Scheme:       k8sClient.Scheme(),
 				PluginClient: mockPlugin,
 				Solver:       solver.NewSimpleSolver(),
-				HTTPClient:   server.Client(),
+				HTTPClient:   wrapTestClient(server),
 			}
 
 			wrongChecksum := "0000000000000000000000000000000000000000000000000000000000000000"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
 					Type:     "url",
-					URL:      server.URL + "/plugin.jar",
+					URL:      testPluginURL,
 					Checksum: wrongChecksum,
 				},
 				UpdateStrategy:   "latest",
@@ -1881,13 +1882,13 @@ var _ = Describe("Plugin Controller", func() {
 				Scheme:       k8sClient.Scheme(),
 				PluginClient: mockPlugin,
 				Solver:       solver.NewSimpleSolver(),
-				HTTPClient:   server.Client(),
+				HTTPClient:   wrapTestClient(server),
 			}
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
 					Type: "url",
-					URL:  server.URL + "/plugin.jar",
+					URL:  testPluginURL,
 				},
 				UpdateStrategy:   "latest",
 				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-no-checksum": "true"}},
@@ -1926,13 +1927,13 @@ var _ = Describe("Plugin Controller", func() {
 				Scheme:       k8sClient.Scheme(),
 				PluginClient: mockPlugin,
 				Solver:       solver.NewSimpleSolver(),
-				HTTPClient:   server.Client(),
+				HTTPClient:   wrapTestClient(server),
 			}
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
 					Type: "url",
-					URL:  server.URL + "/plugin.jar",
+					URL:  testPluginURL,
 				},
 				UpdateStrategy:   "latest",
 				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-cache": "true"}},
@@ -1975,14 +1976,14 @@ var _ = Describe("Plugin Controller", func() {
 				Scheme:       k8sClient.Scheme(),
 				PluginClient: mockPlugin,
 				Solver:       solver.NewSimpleSolver(),
-				HTTPClient:   server.Client(),
+				HTTPClient:   wrapTestClient(server),
 				Metrics:      mockMetrics,
 			}
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
 					Type: "url",
-					URL:  server.URL + "/plugin.jar",
+					URL:  testPluginURL,
 				},
 				UpdateStrategy:   "latest",
 				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-metrics": "true"}},
@@ -2172,3 +2173,32 @@ var _ = Describe("PluginController helpers", func() {
 		})
 	})
 })
+
+// testPluginURL is a public-looking URL used in controller tests.
+// The actual HTTP requests are routed to an httptest server via wrapTestClient.
+const testPluginURL = "https://plugins.example.com/plugin.jar"
+
+// roundTripFunc is an adapter to use a plain function as http.RoundTripper.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+// wrapTestClient returns an HTTP client that routes all requests to the given
+// httptest server, regardless of the URL hostname. This allows plugin specs to
+// use public-looking URLs (passing SSRF validation) while actually hitting the
+// test server.
+func wrapTestClient(server *httptest.Server) *http.Client {
+	client := server.Client()
+	inner := client.Transport
+	client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		testURL, _ := url.Parse(server.URL)
+		req.URL.Scheme = testURL.Scheme
+		req.URL.Host = testURL.Host
+
+		return inner.RoundTrip(req)
+	})
+
+	return client
+}

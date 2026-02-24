@@ -1202,6 +1202,7 @@ rules:
 - ✅ RCON graceful shutdown
 - ✅ Cron-based updates
 - ✅ Persistent cache in status
+- ✅ URL-based plugin source with JAR metadata extraction and SSRF protection
 
 ### Phase 2
 
@@ -1209,7 +1210,6 @@ rules:
 - SAT solver integration for optimization
 - Enhanced Web UI (basic web UI exists in `pkg/webui/`)
 - Webhook validation for CRDs (validate selector correctness)
-- ~~URL-based plugin support with manual compatibility override~~ (implemented)
 
 ### Phase 3
 

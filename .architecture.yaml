@@ -1221,8 +1221,8 @@ decisions:
       - "No metadata extraction: Loses version/compatibility info, solver cannot work properly"
     impact: "New Checksum field in PluginSource, new pkg/plugins/url.go helpers, switch dispatch in fetchPluginMetadata, nil MinecraftVersions normalization in convertToPluginVersionInfo"
     components:
-      url_helpers: "pkg/plugins/url.go - ValidateDownloadURL, FetchJARMetadata, BuildURLVersion, extractPluginYML"
-      controller_dispatch: "internal/controller/plugin_controller.go - fetchURLMetadata, fetchHangarMetadata switch"
+      url_helpers: "pkg/plugins/url.go - ValidateDownloadURL, DownloadJAR, ParseJARMetadata, SafeHTTPClient, isBlockedHost (SSRF protection)"
+      controller_dispatch: "internal/controller/plugin_controller.go - fetchURLMetadata with caching (urlCacheValid, urlCacheTTL), resolveURLVersion, resolveVersionWithFallback"
       api_field: "api/v1beta1/plugin_types.go - Checksum field with kubebuilder pattern validation"
 
 phases:
@@ -1246,7 +1246,6 @@ phases:
     features:
       - "Modrinth API support"
       - "SpigotMC API support"
-      - "URL-based plugin source"
       - "SAT solver for complex constraints"
       - "Admission webhooks for validation"
       - "Web UI namespace selector (multi-namespace view)"

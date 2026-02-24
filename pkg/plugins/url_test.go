@@ -45,29 +45,44 @@ func TestValidateDownloadURL(t *testing.T) {
 	})
 }
 
-func TestBuildURLVersion(t *testing.T) {
-	t.Run("builds version with all fields", func(t *testing.T) {
-		pv := plugins.BuildURLVersion(
-			"https://example.com/plugin.jar",
-			"1.2.3",
-			"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		)
-		assert.Equal(t, "1.2.3", pv.Version)
-		assert.Equal(t, "https://example.com/plugin.jar", pv.DownloadURL)
-		assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", pv.Hash)
-		assert.Empty(t, pv.MinecraftVersions)
-		assert.Empty(t, pv.PaperVersions)
-	})
+func TestValidateDownloadURL_BlockedHosts(t *testing.T) {
+	blocked := []struct {
+		name string
+		url  string
+	}{
+		{"loopback IP", "https://127.0.0.1/plugin.jar"},
+		{"private IP 10.x", "https://10.0.0.1/plugin.jar"},
+		{"private IP 192.168.x", "https://192.168.1.1/plugin.jar"},
+		{"link-local IP", "https://169.254.169.254/latest/meta-data/"},
+		{"localhost hostname", "https://localhost/plugin.jar"},
+		{"kubernetes service DNS", "https://kubernetes.default.svc/plugin.jar"},
+		{"kubernetes cluster-local DNS", "https://myservice.default.svc.cluster.local/plugin.jar"},
+		{"cloud metadata endpoint", "https://metadata.google.internal/computeMetadata/v1/"},
+		{"IPv6 loopback", "https://[::1]/plugin.jar"},
+		{"unspecified address", "https://0.0.0.0/plugin.jar"},
+		{"loopback IP with port", "https://127.0.0.1:8080/plugin.jar"},
+	}
+	for _, tc := range blocked {
+		t.Run("blocks "+tc.name, func(t *testing.T) {
+			err := plugins.ValidateDownloadURL(tc.url)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "blocked")
+		})
+	}
 
-	t.Run("defaults version to 0.0.0 when empty", func(t *testing.T) {
-		pv := plugins.BuildURLVersion("https://example.com/plugin.jar", "", "")
-		assert.Equal(t, "0.0.0", pv.Version)
-	})
-
-	t.Run("preserves empty checksum", func(t *testing.T) {
-		pv := plugins.BuildURLVersion("https://example.com/plugin.jar", "1.0.0", "")
-		assert.Empty(t, pv.Hash)
-	})
+	allowed := []struct {
+		name string
+		url  string
+	}{
+		{"public IP", "https://1.2.3.4/plugin.jar"},
+		{"public hostname", "https://github.com/user/repo/releases/download/v1.0/plugin.jar"},
+	}
+	for _, tc := range allowed {
+		t.Run("allows "+tc.name, func(t *testing.T) {
+			err := plugins.ValidateDownloadURL(tc.url)
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestSafeHTTPClient(t *testing.T) {

@@ -56,6 +56,9 @@ const (
 	repositoryStatusAvailable   = "available"
 	repositoryStatusUnavailable = "unavailable"
 	repositoryStatusOrphaned    = "orphaned"
+
+	// urlCacheTTL is the maximum age of cached URL plugin metadata before re-fetching.
+	urlCacheTTL = 1 * time.Hour
 )
 
 // PluginReconciler reconciles a Plugin object.
@@ -395,8 +398,9 @@ func (r *PluginReconciler) resolveVersionWithFallback(
 }
 
 // urlCacheValid checks whether cached URL metadata is still valid.
-// Returns true if the cached DownloadURL matches the current spec URL and
-// (if a checksum is specified) the cached hash matches the spec checksum.
+// Returns true if the cached DownloadURL matches the current spec URL,
+// the cache is not older than urlCacheTTL, and (if a checksum is specified)
+// the cached hash matches the spec checksum.
 func (r *PluginReconciler) urlCacheValid(plugin *mcv1beta1.Plugin) bool {
 	if len(plugin.Status.AvailableVersions) == 0 {
 		return false
@@ -407,9 +411,16 @@ func (r *PluginReconciler) urlCacheValid(plugin *mcv1beta1.Plugin) bool {
 		return false
 	}
 
+	// Expire cache after TTL.
+	if !cached.CachedAt.IsZero() && time.Since(cached.CachedAt.Time) > urlCacheTTL {
+		return false
+	}
+
 	if plugin.Spec.Source.Checksum != "" {
 		specChecksum := strings.ToLower(plugin.Spec.Source.Checksum)
-		if cached.Hash != specChecksum {
+		cachedHash := strings.ToLower(cached.Hash)
+
+		if cachedHash != specChecksum {
 			return false
 		}
 	}
