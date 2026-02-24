@@ -324,7 +324,7 @@ func PluginForm(data PluginFormData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\" pattern=\"[a-fA-F0-9]{64}\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px; font-family: monospace;\" placeholder=\"aabbccdd00112233...\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Optional SHA256 hash for integrity verification (64 hex chars)</p></div></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateStrategy\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Strategy *</label> <select id=\"updateStrategy\" name=\"updateStrategy\" required style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" onchange=\"document.getElementById('version-field').style.display = this.value === 'pinned' ? 'block' : 'none';\"><option value=\"latest\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\" pattern=\"[a-fA-F0-9]{64}\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px; font-family: monospace;\" placeholder=\"aabbccdd00112233...\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Optional SHA256 hash for integrity verification (64 hex chars)</p></div></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateStrategy\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Strategy *</label> <select id=\"updateStrategy\" name=\"updateStrategy\" required style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" onchange=\"\n\t\t\t\t\t\t\tvar v = this.value;\n\t\t\t\t\t\t\tdocument.getElementById('version-field').style.display = (v === 'pin' || v === 'build-pin') ? 'block' : 'none';\n\t\t\t\t\t\t\tdocument.getElementById('build-field').style.display = v === 'build-pin' ? 'block' : 'none';\n\t\t\t\t\t\t\"><option value=\"latest\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -334,71 +334,104 @@ func PluginForm(data PluginFormData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, ">Latest (auto-update)</option> <option value=\"pinned\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, ">Latest</option> <option value=\"auto\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if data.Strategy == "pinned" {
+			if data.Strategy == "auto" {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, " selected")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, ">Pinned (specific version)</option></select></div><div id=\"version-field\" style=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, ">Auto (constraint solver)</option> <option value=\"pin\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.Strategy == "pin" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, ">Pin (specific version)</option> <option value=\"build-pin\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.Strategy == "build-pin" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, ">Build Pin (specific version + build)</option></select></div><div id=\"version-field\" style=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(versionFieldStyle(data.Strategy))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 155, Col: 69}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 161, Col: 69}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "\"><label for=\"version\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Version</label> <input type=\"text\" id=\"version\" name=\"version\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "\"><label for=\"version\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Version</label> <input type=\"text\" id=\"version\" name=\"version\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(data.Version)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 161, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 167, Col: 27}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"1.0.0\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Required when using pinned strategy</p></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateDelay\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Delay</label> <input type=\"text\" id=\"updateDelay\" name=\"updateDelay\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"1.0.0\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Required for pin and build-pin strategies</p></div><div id=\"build-field\" style=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var17 string
-			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(data.UpdateDelay)
+			templ_7745c5c3_Var17, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(buildFieldStyle(data.Strategy))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 175, Col: 31}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 173, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"168h\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Grace period before applying new releases (e.g., 168h for 7 days)</p></div></div><div style=\"display: flex; gap: 15px; margin-top: 10px;\"><button type=\"submit\" style=\"background-color: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 4px; font-size: 14px; cursor: pointer; font-weight: 600;\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "\"><label for=\"build\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Build Number</label> <input type=\"number\" id=\"build\" name=\"build\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"456\" min=\"1\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Required for build-pin strategy</p></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateDelay\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Delay</label> <input type=\"text\" id=\"updateDelay\" name=\"updateDelay\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var18 string
+			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(data.UpdateDelay)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 193, Col: 31}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"168h\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Grace period before applying new releases (e.g., 168h for 7 days)</p></div></div><div style=\"display: flex; gap: 15px; margin-top: 10px;\"><button type=\"submit\" style=\"background-color: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 4px; font-size: 14px; cursor: pointer; font-weight: 600;\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if data.IsEdit {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "Update Plugin")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "Update Plugin")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "Create Plugin")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "Create Plugin")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "</button> <a href=\"/ui/plugins\" style=\"background-color: var(--bg-tertiary); color: var(--text-primary); padding: 12px 24px; border-radius: 4px; font-size: 14px; text-decoration: none; font-weight: 600;\">Cancel</a></div></form></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</button> <a href=\"/ui/plugins\" style=\"background-color: var(--bg-tertiary); color: var(--text-primary); padding: 12px 24px; border-radius: 4px; font-size: 14px; text-decoration: none; font-weight: 600;\">Cancel</a></div></form></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -420,7 +453,14 @@ func formTitle(isEdit bool) string {
 }
 
 func versionFieldStyle(strategy string) string {
-	if strategy == "pinned" {
+	if strategy == "pin" || strategy == "build-pin" {
+		return "display: block;"
+	}
+	return "display: none;"
+}
+
+func buildFieldStyle(strategy string) string {
+	if strategy == "build-pin" {
 		return "display: block;"
 	}
 	return "display: none;"

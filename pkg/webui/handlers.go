@@ -402,7 +402,7 @@ func (s *Server) parsePluginFormToData(r *http.Request) (service.PluginCreateDat
 		UpdateStrategy: updateStrategy,
 	}
 
-	if updateStrategy == "pinned" {
+	if updateStrategy == "pin" || updateStrategy == "build-pin" {
 		data.Version = r.FormValue("version")
 	}
 

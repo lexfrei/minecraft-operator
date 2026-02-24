@@ -1144,9 +1144,9 @@ var _ = Describe("UpdateController", func() {
 					switch {
 					case len(cmd) > 0 && cmd[0] == "curl":
 						return []byte(""), nil
-					case len(cmd) > 0 && cmd[0] == "sh":
-						// sha256sum returns a wrong hash
-						return []byte("0000000000000000000000000000000000000000000000000000000000000000\n"), nil
+					case len(cmd) > 0 && cmd[0] == "sha256sum":
+						// sha256sum returns wrong hash in "<hash>  <path>" format
+						return []byte("0000000000000000000000000000000000000000000000000000000000000000  /data/plugins/update/test-plugin.jar\n"), nil
 					case len(cmd) > 0 && cmd[0] == "rm":
 						return []byte(""), nil
 					default:
@@ -1287,8 +1287,11 @@ var _ = Describe("UpdateController", func() {
 			Expect(mockExec.Calls).To(HaveLen(1))
 			Expect(mockExec.Calls[0].PodName).To(Equal("test-exec-server-0"))
 			Expect(mockExec.Calls[0].Container).To(Equal("papermc"))
-			// Verify the rm command is in the command args
-			Expect(mockExec.Calls[0].Command[2]).To(ContainSubstring("rm -f /data/plugins/test-plugin-1.0.jar"))
+			// Verify rm uses direct args (no sh -c) to avoid shell injection.
+			Expect(mockExec.Calls[0].Command[0]).To(Equal("rm"))
+			Expect(mockExec.Calls[0].Command[1]).To(Equal("--force"))
+			Expect(mockExec.Calls[0].Command).To(ContainElement("/data/plugins/test-plugin-1.0.jar"))
+			Expect(mockExec.Calls[0].Command).To(ContainElement("/data/plugins/update/test-plugin-1.0.jar"))
 		})
 	})
 
@@ -1873,9 +1876,11 @@ var _ = Describe("UpdateController", func() {
 			By("verifying rm command deletes from both directories")
 			Expect(mockExecutor.Calls).To(HaveLen(1))
 			rmCommand := mockExecutor.Calls[0].Command
-			fullCmd := rmCommand[len(rmCommand)-1] // last arg to "sh -c" is the command string
-			Expect(fullCmd).To(ContainSubstring("/data/plugins/plugin-both-dirs.jar"))
-			Expect(fullCmd).To(ContainSubstring("/data/plugins/update/plugin-both-dirs.jar"))
+			// rm now uses direct args (no sh -c) to avoid shell injection.
+			Expect(rmCommand[0]).To(Equal("rm"))
+			Expect(rmCommand[1]).To(Equal("--force"))
+			Expect(rmCommand).To(ContainElement("/data/plugins/plugin-both-dirs.jar"))
+			Expect(rmCommand).To(ContainElement("/data/plugins/update/plugin-both-dirs.jar"))
 		})
 
 		It("should immediately mark as deleted when InstalledJARName is empty", func() {

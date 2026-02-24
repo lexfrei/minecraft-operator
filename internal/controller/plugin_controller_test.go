@@ -8,6 +8,7 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -1376,6 +1377,110 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(err.Error()).To(ContainSubstring("not yet implemented"))
 			Expect(versions).To(BeNil())
 			Expect(cacheHit).To(BeFalse())
+		})
+
+		It("should keep URL cache valid when spec.version changes", func() {
+			// Changing spec.version (fallback when JAR has no version metadata)
+			// should NOT invalidate the URL metadata cache. The change takes effect
+			// when the cache naturally expires (urlCacheTTL).
+			plugin := &mck8slexlav1beta1.Plugin{
+				Spec: mck8slexlav1beta1.PluginSpec{
+					Source: mck8slexlav1beta1.PluginSource{
+						Type: "url",
+						URL:  "https://example.com/plugin.jar",
+					},
+					Version: "2.0.0", // Changed from original "1.0.0"
+				},
+				Status: mck8slexlav1beta1.PluginStatus{
+					AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
+						{
+							Version:     "1.0.0", // Old version in cache
+							DownloadURL: "https://example.com/plugin.jar",
+							CachedAt:    metav1.Now(), // Fresh cache
+						},
+					},
+				},
+			}
+			Expect(reconciler.urlCacheValid(plugin)).To(BeTrue(),
+				"URL cache should remain valid when spec.version changes — version fallback takes effect on cache expiry")
+		})
+
+		It("should use JAR metadata version when available in resolveURLVersion", func() {
+			jarBytes := testutil.BuildTestJAR("plugin.yml",
+				"name: TestPlugin\nversion: \"3.2.1\"\napi-version: \"1.21\"\n")
+			hash := fmt.Sprintf("%x", sha256.Sum256(jarBytes))
+
+			plugin := &mck8slexlav1beta1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-resolve-jar", Namespace: namespace},
+				Spec: mck8slexlav1beta1.PluginSpec{
+					Source:  mck8slexlav1beta1.PluginSource{Type: "url", URL: "https://example.com/plugin.jar"},
+					Version: "1.0.0", // spec fallback should NOT be used
+				},
+			}
+
+			versions := reconciler.resolveURLVersion(ctx, plugin, jarBytes, hash)
+			Expect(versions).To(HaveLen(1))
+			Expect(versions[0].Version).To(Equal("3.2.1"), "Should use JAR metadata version, not spec.version")
+			Expect(versions[0].MinecraftVersions).To(Equal([]string{"1.21"}))
+			Expect(versions[0].Hash).To(Equal(hash))
+		})
+
+		It("should fall back to spec.version when JAR has no plugin.yml in resolveURLVersion", func() {
+			// Create a ZIP without plugin.yml
+			jarBytes := testutil.BuildTestJAR("README.txt", "not a plugin")
+			hash := fmt.Sprintf("%x", sha256.Sum256(jarBytes))
+
+			plugin := &mck8slexlav1beta1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-resolve-fallback", Namespace: namespace},
+				Spec: mck8slexlav1beta1.PluginSpec{
+					Source:  mck8slexlav1beta1.PluginSource{Type: "url", URL: "https://example.com/plugin.jar"},
+					Version: "2.5.0",
+				},
+			}
+
+			versions := reconciler.resolveURLVersion(ctx, plugin, jarBytes, hash)
+			Expect(versions).To(HaveLen(1))
+			Expect(versions[0].Version).To(Equal("2.5.0"), "Should fall back to spec.version when JAR has no plugin.yml")
+			Expect(versions[0].MinecraftVersions).To(BeEmpty(), "No api-version available from fallback")
+		})
+
+		It("should use 0.0.0 placeholder when both JAR and spec.version are empty in resolveURLVersion", func() {
+			jarBytes := testutil.BuildTestJAR("README.txt", "not a plugin")
+			hash := fmt.Sprintf("%x", sha256.Sum256(jarBytes))
+
+			plugin := &mck8slexlav1beta1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-resolve-placeholder", Namespace: namespace},
+				Spec: mck8slexlav1beta1.PluginSpec{
+					Source: mck8slexlav1beta1.PluginSource{Type: "url", URL: "https://example.com/plugin.jar"},
+					// No spec.version set
+				},
+			}
+
+			versions := reconciler.resolveURLVersion(ctx, plugin, jarBytes, hash)
+			Expect(versions).To(HaveLen(1))
+			Expect(versions[0].Version).To(Equal("0.0.0"), "Should use 0.0.0 placeholder as last resort")
+		})
+
+		It("should invalidate URL cache when spec.source.url changes", func() {
+			plugin := &mck8slexlav1beta1.Plugin{
+				Spec: mck8slexlav1beta1.PluginSpec{
+					Source: mck8slexlav1beta1.PluginSource{
+						Type: "url",
+						URL:  "https://example.com/plugin-v2.jar", // Changed URL
+					},
+				},
+				Status: mck8slexlav1beta1.PluginStatus{
+					AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
+						{
+							Version:     "1.0.0",
+							DownloadURL: "https://example.com/plugin-v1.jar", // Old URL
+							CachedAt:    metav1.Now(),
+						},
+					},
+				},
+			}
+			Expect(reconciler.urlCacheValid(plugin)).To(BeFalse(),
+				"URL cache should be invalidated when spec.source.url changes")
 		})
 
 		It("should return empty result for non-existent plugin", func() {

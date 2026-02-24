@@ -214,7 +214,7 @@ status:
         - "1.20.4"
         - "1.21.1"
       downloadURL: "https://..."
-      hash: "sha256:abc123..."
+      hash: "aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233"
       cachedAt: "2024-01-15T10:00:00Z"
       releasedAt: "2024-01-10T12:00:00Z"
 ```
