@@ -1800,7 +1800,7 @@ var _ = Describe("Plugin Controller", func() {
 				"VersionResolved should be False when checksum verification fails")
 		})
 
-		It("should set RepositoryAvailable=False for URL plugin with HTTP URL", func() {
+		It("should set RepositoryAvailable=False for URL plugin with HTTP URL without requeue", func() {
 			pluginName := "test-url-http-rejected"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
@@ -1815,7 +1815,7 @@ var _ = Describe("Plugin Controller", func() {
 			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
 			_, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = reconciler.Reconcile(ctx, req)
+			result, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 
 			var plugin mck8slexlav1beta1.Plugin
@@ -1827,9 +1827,13 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 			Expect(cond.Message).To(ContainSubstring("HTTPS"),
 				"Error message should indicate HTTPS is required")
+
+			// Invalid URL is a permanent user error — must not requeue periodically.
+			Expect(result.RequeueAfter).To(BeZero(),
+				"Invalid URL should not requeue (permanent user error)")
 		})
 
-		It("should set RepositoryAvailable=False for URL plugin with empty URL", func() {
+		It("should set RepositoryAvailable=False for URL plugin with empty URL without requeue", func() {
 			pluginName := "test-url-empty"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
@@ -1844,7 +1848,7 @@ var _ = Describe("Plugin Controller", func() {
 			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
 			_, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = reconciler.Reconcile(ctx, req)
+			result, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 
 			var plugin mck8slexlav1beta1.Plugin
@@ -1856,6 +1860,10 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 			Expect(cond.Message).To(ContainSubstring("required"),
 				"Error message should indicate URL is required")
+
+			// Empty URL is a permanent user error — must not requeue periodically.
+			Expect(result.RequeueAfter).To(BeZero(),
+				"Empty URL should not requeue (permanent user error)")
 		})
 
 		It("should warn but succeed for URL plugin without checksum", func() {
@@ -2278,6 +2286,35 @@ var _ = Describe("Plugin Controller", func() {
 			}
 			Expect(statusEqual(a, b)).To(BeFalse(),
 				"statusEqual should detect ReleasedAt change")
+		})
+
+		It("should detect LastFetched change", func() {
+			now := metav1.Now()
+			earlier := metav1.NewTime(now.Add(-1 * time.Hour))
+			a := &mck8slexlav1beta1.PluginStatus{
+				RepositoryStatus: "available",
+				LastFetched:      &now,
+			}
+			b := &mck8slexlav1beta1.PluginStatus{
+				RepositoryStatus: "available",
+				LastFetched:      &earlier,
+			}
+			Expect(statusEqual(a, b)).To(BeFalse(),
+				"statusEqual should detect LastFetched change")
+		})
+
+		It("should detect LastFetched nil vs non-nil", func() {
+			now := metav1.Now()
+			a := &mck8slexlav1beta1.PluginStatus{
+				RepositoryStatus: "available",
+				LastFetched:      &now,
+			}
+			b := &mck8slexlav1beta1.PluginStatus{
+				RepositoryStatus: "available",
+				LastFetched:      nil,
+			}
+			Expect(statusEqual(a, b)).To(BeFalse(),
+				"statusEqual should detect LastFetched nil vs non-nil")
 		})
 	})
 

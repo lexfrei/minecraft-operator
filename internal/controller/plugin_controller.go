@@ -57,6 +57,10 @@ const (
 // This is a permanent user error that should not trigger periodic requeue.
 var errChecksumMismatch = errors.New("checksum mismatch")
 
+// errInvalidURL is a sentinel error for URL validation failures (bad scheme, SSRF, empty URL).
+// This is a permanent user error that should not trigger periodic requeue.
+var errInvalidURL = errors.New("invalid URL")
+
 // PluginReconciler reconciles a Plugin object.
 // Note: URL-source plugins download entire JARs (up to MaxJARSize=100MB) into memory
 // during metadata extraction. The default MaxConcurrentReconciles=1 keeps this safe;
@@ -206,6 +210,19 @@ func (r *PluginReconciler) syncPluginMetadata(
 			return nil, ctrl.Result{}, nil
 		}
 
+		// Invalid URL (bad scheme, SSRF-blocked host, empty) is a permanent user error.
+		// The user must fix spec.source.url; the watch triggers re-reconciliation.
+		if errors.Is(repoErr, errInvalidURL) {
+			slog.ErrorContext(ctx, "URL validation failed", "error", repoErr, "plugin", plugin.Name)
+			plugin.Status.RepositoryStatus = repositoryStatusUnavailable
+			r.setCondition(plugin, conditionTypeRepositoryAvailable, metav1.ConditionFalse,
+				reasonUnavailable, repoErr.Error())
+			r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionFalse,
+				reasonUnavailable, "Cannot resolve version: invalid URL")
+
+			return nil, ctrl.Result{}, nil
+		}
+
 		slog.ErrorContext(ctx, "Failed to fetch plugin metadata, using cached versions", "error", repoErr)
 
 		return r.handleRepositoryError(plugin, repoErr)
@@ -316,7 +333,7 @@ func (r *PluginReconciler) fetchURLMetadata(
 	plugin *mcv1beta1.Plugin,
 ) ([]plugins.PluginVersion, bool, error) {
 	if err := plugins.ValidateDownloadURL(plugin.Spec.Source.URL); err != nil {
-		return nil, false, errors.Wrap(err, "invalid URL")
+		return nil, false, errors.Mark(errors.Wrap(err, "invalid URL"), errInvalidURL)
 	}
 
 	// Use cached metadata if URL and checksum haven't changed.
@@ -429,7 +446,7 @@ func (r *PluginReconciler) resolveVersionWithFallback(
 		return plugin.Spec.Version
 	}
 
-	slog.DebugContext(ctx, "No version available for URL plugin, using placeholder",
+	slog.WarnContext(ctx, "No version available for URL plugin, using placeholder",
 		"plugin", plugin.Name, "version", "0.0.0")
 
 	return "0.0.0"
@@ -580,6 +597,16 @@ func (r *PluginReconciler) setCondition(
 // statusEqual compares two Plugin statuses for equality.
 func statusEqual(a, b *mcv1beta1.PluginStatus) bool {
 	if a.RepositoryStatus != b.RepositoryStatus {
+		return false
+	}
+
+	// Compare LastFetched timestamps.
+	switch {
+	case a.LastFetched == nil && b.LastFetched == nil:
+		// both nil, equal
+	case a.LastFetched == nil || b.LastFetched == nil:
+		return false
+	case !a.LastFetched.Equal(b.LastFetched):
 		return false
 	}
 
