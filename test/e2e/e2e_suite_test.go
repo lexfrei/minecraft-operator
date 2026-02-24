@@ -75,7 +75,7 @@ var _ = BeforeSuite(func() {
 	}
 
 	for _, crdURL := range snapshotCRDs {
-		cmd = exec.Command("kubectl", "apply", "--filename", crdURL)
+		cmd = kubectlCmd("apply", "--filename", crdURL)
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install VolumeSnapshot CRD: "+crdURL)
 	}

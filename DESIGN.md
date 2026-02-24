@@ -370,6 +370,12 @@ status:
 
     - type: CronScheduleValid
       status: "True"
+
+    - type: BackupCronValid
+      status: "True"
+
+    - type: BackupReady
+      status: "True"
 ```
 
 #### Usage Examples

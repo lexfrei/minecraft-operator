@@ -349,6 +349,7 @@ Standard Kubernetes conditions.
 | `SolverRunning` | Constraint solver is executing |
 | `CronScheduleValid` | Maintenance window cron is valid |
 | `BackupCronValid` | Backup cron schedule is valid |
+| `BackupReady` | VolumeSnapshot API is available for backups |
 
 ## Complete Example
 

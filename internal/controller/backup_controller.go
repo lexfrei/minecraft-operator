@@ -139,6 +139,11 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 			return ctrl.Result{}, nil
 		}
+
+		// Valid cron — persist BackupCronValid=True condition
+		if updateErr := r.Status().Update(ctx, &server); updateErr != nil {
+			slog.ErrorContext(ctx, "Failed to persist BackupCronValid condition", "error", updateErr)
+		}
 	}
 
 	// Pre-flight: verify VolumeSnapshot API is available in the cluster
@@ -240,17 +245,32 @@ func (r *BackupReconciler) isSnapshotAPIUnavailable(
 		slog.WarnContext(ctx, "VolumeSnapshot API not available in cluster",
 			"error", err, "server", server.Name)
 
-		meta.SetStatusCondition(&server.Status.Conditions, metav1.Condition{
+		// Re-fetch the server to get the latest ResourceVersion before Status().Update()
+		// to avoid conflicts with concurrent controllers.
+		var latestServer mcv1beta1.PaperMCServer
+		if getErr := r.Get(ctx, client.ObjectKey{
+			Name: server.Name, Namespace: server.Namespace,
+		}, &latestServer); getErr != nil {
+			slog.ErrorContext(ctx, "Failed to re-fetch server for snapshot API condition", "error", getErr)
+
+			return true
+		}
+
+		meta.SetStatusCondition(&latestServer.Status.Conditions, metav1.Condition{
 			Type:               conditionTypeBackupReady,
 			Status:             metav1.ConditionFalse,
 			Reason:             reasonSnapshotAPIUnavailable,
-			ObservedGeneration: server.Generation,
+			ObservedGeneration: latestServer.Generation,
 			Message:            "VolumeSnapshot CRD (snapshot.storage.k8s.io) is not installed. Install the CSI snapshot controller and CRDs to enable backups.",
 		})
 
-		if updateErr := r.Status().Update(ctx, server); updateErr != nil {
+		if updateErr := r.Status().Update(ctx, &latestServer); updateErr != nil {
 			slog.ErrorContext(ctx, "Failed to update status with snapshot API condition", "error", updateErr)
 		}
+
+		// Copy updated status back to in-memory server
+		server.Status = latestServer.Status
+		server.ResourceVersion = latestServer.ResourceVersion
 
 		return true
 	}

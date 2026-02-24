@@ -1434,6 +1434,45 @@ func TestBackupReconciler_BackupReadyRecoveryRefreshesServer(t *testing.T) {
 		"other status fields should be preserved")
 }
 
+func TestBackupReconciler_ValidCronPersistsBackupCronValidTrue(t *testing.T) {
+	scheme := newBackupTestScheme()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:  true,
+		Schedule: "0 */6 * * *",
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// BackupCronValid=True should be persisted to the API server
+	var updatedServer mcv1beta1.PaperMCServer
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
+		Name: "my-server", Namespace: "minecraft",
+	}, &updatedServer))
+
+	cond := meta.FindStatusCondition(updatedServer.Status.Conditions, conditionTypeBackupCronValid)
+	require.NotNil(t, cond, "BackupCronValid condition should be persisted for valid cron")
+	assert.Equal(t, metav1.ConditionTrue, cond.Status,
+		"BackupCronValid should be True for valid cron")
+	assert.Equal(t, reasonBackupCronValid, cond.Reason)
+}
+
 func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {
 	reconciler := &BackupReconciler{
 		cronEntries: map[string]cronEntryInfo{
