@@ -1714,9 +1714,10 @@ func TestBackupReconciler_ScheduledBackupRunsAfterFailedManualBackup(t *testing.
 		"scheduled backup should run when last backup was failed, even if StartedAt > triggerTime")
 }
 
-func TestUpdateReconciler_BackupBeforeUpdateSkipsWhenCRDMissing(t *testing.T) {
-	// When VolumeSnapshot CRD is not installed, backupBeforeUpdate should skip
-	// the backup gracefully instead of producing a cryptic error.
+func TestUpdateReconciler_BackupBeforeUpdateErrorsWhenCRDMissing(t *testing.T) {
+	// When VolumeSnapshot CRD is not installed, backupBeforeUpdate must return
+	// an error to abort the update. The user explicitly requested backup protection
+	// via beforeUpdate=true, so proceeding without a backup violates the contract.
 	scheme := newBackupTestScheme()
 
 	server := newTestServer(&mcv1beta1.BackupSpec{
@@ -1747,20 +1748,10 @@ func TestUpdateReconciler_BackupBeforeUpdateSkipsWhenCRDMissing(t *testing.T) {
 		BackupReconciler: backupR,
 	}
 
-	// Should NOT error — instead skip backup silently.
+	// Must return error to abort the update — CRD missing means no backup possible.
 	err := updateR.backupBeforeUpdate(context.Background(), server)
-	require.NoError(t, err)
-
-	// Verify BackupReady condition was set to False.
-	var updatedServer mcv1beta1.PaperMCServer
-	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
-	}, &updatedServer))
-
-	cond := meta.FindStatusCondition(updatedServer.Status.Conditions, conditionTypeBackupReady)
-	require.NotNil(t, cond, "BackupReady condition should be set")
-	assert.Equal(t, metav1.ConditionFalse, cond.Status,
-		"BackupReady should be False when CRD is missing")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "VolumeSnapshot API unavailable")
 }
 
 func TestUpdateReconciler_BackupBeforeUpdateProceedsOnTransientError(t *testing.T) {

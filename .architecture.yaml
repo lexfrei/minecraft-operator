@@ -1205,6 +1205,10 @@ decisions:
         - "Manual: annotation mc.k8s.lex.la/backup-now with Unix timestamp"
       retention: "spec.backup.retention.maxCount (default: 10), oldest snapshots deleted first"
       owner_references: "VolumeSnapshots have ownerReference to PaperMCServer for cascade deletion"
+    edge_cases:
+      crd_missing: "When VolumeSnapshot CRD (snapshot.storage.k8s.io) is not installed: scheduled/manual backups set BackupReady=False condition and skip; pre-update backups return error to abort the update (user explicitly requested backup protection)"
+      post_snapshot_guarantee: "PostSnapshotHook (save-on) always runs via defer, even on panic or PreSnapshotHook failure, with a 10s timeout to prevent indefinite blocking"
+      concurrent_backups: "Per-server mutex (sync.Map) serializes backup execution; no two backups for the same server run in parallel"
 
 phases:
   phase_1_mvp:

@@ -37,6 +37,11 @@ Four main controllers work together:
 - PaperMCServer label changes → trigger Plugin reconciliation for all potentially matching Plugins
 - Optimization: Use owner references, cache selector matching, debounce reconciliations
 
+### Annotations
+
+- `mc.k8s.lex.la/apply-now`: Unix timestamp — triggers immediate update outside maintenance window
+- `mc.k8s.lex.la/backup-now`: Unix timestamp — triggers immediate VolumeSnapshot backup outside cron schedule
+
 ## CRD Design
 
 ### Plugin CRD (`mc.k8s.lex.la/v1beta1`)

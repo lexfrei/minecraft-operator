@@ -720,11 +720,13 @@ func (r *UpdateReconciler) backupBeforeUpdate(
 	}
 
 	// Check VolumeSnapshot API availability before attempting backup.
-	// Without this, a missing CRD would produce a cryptic error and abort the update.
+	// The user explicitly enabled beforeUpdate, so we must abort the update
+	// if backups are impossible — proceeding without a backup violates the contract.
 	if r.BackupReconciler.isSnapshotAPIUnavailable(ctx, server) {
-		slog.WarnContext(ctx, "Skipping pre-update backup: VolumeSnapshot API unavailable", "server", server.Name)
+		slog.ErrorContext(ctx, "Pre-update backup impossible: VolumeSnapshot API unavailable",
+			"server", server.Name)
 
-		return nil
+		return errors.New("pre-update backup failed: VolumeSnapshot API unavailable in cluster")
 	}
 
 	slog.InfoContext(ctx, "Creating pre-update backup", "server", server.Name)
