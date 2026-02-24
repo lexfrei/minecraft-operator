@@ -1362,42 +1362,9 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(plugin.Status.MatchedInstances[0].Compatible).To(BeFalse())
 		})
 
-		It("should set RepositoryAvailable=False when source type is unsupported", func() {
-			// Unsupported source type is treated as repository fetch error,
-			// not as a reconcile error. The plugin is "ready" but repo unavailable.
-			pluginName := "test-unsupported-source"
-			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "modrinth", Project: "SomePlugin"},
-				UpdateStrategy: "latest",
-				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"test-unsupported": "true"},
-				},
-			})
-			defer deletePlugin(pluginName)
-
-			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
-
-			// First reconcile: finalizer
-			_, err := reconciler.Reconcile(ctx, req)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Second reconcile: unsupported source type → handled as repo unavailable
-			result, err := reconciler.Reconcile(ctx, req)
-			Expect(err).NotTo(HaveOccurred(),
-				"Unsupported source type is handled gracefully, not returned as error")
-			Expect(result.RequeueAfter).To(Equal(5*time.Minute),
-				"Should requeue after 5 minutes like any unavailable repo")
-
-			var plugin mck8slexlav1beta1.Plugin
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
-
-			Expect(plugin.Status.RepositoryStatus).To(Equal("unavailable"))
-
-			repoCond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
-			Expect(repoCond).NotTo(BeNil())
-			Expect(repoCond.Status).To(Equal(metav1.ConditionFalse))
-			Expect(repoCond.Message).To(ContainSubstring("not yet implemented"))
-		})
+		// Note: "unsupported source type" test was removed because the CRD enum
+		// now only accepts implemented types (hangar, url). CRD validation rejects
+		// unimplemented types at admission time, making a controller-level test impossible.
 
 		It("should return empty result for non-existent plugin", func() {
 			req := ctrl.Request{NamespacedName: types.NamespacedName{

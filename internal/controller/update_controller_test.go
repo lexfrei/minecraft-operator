@@ -1086,6 +1086,10 @@ var _ = Describe("UpdateController", func() {
 				"curl should restrict protocol to HTTPS to prevent redirect-based SSRF")
 			Expect(mockExec.Calls[0].Command).To(ContainElement("=https"),
 				"curl --proto flag should only allow HTTPS")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--max-filesize"),
+				"curl should limit download size to prevent PVC exhaustion")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("104857600"),
+				"curl --max-filesize should match maxJARSize (100MB)")
 			// Verify -- separator prevents URL-as-flag injection.
 			// The downloadURL must come AFTER -- to prevent a malicious URL
 			// starting with "-" from being interpreted as a curl flag.

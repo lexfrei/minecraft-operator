@@ -13,7 +13,7 @@ import (
 // PluginSource defines the source of a plugin.
 type PluginSource struct {
 	// Type specifies the plugin repository type.
-	// +kubebuilder:validation:Enum=hangar;modrinth;spigot;url
+	// +kubebuilder:validation:Enum=hangar;url
 	Type string `json:"type"`
 
 	// Project is the plugin project identifier (for hangar/modrinth/spigot).

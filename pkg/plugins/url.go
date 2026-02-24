@@ -129,11 +129,16 @@ func isBlockedHost(host string) bool {
 			ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 	}
 
-	// Block decimal-encoded IPs (e.g., "2130706433" = 127.0.0.1).
-	// Some HTTP clients resolve all-numeric hostnames as 32-bit integers.
+	// Block non-standard IP encodings that bypass net.ParseIP but are resolved
+	// by curl and some HTTP clients: decimal integers (2130706433 = 127.0.0.1),
+	// octal octets (0177.0.0.01 = 127.0.0.1), hex octets (0x7f.0.0.1 = 127.0.0.1).
 	if ip := parseDecimalIP(hostname); ip != nil {
 		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
 			ip.IsLinkLocalMulticast() || ip.IsUnspecified()
+	}
+
+	if looksLikeNonStandardIP(hostname) {
+		return true
 	}
 
 	// Block known dangerous hostnames.
@@ -158,6 +163,46 @@ func isBlockedHost(host string) bool {
 	// These are used for mDNS, cloud metadata, and internal service discovery.
 	if strings.HasSuffix(lower, ".local") || strings.HasSuffix(lower, ".internal") {
 		return true
+	}
+
+	return false
+}
+
+// looksLikeNonStandardIP detects hostnames that look like octal or hex-encoded IPs
+// (e.g., "0177.0.0.01", "0x7f.0.0.1"). These bypass net.ParseIP but are resolved
+// by curl and browsers. We reject them outright rather than trying to parse them.
+func looksLikeNonStandardIP(hostname string) bool {
+	parts := strings.Split(hostname, ".")
+	if len(parts) != 4 { //nolint:mnd // IPv4 has exactly 4 octets.
+		return false
+	}
+
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+
+		// Hex prefix in any octet.
+		if strings.HasPrefix(part, "0x") || strings.HasPrefix(part, "0X") {
+			return true
+		}
+
+		// Leading zero in a multi-digit octet indicates octal.
+		if len(part) > 1 && part[0] == '0' {
+			allDigits := true
+
+			for _, c := range part {
+				if c < '0' || c > '9' {
+					allDigits = false
+
+					break
+				}
+			}
+
+			if allDigits {
+				return true
+			}
+		}
 	}
 
 	return false

@@ -131,8 +131,6 @@ spec:
                     description: Type specifies the plugin repository type.
                     enum:
                     - hangar
-                    - modrinth
-                    - spigot
                     - url
                     type: string
                   url:

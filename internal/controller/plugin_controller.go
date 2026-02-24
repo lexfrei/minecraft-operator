@@ -423,7 +423,7 @@ func (r *PluginReconciler) resolveVersionWithFallback(
 		return plugin.Spec.Version
 	}
 
-	slog.WarnContext(ctx, "No version available for URL plugin, using placeholder",
+	slog.DebugContext(ctx, "No version available for URL plugin, using placeholder",
 		"plugin", plugin.Name, "version", "0.0.0")
 
 	return "0.0.0"
