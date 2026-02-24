@@ -24,20 +24,28 @@ import (
 // BuildTestJAR creates an in-memory JAR (ZIP) file with a single entry.
 // Panics on error since this is a test utility.
 func BuildTestJAR(filename, content string) []byte {
+	return BuildTestJARMulti(map[string]string{filename: content})
+}
+
+// BuildTestJARMulti creates an in-memory JAR (ZIP) file with multiple entries.
+// Panics on error since this is a test utility.
+func BuildTestJARMulti(files map[string]string) []byte {
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
-	f, err := w.Create(filename)
-	if err != nil {
-		panic("BuildTestJAR: " + err.Error())
-	}
+	for name, content := range files {
+		f, err := w.Create(name)
+		if err != nil {
+			panic("BuildTestJARMulti: " + err.Error())
+		}
 
-	if _, err := f.Write([]byte(content)); err != nil {
-		panic("BuildTestJAR: " + err.Error())
+		if _, err := f.Write([]byte(content)); err != nil {
+			panic("BuildTestJARMulti: " + err.Error())
+		}
 	}
 
 	if err := w.Close(); err != nil {
-		panic("BuildTestJAR: " + err.Error())
+		panic("BuildTestJARMulti: " + err.Error())
 	}
 
 	return buf.Bytes()

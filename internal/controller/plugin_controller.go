@@ -277,6 +277,9 @@ func (r *PluginReconciler) fetchHangarMetadata(
 }
 
 // fetchURLMetadata fetches plugin metadata by downloading the JAR from a direct URL.
+// The JAR is downloaded once for metadata extraction and SHA256 computation; the computed
+// hash is stored in status.AvailableVersions[].Hash and verified again by the update
+// controller during the actual download to the pod.
 func (r *PluginReconciler) fetchURLMetadata(
 	ctx context.Context,
 	plugin *mcv1beta1.Plugin,
@@ -290,14 +293,22 @@ func (r *PluginReconciler) fetchURLMetadata(
 			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
 	}
 
+	apiStart := time.Now()
+
 	jarMeta, err := plugins.FetchJARMetadata(ctx, plugin.Spec.Source.URL, r.HTTPClient)
+
+	if r.Metrics != nil {
+		r.Metrics.RecordPluginAPICall(plugin.Spec.Source.Type, err, time.Since(apiStart))
+	}
+
 	if err != nil {
 		slog.WarnContext(ctx, "Failed to extract JAR metadata, using spec fields as fallback",
 			"plugin", plugin.Name, "error", err)
 
-		pv := plugins.BuildURLVersion(
-			plugin.Spec.Source.URL, plugin.Spec.Version, plugin.Spec.Source.Checksum,
-		)
+		// Fallback: use spec fields. Hash is intentionally left empty because we could
+		// not download the JAR to verify it. The update controller will download fresh
+		// and use the spec checksum (if any) for verification at install time.
+		pv := plugins.BuildURLVersion(plugin.Spec.Source.URL, plugin.Spec.Version, "")
 		pv.ReleaseDate = time.Now()
 
 		return []plugins.PluginVersion{pv}, nil

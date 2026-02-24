@@ -121,6 +121,23 @@ main: com.example.MinimalPlugin
 		assert.Empty(t, meta.APIVersion)
 		assert.NotEmpty(t, meta.SHA256)
 	})
+
+}
+
+func TestFetchJARMetadata_Preference(t *testing.T) {
+	t.Run("prefers paper-plugin.yml over plugin.yml when both exist", func(t *testing.T) {
+		jarBytes := buildTestJARMulti(t, map[string]string{
+			"plugin.yml":       "name: BukkitPlugin\nversion: \"1.0.0\"\napi-version: \"1.20\"\n",
+			"paper-plugin.yml": "name: PaperPlugin\nversion: \"2.0.0\"\napi-version: \"1.21\"\n",
+		})
+		server := serveJAR(t, jarBytes)
+		meta, err := plugins.FetchJARMetadata(context.Background(), server.URL+"/plugin.jar", server.Client())
+		require.NoError(t, err)
+
+		assert.Equal(t, "PaperPlugin", meta.Name, "Should prefer paper-plugin.yml")
+		assert.Equal(t, "2.0.0", meta.Version, "Should use version from paper-plugin.yml")
+		assert.Equal(t, "1.21", meta.APIVersion, "Should use api-version from paper-plugin.yml")
+	})
 }
 
 func TestFetchJARMetadata_Errors(t *testing.T) {
@@ -185,14 +202,23 @@ func serveJAR(t *testing.T, jarBytes []byte) *httptest.Server {
 func buildTestJAR(t *testing.T, filename, content string) []byte {
 	t.Helper()
 
+	return buildTestJARMulti(t, map[string]string{filename: content})
+}
+
+// buildTestJARMulti creates an in-memory JAR (ZIP) file with multiple entries.
+func buildTestJARMulti(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
-	f, err := w.Create(filename)
-	require.NoError(t, err)
+	for name, content := range files {
+		f, err := w.Create(name)
+		require.NoError(t, err)
 
-	_, err = f.Write([]byte(content))
-	require.NoError(t, err)
+		_, err = f.Write([]byte(content))
+		require.NoError(t, err)
+	}
 
 	require.NoError(t, w.Close())
 

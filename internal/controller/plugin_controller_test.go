@@ -1711,6 +1711,8 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
 			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("1.0.0"),
 				"Should fallback to spec.version")
+			Expect(plugin.Status.AvailableVersions[0].Hash).To(BeEmpty(),
+				"Hash should be empty in fallback because JAR was not successfully downloaded")
 		})
 
 		It("should set RepositoryAvailable=False for URL plugin with checksum mismatch", func() {
@@ -1860,6 +1862,48 @@ var _ = Describe("Plugin Controller", func() {
 				"URL plugin without checksum should still succeed with a warning")
 			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
 			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("2.0.0"))
+		})
+
+		It("should record metrics for URL plugin API calls", func() {
+			pluginName := "test-url-metrics"
+			jarBytes := testutil.BuildTestJAR("plugin.yml", "name: MetricsPlugin\nversion: \"1.0.0\"\n")
+
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/java-archive")
+				_, _ = w.Write(jarBytes)
+			}))
+			defer server.Close()
+
+			mockMetrics := &testutil.MockMetricsRecorder{}
+			metricsReconciler := &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: mockPlugin,
+				Solver:       solver.NewSimpleSolver(),
+				HTTPClient:   server.Client(),
+				Metrics:      mockMetrics,
+			}
+
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  server.URL + "/plugin.jar",
+				},
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-metrics": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+			_, err := metricsReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = metricsReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(mockMetrics.PluginAPICalls).To(BeNumerically(">=", 1),
+				"RecordPluginAPICall should be called for URL source")
+			Expect(mockMetrics.PluginAPISources).To(ContainElement("url"),
+				"Metrics should record 'url' as source type")
 		})
 	})
 

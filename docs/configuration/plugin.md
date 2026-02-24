@@ -65,7 +65,7 @@ spec:
   source:
     type: url
     url: "https://github.com/example/plugin/releases/download/v1.0.0/plugin-1.0.0.jar"
-    checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    checksum: "aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233"
 ```
 
 !!! info "Checksum Verification"
@@ -73,6 +73,12 @@ spec:
     The `checksum` field accepts a SHA256 hex string (64 characters). If provided, the
     operator verifies the downloaded JAR against this hash. If omitted, the operator
     logs a warning but proceeds with the unverified download.
+
+!!! note "Update Strategy for URL Sources"
+
+    For URL sources, `updateStrategy` is accepted but largely irrelevant. A direct URL
+    points to a single file with no version history, so all strategies behave similarly.
+    Use `latest` for simplicity.
 
 ### updateStrategy
 
@@ -323,7 +329,7 @@ spec:
   source:
     type: url
     url: "https://github.com/example/plugin/releases/download/v1.2.0/plugin-1.2.0.jar"
-    checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    checksum: "aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233"
 
   version: "1.2.0"  # Fallback if plugin.yml extraction fails
   updateStrategy: "latest"

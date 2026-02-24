@@ -13,12 +13,16 @@ spec:
     # Optional SHA256 checksum for integrity verification.
     # If omitted, the operator logs a warning but continues.
     # Generate with: sha256sum my-plugin-1.2.0.jar
-    checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    # Replace the placeholder below with the actual checksum of your JAR file.
+    checksum: "aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233"
 
   # Version is auto-extracted from plugin.yml inside the JAR.
   # Specify here as fallback if JAR metadata extraction fails.
   version: "1.2.0"
 
+  # For URL sources, updateStrategy controls how the operator treats the single
+  # available version. Since a URL points to a single file (no version history),
+  # all strategies behave similarly. Use "latest" for simplicity.
   updateStrategy: latest
 
   # Apply to all production servers
