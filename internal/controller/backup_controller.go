@@ -303,6 +303,21 @@ func (r *BackupReconciler) isSnapshotAPIUnavailable(
 	return false
 }
 
+// isSnapshotCRDMissing checks whether the VolumeSnapshot CRD is installed in the cluster.
+// Unlike isSnapshotAPIUnavailable, this method has no side effects — it does not modify
+// server status or write conditions. Safe to call from any controller.
+func (r *BackupReconciler) isSnapshotCRDMissing(ctx context.Context, namespace, serverName string) bool {
+	_, err := r.Snapshotter.ListSnapshots(ctx, namespace, serverName)
+	if err == nil {
+		return false
+	}
+
+	var noKind *meta.NoKindMatchError
+	var noResource *meta.NoResourceMatchError
+
+	return errors.As(err, &noKind) || errors.As(err, &noResource)
+}
+
 // getServerBackupMu returns a per-server mutex for serializing backup execution.
 func (r *BackupReconciler) getServerBackupMu(server *mcv1beta1.PaperMCServer) *sync.Mutex {
 	key := server.Namespace + "/" + server.Name

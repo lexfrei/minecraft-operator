@@ -1,0 +1,64 @@
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: PaperMCServer
+metadata:
+  name: survival
+  namespace: minecraft
+  labels:
+    environment: production
+    type: survival
+spec:
+  updateStrategy: "auto"
+
+  # Update schedule
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+
+  # VolumeSnapshot backups with RCON consistency hooks
+  backup:
+    enabled: true
+    schedule: "0 */6 * * *"    # Every 6 hours
+    beforeUpdate: true          # Backup before any update (default)
+    volumeSnapshotClassName: "" # Use cluster default if empty
+    retention:
+      maxCount: 10              # Keep last 10 snapshots
+
+  # Graceful shutdown
+  gracefulShutdown:
+    timeout: 300s
+
+  # RCON for remote management (required for backup hooks)
+  rcon:
+    enabled: true
+    port: 25575
+    passwordSecret:
+      name: survival-rcon
+      key: password
+
+  # Pod template
+  podTemplate:
+    spec:
+      containers:
+      - name: minecraft
+        image: docker.io/lexfrei/papermc:1.21.4-137
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2000m"
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+        env:
+        - name: EULA
+          value: "TRUE"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: survival-rcon
+  namespace: minecraft
+type: Opaque
+stringData:
+  password: "change-me-in-production"

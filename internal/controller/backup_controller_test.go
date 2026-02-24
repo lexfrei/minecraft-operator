@@ -1748,10 +1748,19 @@ func TestUpdateReconciler_BackupBeforeUpdateErrorsWhenCRDMissing(t *testing.T) {
 		BackupReconciler: backupR,
 	}
 
+	// Capture ResourceVersion before the call to detect mutation.
+	originalRV := server.ResourceVersion
+
 	// Must return error to abort the update — CRD missing means no backup possible.
 	err := updateR.backupBeforeUpdate(context.Background(), server)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "VolumeSnapshot API unavailable")
+
+	// Verify that backupBeforeUpdate did NOT mutate the caller's server object.
+	// isSnapshotAPIUnavailable has side effects (status update, ResourceVersion copy)
+	// that must not leak across controller boundaries.
+	assert.Equal(t, originalRV, server.ResourceVersion,
+		"backupBeforeUpdate must not mutate the caller's server ResourceVersion")
 }
 
 func TestUpdateReconciler_BackupBeforeUpdateProceedsOnTransientError(t *testing.T) {
