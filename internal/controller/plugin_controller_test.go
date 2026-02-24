@@ -1362,9 +1362,21 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(plugin.Status.MatchedInstances[0].Compatible).To(BeFalse())
 		})
 
-		// Note: "unsupported source type" test was removed because the CRD enum
-		// now only accepts implemented types (hangar, url). CRD validation rejects
-		// unimplemented types at admission time, making a controller-level test impossible.
+		// CRD enum prevents creating plugins with unimplemented types at admission time.
+		// This unit test validates the safety-net default case in fetchPluginMetadata
+		// by calling the method directly, bypassing CRD validation.
+		It("should return error from fetchPluginMetadata for unknown source type", func() {
+			plugin := &mck8slexlav1beta1.Plugin{
+				Spec: mck8slexlav1beta1.PluginSpec{
+					Source: mck8slexlav1beta1.PluginSource{Type: "unknown"},
+				},
+			}
+			versions, cacheHit, err := reconciler.fetchPluginMetadata(ctx, plugin)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not yet implemented"))
+			Expect(versions).To(BeNil())
+			Expect(cacheHit).To(BeFalse())
+		})
 
 		It("should return empty result for non-existent plugin", func() {
 			req := ctrl.Request{NamespacedName: types.NamespacedName{

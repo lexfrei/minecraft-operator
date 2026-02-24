@@ -125,7 +125,7 @@ spec:
                     pattern: ^[a-fA-F0-9]{64}$
                     type: string
                   project:
-                    description: Project is the plugin project identifier (for hangar/modrinth/spigot).
+                    description: Project is the plugin project identifier (for hangar).
                     type: string
                   type:
                     description: Type specifies the plugin repository type.

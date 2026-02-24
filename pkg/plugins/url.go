@@ -23,19 +23,21 @@ import (
 )
 
 const (
-	// maxJARSize is the maximum JAR file size we will download for metadata extraction (100 MB).
-	maxJARSize = 100 * 1024 * 1024
+	// MaxJARSize is the maximum JAR file size we will download for metadata extraction (100 MB).
+	// Also used by the update controller to set curl --max-filesize.
+	MaxJARSize = 100 * 1024 * 1024
 
 	// maxPluginYMLSize is the maximum decompressed size for plugin.yml entries (10 MB).
 	// Limits decompressed entry size to prevent zip bomb attacks.
 	maxPluginYMLSize = 10 * 1024 * 1024
 
 	// safeHTTPTimeout is the default timeout for HTTP operations.
-	// Set to 120s to accommodate large JARs (up to maxJARSize=100MB) on slower connections.
+	// Set to 120s to accommodate large JARs (up to MaxJARSize=100MB) on slower connections.
 	safeHTTPTimeout = 120 * time.Second
 
-	// maxRedirects is the maximum number of HTTP redirects to follow.
-	maxRedirects = 10
+	// MaxRedirects is the maximum number of HTTP redirects to follow.
+	// Also used by the update controller to set curl --max-redirs.
+	MaxRedirects = 10
 )
 
 // JARMetadata contains plugin metadata extracted from plugin.yml or paper-plugin.yml inside a JAR.
@@ -67,8 +69,8 @@ func SafeHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout: safeHTTPTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= maxRedirects {
-				return errors.Newf("stopped after %d redirects", maxRedirects)
+			if len(via) >= MaxRedirects {
+				return errors.Newf("stopped after %d redirects", MaxRedirects)
 			}
 
 			// Block redirects to private/internal hosts.
@@ -171,6 +173,9 @@ func isBlockedHost(host string) bool {
 // looksLikeNonStandardIP detects hostnames that look like octal or hex-encoded IPs
 // (e.g., "0177.0.0.01", "0x7f.0.0.1"). These bypass net.ParseIP but are resolved
 // by curl and browsers. We reject them outright rather than trying to parse them.
+// Only checks 4-part hostnames because dotted-octal/hex notation is only meaningful
+// for IPv4 addresses (exactly 4 octets). Valid domain names with leading zeros or
+// hex prefixes in their labels are not rejected since they don't resolve as IPs.
 func looksLikeNonStandardIP(hostname string) bool {
 	parts := strings.Split(hostname, ".")
 	if len(parts) != 4 { //nolint:mnd // IPv4 has exactly 4 octets.
@@ -241,7 +246,7 @@ func parseDecimalIP(hostname string) net.IP {
 
 // DownloadJAR downloads a JAR from the given URL and returns the raw bytes.
 // Uses SafeHTTPClient if httpClient is nil.
-// Note: the entire JAR (up to maxJARSize) is held in memory. With concurrent
+// Note: the entire JAR (up to MaxJARSize) is held in memory. With concurrent
 // URL plugin reconciliations, memory usage scales with num_plugins * jar_size.
 func DownloadJAR(ctx context.Context, jarURL string, httpClient *http.Client) ([]byte, error) {
 	if httpClient == nil {
@@ -266,15 +271,15 @@ func DownloadJAR(ctx context.Context, jarURL string, httpClient *http.Client) ([
 	}
 
 	// Read body with size limit.
-	limitedReader := io.LimitReader(resp.Body, maxJARSize+1)
+	limitedReader := io.LimitReader(resp.Body, MaxJARSize+1)
 
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read JAR body")
 	}
 
-	if len(body) > maxJARSize {
-		return nil, errors.Newf("JAR exceeds maximum size of %d bytes", maxJARSize)
+	if len(body) > MaxJARSize {
+		return nil, errors.Newf("JAR exceeds maximum size of %d bytes", MaxJARSize)
 	}
 
 	return body, nil

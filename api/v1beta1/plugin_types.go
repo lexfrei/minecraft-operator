@@ -16,7 +16,7 @@ type PluginSource struct {
 	// +kubebuilder:validation:Enum=hangar;url
 	Type string `json:"type"`
 
-	// Project is the plugin project identifier (for hangar/modrinth/spigot).
+	// Project is the plugin project identifier (for hangar).
 	// +optional
 	Project string `json:"project,omitempty"`
 

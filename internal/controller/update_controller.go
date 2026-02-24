@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -473,7 +474,10 @@ func (r *UpdateReconciler) downloadPluginToServer(
 		"url", downloadURL)
 
 	_, err := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
-		[]string{"curl", "-fsSL", "--proto", "=https", "--max-redirs", "10", "--max-filesize", "104857600", "-o", outputPath, "--", downloadURL})
+		[]string{"curl", "-fsSL", "--proto", "=https",
+			"--max-redirs", strconv.Itoa(plugins.MaxRedirects),
+			"--max-filesize", strconv.Itoa(plugins.MaxJARSize),
+			"-o", outputPath, "--", downloadURL})
 	if err != nil {
 		return errors.Wrapf(err, "failed to download plugin %s", pluginName)
 	}
