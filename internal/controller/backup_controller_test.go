@@ -1,11 +1,11 @@
 /*
 Copyright 2026.
 
-Licensed under the Apache License, Version 2.0 (the "License");
+Licensed under the BSD 3-Clause License (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+    https://opensource.org/licenses/BSD-3-Clause
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -708,6 +708,51 @@ func TestUpdateReconciler_BackupBeforeUpdateNilBackupReconciler(t *testing.T) {
 	// Should not error when BackupReconciler is nil
 	err := updateReconciler.backupBeforeUpdate(context.Background(), server)
 	require.NoError(t, err)
+}
+
+func TestUpdateReconciler_BackupBeforeUpdateSkipsWhenBackupDisabled(t *testing.T) {
+	// When Enabled=false but BeforeUpdate=true, backup must NOT be performed.
+	scheme := newBackupTestScheme()
+
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:      false,
+		BeforeUpdate: boolPtr(true),
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	backupR := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     time.Now,
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+	backupR.initOnce.Do(backupR.initMaps)
+
+	updateR := &UpdateReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		BackupReconciler: backupR,
+	}
+
+	err := updateR.backupBeforeUpdate(context.Background(), server)
+	require.NoError(t, err)
+
+	// Verify no snapshots were created.
+	snapshots, listErr := backup.NewSnapshotter(fakeClient).ListSnapshots(
+		context.Background(), "minecraft", "my-server")
+	require.NoError(t, listErr)
+	assert.Empty(t, snapshots, "no backup should be created when backup is disabled")
 }
 
 func TestBackupReconciler_RCONDisabledCreatesSnapshotWithoutHooks(t *testing.T) {
@@ -1661,7 +1706,7 @@ func TestBackupReconciler_MaxCountDefaultWhenZero(t *testing.T) {
 	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
 		context.Background(), "minecraft", "my-server")
 	require.NoError(t, err)
-	assert.Equal(t, defaultMaxBackupCount, len(snapshots),
+	assert.Equal(t, int(defaultMaxBackupCount), len(snapshots),
 		"should retain exactly defaultMaxBackupCount snapshots when MaxCount is zero/unset")
 }
 

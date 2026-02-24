@@ -117,7 +117,7 @@ type BackupRetention struct {
 	// +optional
 	// +kubebuilder:default=10
 	// +kubebuilder:validation:Minimum=1
-	MaxCount int `json:"maxCount,omitempty"`
+	MaxCount int32 `json:"maxCount,omitempty"`
 }
 
 // BackupStatus represents the observed backup state for the server.

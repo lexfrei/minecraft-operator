@@ -1,11 +1,11 @@
 /*
 Copyright 2026.
 
-Licensed under the Apache License, Version 2.0 (the "License");
+Licensed under the BSD 3-Clause License (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+    https://opensource.org/licenses/BSD-3-Clause
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -55,7 +55,7 @@ const (
 	backupNowMaxAge = 5 * time.Minute
 
 	// defaultMaxBackupCount is the default retention count when not specified.
-	defaultMaxBackupCount = 10
+	defaultMaxBackupCount int32 = 10
 )
 
 // RCONClientFactory creates RCON clients. Allows injection for testing.
@@ -452,7 +452,7 @@ func (r *BackupReconciler) performBackup(
 		maxCount = server.Spec.Backup.Retention.MaxCount
 	}
 
-	deleted, retErr := r.Snapshotter.DeleteOldSnapshots(ctx, server.Namespace, server.Name, maxCount)
+	deleted, retErr := r.Snapshotter.DeleteOldSnapshots(ctx, server.Namespace, server.Name, int(maxCount))
 	if retErr != nil {
 		slog.ErrorContext(ctx, "Failed to apply retention policy", "error", retErr)
 	} else if deleted > 0 {
@@ -656,7 +656,7 @@ func (r *BackupReconciler) manageBackupCronSchedule(
 	// Add new cron job — callback records trigger time for Reconcile to pick up
 	entryID, err := r.cron.AddFunc(cronSpec, func() {
 		r.cronTriggerMu.Lock()
-		r.cronTriggerTimes[serverKey] = time.Now()
+		r.cronTriggerTimes[serverKey] = r.now()
 		r.cronTriggerMu.Unlock()
 		slog.InfoContext(context.Background(), "Backup cron triggered", "server", serverKey)
 	})

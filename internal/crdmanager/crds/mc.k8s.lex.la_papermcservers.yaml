@@ -58,6 +58,7 @@ spec:
                         description: |-
                           MaxCount is the maximum number of VolumeSnapshots to retain per server.
                           Oldest snapshots are deleted first when the limit is exceeded.
+                        format: int32
                         minimum: 1
                         type: integer
                     type: object
