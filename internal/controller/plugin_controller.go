@@ -354,7 +354,6 @@ func (r *PluginReconciler) resolveURLVersion(
 
 		return []plugins.PluginVersion{{
 			Version:     version,
-			ReleaseDate: time.Now(),
 			DownloadURL: plugin.Spec.Source.URL,
 			Hash:        sha256Hex,
 		}}, nil
@@ -369,7 +368,6 @@ func (r *PluginReconciler) resolveURLVersion(
 
 	return []plugins.PluginVersion{{
 		Version:           version,
-		ReleaseDate:       time.Now(),
 		DownloadURL:       plugin.Spec.Source.URL,
 		Hash:              sha256Hex,
 		MinecraftVersions: mcVersions,
@@ -411,8 +409,8 @@ func (r *PluginReconciler) urlCacheValid(plugin *mcv1beta1.Plugin) bool {
 		return false
 	}
 
-	// Expire cache after TTL.
-	if !cached.CachedAt.IsZero() && time.Since(cached.CachedAt.Time) > urlCacheTTL {
+	// Expire cache after TTL. Zero CachedAt is treated as expired.
+	if cached.CachedAt.IsZero() || time.Since(cached.CachedAt.Time) > urlCacheTTL {
 		return false
 	}
 
@@ -470,13 +468,18 @@ func convertToPluginVersionInfo(versions []plugins.PluginVersion) []mcv1beta1.Pl
 			mcVersions = []string{}
 		}
 
+		releasedAt := metav1.NewTime(v.ReleaseDate)
+		if v.ReleaseDate.IsZero() {
+			releasedAt = now
+		}
+
 		infos[i] = mcv1beta1.PluginVersionInfo{
 			Version:           v.Version,
 			MinecraftVersions: mcVersions,
 			DownloadURL:       v.DownloadURL,
 			Hash:              v.Hash,
 			CachedAt:          now,
-			ReleasedAt:        metav1.NewTime(v.ReleaseDate),
+			ReleasedAt:        releasedAt,
 		}
 	}
 

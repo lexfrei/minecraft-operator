@@ -659,8 +659,8 @@ Currently implemented as simple linear search (`SimpleSolver`). SAT solver plann
                  │
                  ▼
 ┌─────────────────────────────────────────┐
-│  Fetch plugin metadata from API          │
-│  (Hangar/Modrinth/etc, with caching)     │
+│  Fetch plugin metadata from source        │
+│  (Hangar/Modrinth/URL, with caching)     │
 └────────────────┬────────────────────────┘
                  │
                  ▼
@@ -1187,7 +1187,7 @@ rules:
 - **API keys** (for CurseForge in future): Via Secret
 - **Network policies**: Operator can only access:
   - Kubernetes API
-  - Plugin repository APIs (Hangar, Modrinth, etc)
+  - Plugin repository APIs (Hangar, Modrinth) and direct URL endpoints
   - RCON port of pods (25575)
 
 ## Future Development

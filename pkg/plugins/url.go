@@ -69,7 +69,13 @@ type pluginYML struct {
 }
 
 // SafeHTTPClient creates an HTTP client with timeout and SSRF protection.
-// It blocks cross-host redirects to prevent SSRF via open redirect.
+// It blocks redirects to private/internal hosts to prevent SSRF via open redirect,
+// while allowing cross-host redirects to public hosts (e.g., GitHub → CDN).
+//
+// Known limitation: DNS rebinding attacks are not prevented. ValidateDownloadURL
+// checks the hostname at URL parse time, but a malicious DNS record could resolve
+// to a private IP at connection time. This is mitigated by the fact that modifying
+// Plugin CRDs requires Kubernetes RBAC access.
 func SafeHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout: safeHTTPTimeout,
@@ -78,9 +84,9 @@ func SafeHTTPClient() *http.Client {
 				return errors.Newf("stopped after %d redirects", maxRedirects)
 			}
 
-			if len(via) > 0 && req.URL.Host != via[0].URL.Host {
-				return errors.Newf("redirect to different host blocked: %s -> %s",
-					via[0].URL.Host, req.URL.Host)
+			// Block redirects to private/internal hosts.
+			if isBlockedHost(req.URL.Host) {
+				return errors.Newf("redirect to blocked host: %s", req.URL.Host)
 			}
 
 			return nil
@@ -90,6 +96,8 @@ func SafeHTTPClient() *http.Client {
 
 // ValidateDownloadURL checks that a URL is valid and safe for plugin downloads.
 // Blocks non-HTTPS URLs, missing hosts, and private/internal network addresses.
+// Note: This validates the hostname at parse time. DNS rebinding (where a hostname
+// resolves to a private IP at connection time) is a known limitation.
 func ValidateDownloadURL(rawURL string) error {
 	if rawURL == "" {
 		return errors.New("URL is required for url source type")

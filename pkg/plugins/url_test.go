@@ -1,8 +1,6 @@
 package plugins_test
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -11,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
+	"github.com/lexfrei/minecraft-operator/pkg/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -91,8 +90,9 @@ func TestSafeHTTPClient(t *testing.T) {
 		assert.NotZero(t, client.Timeout, "SafeHTTPClient should have a non-zero timeout")
 	})
 
-	t.Run("blocks cross-host redirects", func(t *testing.T) {
-		// Create a server that redirects to a different host.
+	t.Run("blocks redirect to private host", func(t *testing.T) {
+		// Create a server on loopback that redirects to another loopback address.
+		// Both are 127.0.0.1 (blocked host), so the redirect target is blocked.
 		evilServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte("evil"))
 		}))
@@ -114,39 +114,29 @@ func TestSafeHTTPClient(t *testing.T) {
 
 		_, err = client.Do(req) //nolint:bodyclose // Error expected, no body to close.
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "redirect to different host blocked")
+		assert.Contains(t, err.Error(), "redirect to blocked host")
 	})
 
-	t.Run("allows same-host redirects", func(t *testing.T) {
-		mux := http.NewServeMux()
-		mux.HandleFunc("/redirect", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/final", http.StatusFound)
-		})
-		mux.HandleFunc("/final", func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("ok"))
-		})
+	t.Run("allows redirect to public host", func(t *testing.T) {
+		client := plugins.SafeHTTPClient()
 
-		server := httptest.NewTLSServer(mux)
-		defer server.Close()
-
-		client := server.Client()
-		safeClient := plugins.SafeHTTPClient()
-		client.CheckRedirect = safeClient.CheckRedirect
-
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/redirect", nil)
+		// Simulate a redirect to a public CDN host (e.g., GitHub releases → CDN).
+		req, err := http.NewRequestWithContext(
+			context.Background(), http.MethodGet,
+			"https://objects.githubusercontent.com/release-asset.jar", nil,
+		)
 		require.NoError(t, err)
 
-		resp, err := client.Do(req)
+		// CheckRedirect should allow this since the target is a public host.
+		via := []*http.Request{req}
+		err = client.CheckRedirect(req, via)
 		require.NoError(t, err)
-		defer func() { _ = resp.Body.Close() }()
-
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
 }
 
 func TestDownloadJAR(t *testing.T) {
 	t.Run("downloads JAR bytes successfully", func(t *testing.T) {
-		jarBytes := buildTestJAR(t, "plugin.yml", "name: TestPlugin\n")
+		jarBytes := testutil.BuildTestJAR("plugin.yml", "name: TestPlugin\n")
 		server := serveJAR(t, jarBytes)
 
 		body, err := plugins.DownloadJAR(context.Background(), server.URL+"/plugin.jar", server.Client())
@@ -191,7 +181,7 @@ func TestDownloadJAR(t *testing.T) {
 
 func TestParseJARMetadata(t *testing.T) {
 	t.Run("extracts metadata from plugin.yml", func(t *testing.T) {
-		jarBytes := buildTestJAR(t, "plugin.yml", "name: TestPlugin\nversion: \"2.5.0\"\napi-version: \"1.21\"\n")
+		jarBytes := testutil.BuildTestJAR("plugin.yml", "name: TestPlugin\nversion: \"2.5.0\"\napi-version: \"1.21\"\n")
 
 		meta, err := plugins.ParseJARMetadata(jarBytes)
 		require.NoError(t, err)
@@ -209,7 +199,7 @@ func TestParseJARMetadata(t *testing.T) {
 	})
 
 	t.Run("returns error when no plugin.yml found", func(t *testing.T) {
-		jarBytes := buildTestJAR(t, "README.txt", "not a plugin")
+		jarBytes := testutil.BuildTestJAR("README.txt", "not a plugin")
 
 		_, err := plugins.ParseJARMetadata(jarBytes)
 		require.Error(t, err)
@@ -219,7 +209,7 @@ func TestParseJARMetadata(t *testing.T) {
 
 func TestFetchJARMetadata(t *testing.T) {
 	t.Run("extracts metadata from plugin.yml", func(t *testing.T) {
-		jarBytes := buildTestJAR(t, "plugin.yml", `
+		jarBytes := testutil.BuildTestJAR("plugin.yml", `
 name: TestPlugin
 version: "2.5.0"
 api-version: "1.21"
@@ -239,7 +229,7 @@ main: com.example.TestPlugin
 	})
 
 	t.Run("extracts metadata from paper-plugin.yml", func(t *testing.T) {
-		jarBytes := buildTestJAR(t, "paper-plugin.yml", `
+		jarBytes := testutil.BuildTestJAR("paper-plugin.yml", `
 name: PaperTestPlugin
 version: "3.0.0"
 api-version: "1.20"
@@ -255,7 +245,7 @@ main: com.example.PaperTestPlugin
 	})
 
 	t.Run("handles missing optional fields", func(t *testing.T) {
-		jarBytes := buildTestJAR(t, "plugin.yml", `
+		jarBytes := testutil.BuildTestJAR("plugin.yml", `
 name: MinimalPlugin
 main: com.example.MinimalPlugin
 `)
@@ -272,7 +262,7 @@ main: com.example.MinimalPlugin
 
 func TestFetchJARMetadata_Preference(t *testing.T) {
 	t.Run("prefers paper-plugin.yml over plugin.yml when both exist", func(t *testing.T) {
-		jarBytes := buildTestJARMulti(t, map[string]string{
+		jarBytes := testutil.BuildTestJARMulti(map[string]string{
 			"plugin.yml":       "name: BukkitPlugin\nversion: \"1.0.0\"\napi-version: \"1.20\"\n",
 			"paper-plugin.yml": "name: PaperPlugin\nversion: \"2.0.0\"\napi-version: \"1.21\"\n",
 		})
@@ -288,7 +278,7 @@ func TestFetchJARMetadata_Preference(t *testing.T) {
 
 func TestFetchJARMetadata_Errors(t *testing.T) {
 	t.Run("returns error when no plugin.yml found", func(t *testing.T) {
-		jarBytes := buildTestJAR(t, "README.txt", "not a plugin")
+		jarBytes := testutil.BuildTestJAR("README.txt", "not a plugin")
 		server := serveJAR(t, jarBytes)
 
 		_, err := plugins.FetchJARMetadata(context.Background(), server.URL+"/plugin.jar", server.Client())
@@ -342,31 +332,4 @@ func serveJAR(t *testing.T, jarBytes []byte) *httptest.Server {
 	t.Cleanup(server.Close)
 
 	return server
-}
-
-// buildTestJAR creates an in-memory JAR (ZIP) file with a single entry.
-func buildTestJAR(t *testing.T, filename, content string) []byte {
-	t.Helper()
-
-	return buildTestJARMulti(t, map[string]string{filename: content})
-}
-
-// buildTestJARMulti creates an in-memory JAR (ZIP) file with multiple entries.
-func buildTestJARMulti(t *testing.T, files map[string]string) []byte {
-	t.Helper()
-
-	var buf bytes.Buffer
-	w := zip.NewWriter(&buf)
-
-	for name, content := range files {
-		f, err := w.Create(name)
-		require.NoError(t, err)
-
-		_, err = f.Write([]byte(content))
-		require.NoError(t, err)
-	}
-
-	require.NoError(t, w.Close())
-
-	return buf.Bytes()
 }
