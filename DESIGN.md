@@ -79,8 +79,8 @@ Minecraft Operator is a Kubernetes operator for managing PaperMC servers with a 
 ┌───────▼──────┐  ┌──────▼───▼───────┐
 │  Plugin APIs │  │  Minecraft Pods   │
 │  - Hangar    │  │  + RCON           │
-│  - Modrinth  │  │  + StatefulSet    │
-│  - SpigotMC  │  │                   │
+│  - URL (JAR) │  │  + StatefulSet    │
+│              │  │                   │
 └──────────────┘  └───────────────────┘
 
 Relationships:
@@ -675,7 +675,7 @@ Currently implemented as simple linear search (`SimpleSolver`). SAT solver plann
                  ▼
 ┌─────────────────────────────────────────┐
 │  Fetch plugin metadata from source        │
-│  (Hangar/Modrinth/URL, with caching)     │
+│  (Hangar/URL, with caching)              │
 └────────────────┬────────────────────────┘
                  │
                  ▼
@@ -1202,7 +1202,7 @@ rules:
 - **API keys** (for CurseForge in future): Via Secret
 - **Network policies**: Operator can only access:
   - Kubernetes API
-  - Plugin repository APIs (Hangar, Modrinth) and direct URL endpoints
+  - Plugin repository APIs (Hangar) and direct URL endpoints
   - RCON port of pods (25575)
 
 ## Future Development

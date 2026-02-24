@@ -41,7 +41,7 @@ Plugins typically use semantic versioning:
 - Standard semver: `2.5.0`, `1.18.2`, `3.0.1`
 - Some plugins include builds: `2.5.0-build.123`
 
-The operator fetches version metadata from plugin repositories (Hangar, Modrinth, etc.) or directly from JAR files (URL source) to determine compatibility.
+The operator fetches version metadata from plugin repositories (Hangar) or directly from JAR files (URL source) to determine compatibility.
 
 ## PaperMCServer Update Strategies
 
@@ -300,7 +300,7 @@ The `Plugin` resource uses the same `updateStrategy` field as `PaperMCServer`, p
 
 **Version resolution**:
 
-1. Fetch all available plugin versions from the repository (Hangar, Modrinth, etc.)
+1. Fetch all available plugin versions from the repository (Hangar, URL, etc.)
 2. Filter versions by `updateDelay` (exclude too-new versions)
 3. For each version (newest first), check compatibility with ALL matched servers' Paper versions
 4. Return the highest compatible version

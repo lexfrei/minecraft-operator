@@ -1096,6 +1096,22 @@ var _ = Describe("UpdateController", func() {
 				"curl should restrict protocol to HTTPS to prevent redirect-based SSRF")
 			Expect(mockExec.Calls[0].Command).To(ContainElement("=https"),
 				"curl --proto flag should only allow HTTPS")
+			// Verify -- separator prevents URL-as-flag injection.
+			// The downloadURL must come AFTER -- to prevent a malicious URL
+			// starting with "-" from being interpreted as a curl flag.
+			dashDashIdx := -1
+			urlIdx := -1
+			for i, arg := range mockExec.Calls[0].Command {
+				if arg == "--" {
+					dashDashIdx = i
+				}
+				if arg == "https://example.com/plugin.jar" {
+					urlIdx = i
+				}
+			}
+			Expect(dashDashIdx).To(BeNumerically(">", 0), "curl args must include -- separator")
+			Expect(urlIdx).To(BeNumerically(">", dashDashIdx),
+				"download URL must come after -- to prevent flag injection")
 		})
 
 		It("should block download for URL plugin with private/internal download URL", func() {
