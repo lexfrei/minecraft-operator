@@ -15,6 +15,7 @@ A Kubernetes operator for managing [PaperMC](https://papermc.io/) servers with a
 - **Self-Managed CRDs** — CRDs embedded in the operator binary, applied at startup via server-side apply
 - **Web UI** — Built-in dashboard for monitoring servers and plugins
 - **Hangar Integration** — Automatic plugin downloads from PaperMC Hangar repository
+- **Direct URL Plugins** — Download plugins from any HTTPS URL with optional SHA256 checksum verification
 
 ## Quick Start
 
@@ -115,7 +116,7 @@ See [Update Strategies Guide](docs/configuration/update-strategies.md) for detai
 
 Four controllers work together:
 
-1. **Plugin Controller** — Fetches plugin metadata from Hangar, runs compatibility solver, updates Plugin status
+1. **Plugin Controller** — Fetches plugin metadata from Hangar or direct URLs, runs compatibility solver, updates Plugin status
 2. **PaperMCServer Controller** — Manages StatefulSet and Service, resolves Paper version based on update strategy
 3. **Update Controller** — Executes scheduled updates during maintenance windows with graceful RCON shutdown
 4. **Backup Controller** — Creates VolumeSnapshots with RCON save hooks for data consistency, supports cron scheduling, manual triggers, and retention

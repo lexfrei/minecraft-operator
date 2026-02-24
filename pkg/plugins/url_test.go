@@ -61,6 +61,8 @@ func TestValidateDownloadURL_BlockedHosts(t *testing.T) {
 		{"IPv6 loopback", "https://[::1]/plugin.jar"},
 		{"IPv4-mapped loopback", "https://[::ffff:127.0.0.1]/plugin.jar"},
 		{"IPv4-mapped link-local", "https://[::ffff:169.254.169.254]/plugin.jar"},
+		{"IPv4-mapped private 10.x", "https://[::ffff:10.0.0.1]/plugin.jar"},
+		{"IPv4-mapped private 192.168.x", "https://[::ffff:192.168.1.1]/plugin.jar"},
 		{"unspecified address", "https://0.0.0.0/plugin.jar"},
 		{"loopback IP with port", "https://127.0.0.1:8080/plugin.jar"},
 		{"mDNS .local domain", "https://myhost.local/plugin.jar"},
@@ -157,7 +159,7 @@ func TestDownloadJAR(t *testing.T) {
 
 		_, err := plugins.DownloadJAR(context.Background(), server.URL+"/missing.jar", server.Client())
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "404")
+		assert.Contains(t, err.Error(), "HTTP 404")
 	})
 
 	t.Run("respects context cancellation", func(t *testing.T) {
@@ -174,13 +176,46 @@ func TestDownloadJAR(t *testing.T) {
 	})
 
 	t.Run("uses SafeHTTPClient when nil client provided", func(t *testing.T) {
-		// With nil client, DownloadJAR should use SafeHTTPClient internally.
-		// We can't easily test the exact client used, but we can verify it doesn't panic.
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
 		_, err := plugins.DownloadJAR(ctx, "https://example.com/plugin.jar", nil)
 		require.Error(t, err, "Should fail due to cancelled context, not panic from nil client")
+	})
+}
+
+func TestDownloadJAR_SizeLimitAndErrors(t *testing.T) {
+	t.Run("rejects JAR exceeding maximum size", func(t *testing.T) {
+		// Serve a response larger than maxJARSize (100MB).
+		// Uses streaming writes to avoid allocating 100MB in the test.
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/java-archive")
+			chunk := make([]byte, 64*1024)
+			total := 100*1024*1024 + 2
+			for written := 0; written < total; written += len(chunk) {
+				remaining := total - written
+				if remaining < len(chunk) {
+					chunk = chunk[:remaining]
+				}
+				_, _ = w.Write(chunk)
+			}
+		}))
+		defer server.Close()
+
+		_, err := plugins.DownloadJAR(context.Background(), server.URL+"/huge.jar", server.Client())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds maximum size")
+	})
+
+	t.Run("returns error with HTTP status code on failure", func(t *testing.T) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+
+		_, err := plugins.DownloadJAR(context.Background(), server.URL+"/forbidden.jar", server.Client())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "HTTP 403")
 	})
 }
 

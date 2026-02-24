@@ -41,7 +41,7 @@ Plugins typically use semantic versioning:
 - Standard semver: `2.5.0`, `1.18.2`, `3.0.1`
 - Some plugins include builds: `2.5.0-build.123`
 
-The operator fetches version metadata from plugin repositories (Hangar, Modrinth, etc.) to determine compatibility.
+The operator fetches version metadata from plugin repositories (Hangar, Modrinth, etc.) or directly from JAR files (URL source) to determine compatibility.
 
 ## PaperMCServer Update Strategies
 
@@ -509,6 +509,33 @@ kubectl patch plugin luckperms --type=merge \
 # Update to a new version and build
 kubectl patch plugin luckperms --type=merge \
   -p '{"spec":{"version":"5.4.110","build":1555}}'
+```
+
+### URL Source Plugins
+
+For plugins using `source.type: url`, all update strategies behave similarly because the URL points to a single JAR file rather than a versioned repository:
+
+- The operator downloads the JAR from the specified URL and extracts version metadata from `plugin.yml` or `paper-plugin.yml`
+- If the JAR has no version metadata, `spec.version` is used as a fallback (or `0.0.0` if not set)
+- Version caching uses a 1-hour TTL — the JAR is re-downloaded when the cache expires
+- URL or checksum changes in the spec trigger immediate re-download
+- All strategies are accepted without warning since there is only one "version" (the JAR at the URL)
+- To update, change the URL or wait for the cache to expire after uploading a new JAR to the same URL
+
+```yaml
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: Plugin
+metadata:
+  name: custom-plugin
+spec:
+  source:
+    type: url
+    url: "https://github.com/user/repo/releases/download/v2.0/plugin.jar"
+    checksum: "aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344"
+  updateStrategy: latest
+  instanceSelector:
+    matchLabels:
+      app: minecraft
 ```
 
 ## Strategy Comparison

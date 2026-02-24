@@ -483,7 +483,7 @@ func (r *UpdateReconciler) downloadPluginToServer(
 		"url", downloadURL)
 
 	_, err := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
-		[]string{"curl", "-fsSL", "-o", outputPath, downloadURL})
+		[]string{"curl", "-fsSL", "--proto", "=https", "--max-redirs", "10", "-o", outputPath, downloadURL})
 	if err != nil {
 		return errors.Wrapf(err, "failed to download plugin %s", pluginName)
 	}

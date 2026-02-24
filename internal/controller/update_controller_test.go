@@ -1092,6 +1092,10 @@ var _ = Describe("UpdateController", func() {
 			Expect(mockExec.Calls[0].Namespace).To(Equal("default"))
 			Expect(mockExec.Calls[0].Container).To(Equal("papermc"))
 			Expect(mockExec.Calls[0].Command).To(ContainElement("curl"))
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--proto"),
+				"curl should restrict protocol to HTTPS to prevent redirect-based SSRF")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("=https"),
+				"curl --proto flag should only allow HTTPS")
 		})
 
 		It("should block download for URL plugin with private/internal download URL", func() {
