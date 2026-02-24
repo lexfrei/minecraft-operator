@@ -1670,8 +1670,55 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 		})
 
-		It("should fallback to spec version when JAR metadata extraction fails for URL plugin", func() {
+		It("should fallback to spec version when JAR parse fails but download succeeds", func() {
 			pluginName := "test-url-fallback"
+
+			// Serve non-ZIP data: download succeeds, but ZIP parse fails → fallback.
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/java-archive")
+				_, _ = w.Write([]byte("this is not a zip file"))
+			}))
+			defer server.Close()
+
+			urlReconciler := &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: mockPlugin,
+				Solver:       solver.NewSimpleSolver(),
+				HTTPClient:   server.Client(),
+			}
+
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  server.URL + "/plugin.jar",
+				},
+				Version:          "1.0.0",
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-fallback": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+			_, err := urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1beta1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.RepositoryStatus).To(Equal("available"),
+				"ZIP parse failure should use fallback, not mark repo unavailable")
+			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
+			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("1.0.0"),
+				"Should fallback to spec.version")
+			Expect(plugin.Status.AvailableVersions[0].Hash).NotTo(BeEmpty(),
+				"Hash should be set because JAR bytes were downloaded successfully")
+		})
+
+		It("should mark repo unavailable when HTTP download fails for URL plugin", func() {
+			pluginName := "test-url-http-fail"
 
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusNotFound)
@@ -1693,7 +1740,7 @@ var _ = Describe("Plugin Controller", func() {
 				},
 				Version:          "1.0.0",
 				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-fallback": "true"}},
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-http-fail": "true"}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -1706,13 +1753,11 @@ var _ = Describe("Plugin Controller", func() {
 			var plugin mck8slexlav1beta1.Plugin
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
 
-			Expect(plugin.Status.RepositoryStatus).To(Equal("available"),
-				"Metadata extraction failure should use fallback, not mark repo unavailable")
-			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
-			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("1.0.0"),
-				"Should fallback to spec.version")
-			Expect(plugin.Status.AvailableVersions[0].Hash).To(BeEmpty(),
-				"Hash should be empty in fallback because JAR was not successfully downloaded")
+			Expect(plugin.Status.RepositoryStatus).To(Equal("unavailable"),
+				"HTTP download failure should mark repo as unavailable")
+			cond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 		})
 
 		It("should set RepositoryAvailable=False for URL plugin with checksum mismatch", func() {
@@ -1862,6 +1907,56 @@ var _ = Describe("Plugin Controller", func() {
 				"URL plugin without checksum should still succeed with a warning")
 			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
 			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("2.0.0"))
+		})
+
+		It("should use cached metadata when URL has not changed", func() {
+			pluginName := "test-url-caching"
+			jarBytes := testutil.BuildTestJAR("plugin.yml", "name: CachedPlugin\nversion: \"1.0.0\"\n")
+
+			downloadCount := 0
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				downloadCount++
+				w.Header().Set("Content-Type", "application/java-archive")
+				_, _ = w.Write(jarBytes)
+			}))
+			defer server.Close()
+
+			urlReconciler := &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: mockPlugin,
+				Solver:       solver.NewSimpleSolver(),
+				HTTPClient:   server.Client(),
+			}
+
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  server.URL + "/plugin.jar",
+				},
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-cache": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconciliation: adds finalizer.
+			_, err := urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconciliation: downloads JAR and caches metadata.
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			firstDownloadCount := downloadCount
+
+			// Third reconciliation: should use cached metadata, no extra download.
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(downloadCount).To(Equal(firstDownloadCount),
+				"Third reconciliation should use cache, not re-download JAR")
 		})
 
 		It("should record metrics for URL plugin API calls", func() {

@@ -70,6 +70,138 @@ func TestBuildURLVersion(t *testing.T) {
 	})
 }
 
+func TestSafeHTTPClient(t *testing.T) {
+	t.Run("has timeout configured", func(t *testing.T) {
+		client := plugins.SafeHTTPClient()
+		assert.NotZero(t, client.Timeout, "SafeHTTPClient should have a non-zero timeout")
+	})
+
+	t.Run("blocks cross-host redirects", func(t *testing.T) {
+		// Create a server that redirects to a different host.
+		evilServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("evil"))
+		}))
+		defer evilServer.Close()
+
+		redirectServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, evilServer.URL+"/evil", http.StatusFound)
+		}))
+		defer redirectServer.Close()
+
+		// SafeHTTPClient won't work with test TLS servers out of the box,
+		// so we create a client with the same CheckRedirect policy but the test TLS config.
+		client := redirectServer.Client()
+		safeClient := plugins.SafeHTTPClient()
+		client.CheckRedirect = safeClient.CheckRedirect
+
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, redirectServer.URL+"/start", nil)
+		require.NoError(t, err)
+
+		_, err = client.Do(req) //nolint:bodyclose // Error expected, no body to close.
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "redirect to different host blocked")
+	})
+
+	t.Run("allows same-host redirects", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/redirect", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/final", http.StatusFound)
+		})
+		mux.HandleFunc("/final", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("ok"))
+		})
+
+		server := httptest.NewTLSServer(mux)
+		defer server.Close()
+
+		client := server.Client()
+		safeClient := plugins.SafeHTTPClient()
+		client.CheckRedirect = safeClient.CheckRedirect
+
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/redirect", nil)
+		require.NoError(t, err)
+
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+}
+
+func TestDownloadJAR(t *testing.T) {
+	t.Run("downloads JAR bytes successfully", func(t *testing.T) {
+		jarBytes := buildTestJAR(t, "plugin.yml", "name: TestPlugin\n")
+		server := serveJAR(t, jarBytes)
+
+		body, err := plugins.DownloadJAR(context.Background(), server.URL+"/plugin.jar", server.Client())
+		require.NoError(t, err)
+		assert.Equal(t, jarBytes, body)
+	})
+
+	t.Run("returns error on HTTP failure", func(t *testing.T) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		_, err := plugins.DownloadJAR(context.Background(), server.URL+"/missing.jar", server.Client())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "404")
+	})
+
+	t.Run("respects context cancellation", func(t *testing.T) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("data"))
+		}))
+		defer server.Close()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := plugins.DownloadJAR(ctx, server.URL+"/plugin.jar", server.Client())
+		require.Error(t, err)
+	})
+
+	t.Run("uses SafeHTTPClient when nil client provided", func(t *testing.T) {
+		// With nil client, DownloadJAR should use SafeHTTPClient internally.
+		// We can't easily test the exact client used, but we can verify it doesn't panic.
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := plugins.DownloadJAR(ctx, "https://example.com/plugin.jar", nil)
+		require.Error(t, err, "Should fail due to cancelled context, not panic from nil client")
+	})
+}
+
+func TestParseJARMetadata(t *testing.T) {
+	t.Run("extracts metadata from plugin.yml", func(t *testing.T) {
+		jarBytes := buildTestJAR(t, "plugin.yml", "name: TestPlugin\nversion: \"2.5.0\"\napi-version: \"1.21\"\n")
+
+		meta, err := plugins.ParseJARMetadata(jarBytes)
+		require.NoError(t, err)
+
+		assert.Equal(t, "TestPlugin", meta.Name)
+		assert.Equal(t, "2.5.0", meta.Version)
+		assert.Equal(t, "1.21", meta.APIVersion)
+		assert.Empty(t, meta.SHA256, "ParseJARMetadata should not set SHA256")
+	})
+
+	t.Run("returns error for invalid ZIP", func(t *testing.T) {
+		_, err := plugins.ParseJARMetadata([]byte("not a zip file"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "ZIP")
+	})
+
+	t.Run("returns error when no plugin.yml found", func(t *testing.T) {
+		jarBytes := buildTestJAR(t, "README.txt", "not a plugin")
+
+		_, err := plugins.ParseJARMetadata(jarBytes)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin.yml")
+	})
+}
+
 func TestFetchJARMetadata(t *testing.T) {
 	t.Run("extracts metadata from plugin.yml", func(t *testing.T) {
 		jarBytes := buildTestJAR(t, "plugin.yml", `
@@ -121,7 +253,6 @@ main: com.example.MinimalPlugin
 		assert.Empty(t, meta.APIVersion)
 		assert.NotEmpty(t, meta.SHA256)
 	})
-
 }
 
 func TestFetchJARMetadata_Preference(t *testing.T) {

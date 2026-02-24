@@ -28,7 +28,6 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	goruntime "runtime"
 	"time"
@@ -310,7 +309,7 @@ func main() {
 		PluginClient: pluginClient,
 		Solver:       constraintSolver,
 		Metrics:      metricsRecorder,
-		HTTPClient:   &http.Client{Timeout: 30 * time.Second},
+		HTTPClient:   plugins.SafeHTTPClient(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Plugin")
 		os.Exit(1)

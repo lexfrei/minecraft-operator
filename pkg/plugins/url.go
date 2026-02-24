@@ -25,13 +25,26 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"gopkg.in/yaml.v3"
 )
 
-// maxJARSize is the maximum JAR file size we will download for metadata extraction (100 MB).
-const maxJARSize = 100 * 1024 * 1024
+const (
+	// maxJARSize is the maximum JAR file size we will download for metadata extraction (100 MB).
+	maxJARSize = 100 * 1024 * 1024
+
+	// maxPluginYMLSize is the maximum decompressed size for plugin.yml entries (10 MB).
+	// Limits decompressed entry size to prevent zip bomb attacks.
+	maxPluginYMLSize = 10 * 1024 * 1024
+
+	// safeHTTPTimeout is the default timeout for HTTP operations.
+	safeHTTPTimeout = 30 * time.Second
+
+	// maxRedirects is the maximum number of HTTP redirects to follow.
+	maxRedirects = 10
+)
 
 // JARMetadata contains plugin metadata extracted from plugin.yml or paper-plugin.yml inside a JAR.
 type JARMetadata struct {
@@ -42,6 +55,7 @@ type JARMetadata struct {
 	// APIVersion is the Minecraft API version (e.g. "1.21").
 	APIVersion string
 	// SHA256 is the computed hash of the downloaded JAR.
+	// Only set by FetchJARMetadata; ParseJARMetadata leaves this empty.
 	SHA256 string
 }
 
@@ -50,6 +64,26 @@ type pluginYML struct {
 	Name       string `yaml:"name"`
 	Version    string `yaml:"version"`
 	APIVersion string `yaml:"api-version"`
+}
+
+// SafeHTTPClient creates an HTTP client with timeout and SSRF protection.
+// It blocks cross-host redirects to prevent SSRF via open redirect.
+func SafeHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: safeHTTPTimeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= maxRedirects {
+				return errors.Newf("stopped after %d redirects", maxRedirects)
+			}
+
+			if len(via) > 0 && req.URL.Host != via[0].URL.Host {
+				return errors.Newf("redirect to different host blocked: %s -> %s",
+					via[0].URL.Host, req.URL.Host)
+			}
+
+			return nil
+		},
+	}
 }
 
 // ValidateDownloadURL checks that a URL is valid for plugin downloads.
@@ -88,13 +122,11 @@ func BuildURLVersion(downloadURL, version, checksum string) PluginVersion {
 	}
 }
 
-// FetchJARMetadata downloads a JAR from the given URL and extracts plugin metadata.
-// It reads plugin.yml or paper-plugin.yml from inside the JAR and computes the SHA256 hash.
-// The httpClient parameter allows injecting a custom client (e.g. for TLS test servers).
-// Pass nil to use http.DefaultClient.
-func FetchJARMetadata(ctx context.Context, jarURL string, httpClient *http.Client) (*JARMetadata, error) {
+// DownloadJAR downloads a JAR from the given URL and returns the raw bytes.
+// Uses SafeHTTPClient if httpClient is nil.
+func DownloadJAR(ctx context.Context, jarURL string, httpClient *http.Client) ([]byte, error) {
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = SafeHTTPClient()
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, jarURL, nil)
@@ -124,29 +156,44 @@ func FetchJARMetadata(ctx context.Context, jarURL string, httpClient *http.Clien
 		return nil, errors.Newf("JAR exceeds maximum size of %d bytes", maxJARSize)
 	}
 
-	// Compute SHA256.
-	hash := sha256.Sum256(body)
-	sha256Hex := fmt.Sprintf("%x", hash)
+	return body, nil
+}
 
-	// Open as ZIP.
-	zipReader, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+// ParseJARMetadata parses a JAR file (ZIP archive) and extracts plugin metadata
+// from plugin.yml or paper-plugin.yml. The SHA256 field is NOT set by this function;
+// callers should compute it separately if needed.
+func ParseJARMetadata(jarBytes []byte) (*JARMetadata, error) {
+	zipReader, err := zip.NewReader(bytes.NewReader(jarBytes), int64(len(jarBytes)))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open JAR as ZIP archive")
 	}
 
-	// Find plugin.yml or paper-plugin.yml.
-	meta, err := extractPluginYML(zipReader)
+	return extractPluginYML(zipReader)
+}
+
+// FetchJARMetadata downloads a JAR from the given URL and extracts plugin metadata.
+// This is a convenience function that calls DownloadJAR and ParseJARMetadata,
+// and also computes the SHA256 hash of the downloaded JAR.
+func FetchJARMetadata(ctx context.Context, jarURL string, httpClient *http.Client) (*JARMetadata, error) {
+	body, err := DownloadJAR(ctx, jarURL, httpClient)
 	if err != nil {
 		return nil, err
 	}
 
-	meta.SHA256 = sha256Hex
+	meta, err := ParseJARMetadata(body)
+	if err != nil {
+		return nil, err
+	}
+
+	hash := sha256.Sum256(body)
+	meta.SHA256 = fmt.Sprintf("%x", hash)
 
 	return meta, nil
 }
 
 // extractPluginYML finds and parses plugin.yml or paper-plugin.yml from a ZIP archive.
 // Prefers paper-plugin.yml over plugin.yml if both exist.
+// Limits decompressed entry size to prevent zip bomb attacks.
 func extractPluginYML(zipReader *zip.Reader) (*JARMetadata, error) {
 	var pluginFile, paperPluginFile *zip.File
 
@@ -175,8 +222,20 @@ func extractPluginYML(zipReader *zip.Reader) (*JARMetadata, error) {
 	}
 	defer func() { _ = rc.Close() }()
 
+	// Limit decompressed size to prevent zip bomb attacks.
+	limitedReader := io.LimitReader(rc, maxPluginYMLSize+1)
+
+	data, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read %s from JAR", target.Name)
+	}
+
+	if len(data) > maxPluginYMLSize {
+		return nil, errors.Newf("%s exceeds maximum size of %d bytes", target.Name, maxPluginYMLSize)
+	}
+
 	var yml pluginYML
-	if err := yaml.NewDecoder(rc).Decode(&yml); err != nil {
+	if err := yaml.Unmarshal(data, &yml); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse %s", target.Name)
 	}
 

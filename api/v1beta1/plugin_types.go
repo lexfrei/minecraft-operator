@@ -37,7 +37,7 @@ type PluginSource struct {
 	// Checksum is the expected SHA256 hash of the JAR file (for type: url).
 	// If not provided, the operator logs a warning about unverified downloads.
 	// +optional
-	// +kubebuilder:validation:Pattern=`^[a-f0-9]{64}$`
+	// +kubebuilder:validation:Pattern=`^[a-fA-F0-9]{64}$`
 	Checksum string `json:"checksum,omitempty"`
 }
 

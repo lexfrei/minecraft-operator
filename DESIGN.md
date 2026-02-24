@@ -126,7 +126,7 @@ metadata:
 spec:
   # Plugin source
   source:
-    type: hangar  # Currently only hangar, planned: modrinth, spigot, url
+    type: hangar  # Supported: hangar, url. Planned: modrinth, spigot
     project: "EssentialsX"
 
   # Update strategy for version management
@@ -1209,7 +1209,7 @@ rules:
 - SAT solver integration for optimization
 - Enhanced Web UI (basic web UI exists in `pkg/webui/`)
 - Webhook validation for CRDs (validate selector correctness)
-- URL-based plugin support with manual compatibility override
+- ~~URL-based plugin support with manual compatibility override~~ (implemented)
 
 ### Phase 3
 

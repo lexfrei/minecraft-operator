@@ -18,8 +18,11 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -277,9 +280,9 @@ func (r *PluginReconciler) fetchHangarMetadata(
 }
 
 // fetchURLMetadata fetches plugin metadata by downloading the JAR from a direct URL.
-// The JAR is downloaded once for metadata extraction and SHA256 computation; the computed
-// hash is stored in status.AvailableVersions[].Hash and verified again by the update
-// controller during the actual download to the pod.
+// Uses a two-phase approach: DownloadJAR (HTTP failure = repo unavailable) then
+// ParseJARMetadata (parse failure = fallback with computed hash, repo available).
+// Cached metadata is returned if the URL has not changed since the last fetch.
 func (r *PluginReconciler) fetchURLMetadata(
 	ctx context.Context,
 	plugin *mcv1beta1.Plugin,
@@ -293,41 +296,68 @@ func (r *PluginReconciler) fetchURLMetadata(
 			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
 	}
 
+	// Use cached metadata if URL and checksum haven't changed.
+	if r.urlCacheValid(plugin) {
+		slog.DebugContext(ctx, "Using cached metadata for URL plugin",
+			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
+
+		return convertCachedVersions(plugin.Status.AvailableVersions), nil
+	}
+
+	// Phase 1: Download JAR. HTTP failure means the repo is unreachable.
 	apiStart := time.Now()
 
-	jarMeta, err := plugins.FetchJARMetadata(ctx, plugin.Spec.Source.URL, r.HTTPClient)
+	jarBytes, downloadErr := plugins.DownloadJAR(ctx, plugin.Spec.Source.URL, r.HTTPClient)
 
 	if r.Metrics != nil {
-		r.Metrics.RecordPluginAPICall(plugin.Spec.Source.Type, err, time.Since(apiStart))
+		r.Metrics.RecordPluginAPICall(plugin.Spec.Source.Type, downloadErr, time.Since(apiStart))
 	}
 
-	if err != nil {
-		slog.WarnContext(ctx, "Failed to extract JAR metadata, using spec fields as fallback",
-			"plugin", plugin.Name, "error", err)
-
-		// Fallback: use spec fields. Hash is intentionally left empty because we could
-		// not download the JAR to verify it. The update controller will download fresh
-		// and use the spec checksum (if any) for verification at install time.
-		pv := plugins.BuildURLVersion(plugin.Spec.Source.URL, plugin.Spec.Version, "")
-		pv.ReleaseDate = time.Now()
-
-		return []plugins.PluginVersion{pv}, nil
+	if downloadErr != nil {
+		return nil, errors.Wrap(downloadErr, "failed to download JAR")
 	}
 
-	// Verify checksum if provided.
-	if plugin.Spec.Source.Checksum != "" && jarMeta.SHA256 != plugin.Spec.Source.Checksum {
-		return nil, errors.Newf("checksum mismatch: expected %s, got %s",
-			plugin.Spec.Source.Checksum, jarMeta.SHA256)
+	// Compute SHA256 once for both checksum verification and metadata.
+	sha256Hex := fmt.Sprintf("%x", sha256.Sum256(jarBytes))
+
+	// Verify checksum if provided (normalize to lowercase for comparison).
+	if plugin.Spec.Source.Checksum != "" {
+		specChecksum := strings.ToLower(plugin.Spec.Source.Checksum)
+		if sha256Hex != specChecksum {
+			return nil, errors.Newf("checksum mismatch: expected %s, got %s",
+				specChecksum, sha256Hex)
+		}
 	}
 
-	version := jarMeta.Version
-	if version == "" {
-		version = plugin.Spec.Version
+	// Phase 2: Parse JAR metadata. Parse failure falls back to spec fields
+	// with the computed hash (JAR was downloaded successfully).
+	return r.resolveURLVersion(ctx, plugin, jarBytes, sha256Hex)
+}
+
+// resolveURLVersion parses JAR metadata and builds the version info.
+// Falls back to spec fields if the JAR cannot be parsed as a valid plugin archive.
+func (r *PluginReconciler) resolveURLVersion(
+	ctx context.Context,
+	plugin *mcv1beta1.Plugin,
+	jarBytes []byte,
+	sha256Hex string,
+) ([]plugins.PluginVersion, error) {
+	jarMeta, parseErr := plugins.ParseJARMetadata(jarBytes)
+	if parseErr != nil {
+		slog.WarnContext(ctx, "Failed to parse JAR metadata, using spec fields as fallback",
+			"plugin", plugin.Name, "error", parseErr)
+
+		version := r.resolveVersionWithFallback(ctx, plugin, "")
+
+		return []plugins.PluginVersion{{
+			Version:     version,
+			ReleaseDate: time.Now(),
+			DownloadURL: plugin.Spec.Source.URL,
+			Hash:        sha256Hex,
+		}}, nil
 	}
 
-	if version == "" {
-		version = "0.0.0"
-	}
+	version := r.resolveVersionWithFallback(ctx, plugin, jarMeta.Version)
 
 	var mcVersions []string
 	if jarMeta.APIVersion != "" {
@@ -338,9 +368,53 @@ func (r *PluginReconciler) fetchURLMetadata(
 		Version:           version,
 		ReleaseDate:       time.Now(),
 		DownloadURL:       plugin.Spec.Source.URL,
-		Hash:              jarMeta.SHA256,
+		Hash:              sha256Hex,
 		MinecraftVersions: mcVersions,
 	}}, nil
+}
+
+// resolveVersionWithFallback determines the plugin version using JAR metadata,
+// spec.version, or "0.0.0" placeholder (with warning) as fallbacks.
+func (r *PluginReconciler) resolveVersionWithFallback(
+	ctx context.Context,
+	plugin *mcv1beta1.Plugin,
+	jarVersion string,
+) string {
+	if jarVersion != "" {
+		return jarVersion
+	}
+
+	if plugin.Spec.Version != "" {
+		return plugin.Spec.Version
+	}
+
+	slog.WarnContext(ctx, "No version available for URL plugin, using placeholder",
+		"plugin", plugin.Name, "version", "0.0.0")
+
+	return "0.0.0"
+}
+
+// urlCacheValid checks whether cached URL metadata is still valid.
+// Returns true if the cached DownloadURL matches the current spec URL and
+// (if a checksum is specified) the cached hash matches the spec checksum.
+func (r *PluginReconciler) urlCacheValid(plugin *mcv1beta1.Plugin) bool {
+	if len(plugin.Status.AvailableVersions) == 0 {
+		return false
+	}
+
+	cached := plugin.Status.AvailableVersions[0]
+	if cached.DownloadURL != plugin.Spec.Source.URL {
+		return false
+	}
+
+	if plugin.Spec.Source.Checksum != "" {
+		specChecksum := strings.ToLower(plugin.Spec.Source.Checksum)
+		if cached.Hash != specChecksum {
+			return false
+		}
+	}
+
+	return true
 }
 
 // buildMatchedInstances constructs the list of matched instances.
