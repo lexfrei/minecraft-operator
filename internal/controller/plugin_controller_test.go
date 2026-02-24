@@ -2001,6 +2001,69 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(mockMetrics.PluginAPISources).To(ContainElement("url"),
 				"Metrics should record 'url' as source type")
 		})
+
+		It("should invalidate URL cache when spec.version changes", func() {
+			pluginName := "test-url-version-cache"
+			downloadCount := 0
+			jarBytes := testutil.BuildTestJAR("plugin.yml", "name: VersionCachePlugin\n")
+
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				downloadCount++
+				w.Header().Set("Content-Type", "application/java-archive")
+				_, _ = w.Write(jarBytes)
+			}))
+			defer server.Close()
+
+			urlReconciler := &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: mockPlugin,
+				Solver:       solver.NewSimpleSolver(),
+				HTTPClient:   wrapTestClient(server),
+			}
+
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  testPluginURL,
+				},
+				Version:          "1.0.0",
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"version-cache": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+
+			// First reconciliation: adds finalizer.
+			_, err := urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconciliation: downloads JAR and caches metadata.
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			firstDownloadCount := downloadCount
+
+			// Third reconciliation: should use cache.
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(downloadCount).To(Equal(firstDownloadCount), "Cache should be valid")
+
+			// Change spec.version.
+			var plugin mck8slexlav1beta1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: pluginName, Namespace: namespace,
+			}, &plugin)).To(Succeed())
+			plugin.Spec.Version = "2.0.0"
+			Expect(k8sClient.Update(ctx, &plugin)).To(Succeed())
+
+			// Reconciliation after spec.version change: should re-download.
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(downloadCount).To(BeNumerically(">", firstDownloadCount),
+				"Changing spec.version should invalidate cache and trigger re-download")
+		})
 	})
 
 	Context("statusEqual comparison gaps", func() {

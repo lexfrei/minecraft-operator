@@ -334,7 +334,20 @@ func (r *PluginReconciler) fetchURLMetadata(
 
 	// Phase 2: Parse JAR metadata. Parse failure falls back to spec fields
 	// with the computed hash (JAR was downloaded successfully).
-	return r.resolveURLVersion(ctx, plugin, jarBytes, sha256Hex)
+	versions := r.resolveURLVersion(ctx, plugin, jarBytes, sha256Hex)
+
+	// Preserve ReleaseDate from cache if the JAR content hasn't changed.
+	// This ensures updateDelay works correctly across cache refreshes —
+	// without this, ReleasedAt would reset to "now" on every refetch,
+	// making updateDelay ineffective for URL plugins.
+	if len(plugin.Status.AvailableVersions) > 0 && len(versions) > 0 {
+		cached := plugin.Status.AvailableVersions[0]
+		if strings.EqualFold(cached.Hash, versions[0].Hash) && !cached.ReleasedAt.IsZero() {
+			versions[0].ReleaseDate = cached.ReleasedAt.Time
+		}
+	}
+
+	return versions, nil
 }
 
 // resolveURLVersion parses JAR metadata and builds the version info.
@@ -344,7 +357,7 @@ func (r *PluginReconciler) resolveURLVersion(
 	plugin *mcv1beta1.Plugin,
 	jarBytes []byte,
 	sha256Hex string,
-) ([]plugins.PluginVersion, error) {
+) []plugins.PluginVersion {
 	jarMeta, parseErr := plugins.ParseJARMetadata(jarBytes)
 	if parseErr != nil {
 		slog.WarnContext(ctx, "Failed to parse JAR metadata, using spec fields as fallback",
@@ -356,7 +369,7 @@ func (r *PluginReconciler) resolveURLVersion(
 			Version:     version,
 			DownloadURL: plugin.Spec.Source.URL,
 			Hash:        sha256Hex,
-		}}, nil
+		}}
 	}
 
 	version := r.resolveVersionWithFallback(ctx, plugin, jarMeta.Version)
@@ -371,7 +384,7 @@ func (r *PluginReconciler) resolveURLVersion(
 		DownloadURL:       plugin.Spec.Source.URL,
 		Hash:              sha256Hex,
 		MinecraftVersions: mcVersions,
-	}}, nil
+	}}
 }
 
 // resolveVersionWithFallback determines the plugin version using JAR metadata,
@@ -397,8 +410,8 @@ func (r *PluginReconciler) resolveVersionWithFallback(
 
 // urlCacheValid checks whether cached URL metadata is still valid.
 // Returns true if the cached DownloadURL matches the current spec URL,
-// the cache is not older than urlCacheTTL, and (if a checksum is specified)
-// the cached hash matches the spec checksum.
+// the cache is not older than urlCacheTTL, spec.version hasn't changed,
+// and (if a checksum is specified) the cached hash matches the spec checksum.
 func (r *PluginReconciler) urlCacheValid(plugin *mcv1beta1.Plugin) bool {
 	if len(plugin.Status.AvailableVersions) == 0 {
 		return false
@@ -411,6 +424,13 @@ func (r *PluginReconciler) urlCacheValid(plugin *mcv1beta1.Plugin) bool {
 
 	// Expire cache after TTL. Zero CachedAt is treated as expired.
 	if cached.CachedAt.IsZero() || time.Since(cached.CachedAt.Time) > urlCacheTTL {
+		return false
+	}
+
+	// Invalidate cache when spec.version changes. This is used as a fallback
+	// version when the JAR has no version in plugin.yml. Conservative check:
+	// may cause an extra download if spec.version differs from JAR version.
+	if plugin.Spec.Version != "" && cached.Version != plugin.Spec.Version {
 		return false
 	}
 

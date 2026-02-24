@@ -20,8 +20,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -209,26 +207,6 @@ func ParseJARMetadata(jarBytes []byte) (*JARMetadata, error) {
 	}
 
 	return extractPluginYML(zipReader)
-}
-
-// FetchJARMetadata downloads a JAR from the given URL and extracts plugin metadata.
-// This is a convenience function that calls DownloadJAR and ParseJARMetadata,
-// and also computes the SHA256 hash of the downloaded JAR.
-func FetchJARMetadata(ctx context.Context, jarURL string, httpClient *http.Client) (*JARMetadata, error) {
-	body, err := DownloadJAR(ctx, jarURL, httpClient)
-	if err != nil {
-		return nil, err
-	}
-
-	meta, err := ParseJARMetadata(body)
-	if err != nil {
-		return nil, err
-	}
-
-	hash := sha256.Sum256(body)
-	meta.SHA256 = fmt.Sprintf("%x", hash)
-
-	return meta, nil
 }
 
 // extractPluginYML finds and parses plugin.yml or paper-plugin.yml from a ZIP archive.

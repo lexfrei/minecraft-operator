@@ -574,6 +574,14 @@ func (r *UpdateReconciler) applyPluginUpdates(
 			continue
 		}
 
+		// Re-validate URL before download as defense-in-depth against SSRF.
+		if err := plugins.ValidateDownloadURL(downloadURL); err != nil {
+			downloadErrors = append(downloadErrors,
+				errors.Wrapf(err, "plugin %s download URL validation failed", pluginName))
+
+			continue
+		}
+
 		// Download plugin
 		if err := r.downloadPluginToServer(ctx, server, pluginName, downloadURL, hash); err != nil {
 			downloadErrors = append(downloadErrors,

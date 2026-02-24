@@ -2,8 +2,6 @@ package plugins_test
 
 import (
 	"context"
-	"crypto/sha256"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -51,6 +49,7 @@ func TestValidateDownloadURL_BlockedHosts(t *testing.T) {
 	}{
 		{"loopback IP", "https://127.0.0.1/plugin.jar"},
 		{"private IP 10.x", "https://10.0.0.1/plugin.jar"},
+		{"private IP 172.16.x", "https://172.16.0.1/plugin.jar"},
 		{"private IP 192.168.x", "https://192.168.1.1/plugin.jar"},
 		{"link-local IP", "https://169.254.169.254/latest/meta-data/"},
 		{"localhost hostname", "https://localhost/plugin.jar"},
@@ -207,117 +206,31 @@ func TestParseJARMetadata(t *testing.T) {
 	})
 }
 
-func TestFetchJARMetadata(t *testing.T) {
-	t.Run("extracts metadata from plugin.yml", func(t *testing.T) {
-		jarBytes := testutil.BuildTestJAR("plugin.yml", `
-name: TestPlugin
-version: "2.5.0"
-api-version: "1.21"
-main: com.example.TestPlugin
-`)
-		server := serveJAR(t, jarBytes)
-		meta, err := plugins.FetchJARMetadata(context.Background(), server.URL+"/plugin.jar", server.Client())
-		require.NoError(t, err)
-
-		assert.Equal(t, "TestPlugin", meta.Name)
-		assert.Equal(t, "2.5.0", meta.Version)
-		assert.Equal(t, "1.21", meta.APIVersion)
-		assert.NotEmpty(t, meta.SHA256, "SHA256 should be computed")
-
-		expectedHash := fmt.Sprintf("%x", sha256.Sum256(jarBytes))
-		assert.Equal(t, expectedHash, meta.SHA256)
-	})
-
-	t.Run("extracts metadata from paper-plugin.yml", func(t *testing.T) {
-		jarBytes := testutil.BuildTestJAR("paper-plugin.yml", `
-name: PaperTestPlugin
-version: "3.0.0"
-api-version: "1.20"
-main: com.example.PaperTestPlugin
-`)
-		server := serveJAR(t, jarBytes)
-		meta, err := plugins.FetchJARMetadata(context.Background(), server.URL+"/plugin.jar", server.Client())
-		require.NoError(t, err)
-
-		assert.Equal(t, "PaperTestPlugin", meta.Name)
-		assert.Equal(t, "3.0.0", meta.Version)
-		assert.Equal(t, "1.20", meta.APIVersion)
-	})
-
-	t.Run("handles missing optional fields", func(t *testing.T) {
-		jarBytes := testutil.BuildTestJAR("plugin.yml", `
-name: MinimalPlugin
-main: com.example.MinimalPlugin
-`)
-		server := serveJAR(t, jarBytes)
-		meta, err := plugins.FetchJARMetadata(context.Background(), server.URL+"/plugin.jar", server.Client())
-		require.NoError(t, err)
-
-		assert.Equal(t, "MinimalPlugin", meta.Name)
-		assert.Empty(t, meta.Version)
-		assert.Empty(t, meta.APIVersion)
-		assert.NotEmpty(t, meta.SHA256)
-	})
-}
-
-func TestFetchJARMetadata_Preference(t *testing.T) {
+func TestParseJARMetadata_PaperPreference(t *testing.T) {
 	t.Run("prefers paper-plugin.yml over plugin.yml when both exist", func(t *testing.T) {
 		jarBytes := testutil.BuildTestJARMulti(map[string]string{
 			"plugin.yml":       "name: BukkitPlugin\nversion: \"1.0.0\"\napi-version: \"1.20\"\n",
 			"paper-plugin.yml": "name: PaperPlugin\nversion: \"2.0.0\"\napi-version: \"1.21\"\n",
 		})
-		server := serveJAR(t, jarBytes)
-		meta, err := plugins.FetchJARMetadata(context.Background(), server.URL+"/plugin.jar", server.Client())
+
+		meta, err := plugins.ParseJARMetadata(jarBytes)
 		require.NoError(t, err)
 
 		assert.Equal(t, "PaperPlugin", meta.Name, "Should prefer paper-plugin.yml")
 		assert.Equal(t, "2.0.0", meta.Version, "Should use version from paper-plugin.yml")
 		assert.Equal(t, "1.21", meta.APIVersion, "Should use api-version from paper-plugin.yml")
 	})
-}
 
-func TestFetchJARMetadata_Errors(t *testing.T) {
-	t.Run("returns error when no plugin.yml found", func(t *testing.T) {
-		jarBytes := testutil.BuildTestJAR("README.txt", "not a plugin")
-		server := serveJAR(t, jarBytes)
+	t.Run("extracts metadata from paper-plugin.yml alone", func(t *testing.T) {
+		jarBytes := testutil.BuildTestJAR("paper-plugin.yml",
+			"name: PaperTestPlugin\nversion: \"3.0.0\"\napi-version: \"1.20\"\n")
 
-		_, err := plugins.FetchJARMetadata(context.Background(), server.URL+"/plugin.jar", server.Client())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "plugin.yml")
-	})
+		meta, err := plugins.ParseJARMetadata(jarBytes)
+		require.NoError(t, err)
 
-	t.Run("returns error on HTTP failure", func(t *testing.T) {
-		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusNotFound)
-		}))
-		defer server.Close()
-
-		_, err := plugins.FetchJARMetadata(context.Background(), server.URL+"/missing.jar", server.Client())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "404")
-	})
-
-	t.Run("returns error on invalid ZIP", func(t *testing.T) {
-		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("not a zip file"))
-		}))
-		defer server.Close()
-
-		_, err := plugins.FetchJARMetadata(context.Background(), server.URL+"/broken.jar", server.Client())
-		require.Error(t, err)
-	})
-
-	t.Run("respects context cancellation", func(t *testing.T) {
-		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("data"))
-		}))
-		defer server.Close()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		_, err := plugins.FetchJARMetadata(ctx, server.URL+"/plugin.jar", server.Client())
-		require.Error(t, err)
+		assert.Equal(t, "PaperTestPlugin", meta.Name)
+		assert.Equal(t, "3.0.0", meta.Version)
+		assert.Equal(t, "1.20", meta.APIVersion)
 	})
 }
 
