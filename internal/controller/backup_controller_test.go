@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -1552,6 +1553,115 @@ func TestBackupReconciler_ValidCronPersistsBackupCronValidTrue(t *testing.T) {
 	assert.Equal(t, metav1.ConditionTrue, cond.Status,
 		"BackupCronValid should be True for valid cron")
 	assert.Equal(t, reasonBackupCronValid, cond.Reason)
+}
+
+func TestBackupReconciler_ServerDeletionCleansCronTrigger(t *testing.T) {
+	scheme := newBackupTestScheme()
+
+	// No server in the fake client — simulates deleted server
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		Build()
+
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+	}
+	r.initMaps()
+
+	serverKey := testServerKey
+
+	// Simulate an existing cron entry and a pending trigger
+	r.cronEntriesMu.Lock()
+	r.cronEntries[serverKey] = cronEntryInfo{ID: 1, Spec: "0 */6 * * *"}
+	r.cronEntriesMu.Unlock()
+
+	r.cronTriggerMu.Lock()
+	r.cronTriggerTimes[serverKey] = time.Now()
+	r.cronTriggerMu.Unlock()
+
+	// Reconcile — server not found
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// Both cron entry and trigger time should be cleaned up
+	r.cronEntriesMu.RLock()
+	_, entryExists := r.cronEntries[serverKey]
+	r.cronEntriesMu.RUnlock()
+	assert.False(t, entryExists, "cron entry should be removed on server deletion")
+
+	r.cronTriggerMu.RLock()
+	_, triggerExists := r.cronTriggerTimes[serverKey]
+	r.cronTriggerMu.RUnlock()
+	assert.False(t, triggerExists, "cron trigger should be consumed on server deletion")
+}
+
+func TestBackupReconciler_MaxCountDefaultWhenZero(t *testing.T) {
+	scheme := newBackupTestScheme()
+	now := time.Now()
+
+	// BackupSpec without Retention — MaxCount defaults to 0 (Go zero value)
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled: true,
+	})
+	server.Annotations = map[string]string{
+		AnnotationBackupNow: fmt.Sprintf("%d", now.Unix()),
+	}
+
+	// Create 12 existing snapshots (more than the default maxCount of 10)
+	objs := make([]client.Object, 0, 16) //nolint:mnd // 4 base objects + 12 snapshots
+	objs = append(objs, server, newServerPod(), newRCONSecret(), newServerPVC())
+
+	for i := range 12 {
+		snap := &volumesnapshotv1.VolumeSnapshot{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              fmt.Sprintf("my-server-backup-old-%d", i),
+				Namespace:         "minecraft",
+				CreationTimestamp: metav1.NewTime(now.Add(time.Duration(-12+i) * time.Hour)),
+				Labels: map[string]string{
+					backup.LabelServerName: "my-server",
+					backup.LabelManagedBy:  "minecraft-operator",
+				},
+			},
+		}
+		objs = append(objs, snap)
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objs...).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	r := &BackupReconciler{
+		Client: fakeClient, Scheme: scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+	})
+	require.NoError(t, err)
+
+	// With defaultMaxBackupCount=10, after adding 1 new snapshot (total 13),
+	// the oldest 3 should be deleted, leaving 10
+	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
+		context.Background(), "minecraft", "my-server")
+	require.NoError(t, err)
+	assert.Equal(t, defaultMaxBackupCount, len(snapshots),
+		"should retain exactly defaultMaxBackupCount snapshots when MaxCount is zero/unset")
 }
 
 func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {

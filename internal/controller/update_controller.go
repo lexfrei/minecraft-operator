@@ -733,6 +733,13 @@ func (r *UpdateReconciler) performPluginOnlyUpdate(
 
 	// Step 0: Pre-update backup (if enabled). Abort update on failure to
 	// avoid data loss — the user explicitly requested backup protection.
+	//
+	// Note: the backup's PostSnapshotHook sends "save-on" to re-enable auto-save.
+	// There is a brief window between "save-on" and the graceful shutdown's "save-all"
+	// where new data may be written. The backup thus captures the state at snapshot time,
+	// not the exact pre-update state. This trade-off is acceptable because (a) the window
+	// is typically milliseconds, and (b) keeping auto-save disabled until shutdown would
+	// risk data loss if the update process crashes.
 	if err := r.backupBeforeUpdate(ctx, server); err != nil {
 		return errors.Wrap(err, "pre-update backup failed, aborting update")
 	}
@@ -830,6 +837,7 @@ func (r *UpdateReconciler) performCombinedUpdate(
 
 	// Step 0: Pre-update backup (if enabled). Abort update on failure to
 	// avoid data loss — the user explicitly requested backup protection.
+	// See performPluginOnlyUpdate for the save-on/save-all window trade-off.
 	if err := r.backupBeforeUpdate(ctx, server); err != nil {
 		return errors.Wrap(err, "pre-update backup failed, aborting update")
 	}

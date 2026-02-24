@@ -112,6 +112,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		if apierrors.IsNotFound(err) {
 			skipMetrics = true
 			r.removeBackupCronJob(req.String())
+			r.consumeCronTrigger(req.String())
 			slog.InfoContext(ctx, "PaperMCServer not found, removed backup cron if existed")
 
 			return ctrl.Result{}, nil
