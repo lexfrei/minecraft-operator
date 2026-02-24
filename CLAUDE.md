@@ -48,9 +48,9 @@ Four main controllers work together:
 
 **Spec:**
 
-- `source`: Plugin repository (`hangar` or `url`; `modrinth`/`spigot` planned but not implemented)
-- `updateStrategy`: `latest`, `auto`, `pin`, or `build-pin` (defines version management behavior)
-- `version`: Specific version when using `pin` or `build-pin` strategy
+- `source`: Plugin repository (`hangar` or `url`; `modrinth`/`spigot` planned but not implemented). For `url` type, includes `url` (HTTPS download URL) and optional `checksum` (SHA256 hex string for integrity verification)
+- `updateStrategy`: `latest`, `auto`, `pin`, or `build-pin` (defines version management behavior). For URL-source plugins, all strategies behave similarly since only one version exists (the JAR at the URL)
+- `version`: Specific version when using `pin` or `build-pin` strategy (also used as fallback version for URL-source plugins when JAR has no plugin.yml version)
 - `updateDelay`: Grace period before auto-applying new releases (e.g., `168h` for 7 days)
 - `instanceSelector`: Label selector to match PaperMCServer instances
 - `compatibilityOverride`: Manual compatibility specification for edge cases

@@ -1791,6 +1791,13 @@ var _ = Describe("Plugin Controller", func() {
 			// User fixing the checksum triggers re-reconciliation via the watch.
 			Expect(result.RequeueAfter).To(BeZero(),
 				"Checksum mismatch should not requeue (permanent user error)")
+
+			// VersionResolved must be set to False so users and monitoring
+			// can see that version resolution is broken.
+			vrCond := findCondition(plugin.Status.Conditions, conditionTypeVersionResolved)
+			Expect(vrCond).NotTo(BeNil(), "VersionResolved condition should be set on checksum mismatch")
+			Expect(vrCond.Status).To(Equal(metav1.ConditionFalse),
+				"VersionResolved should be False when checksum verification fails")
 		})
 
 		It("should set RepositoryAvailable=False for URL plugin with HTTP URL", func() {

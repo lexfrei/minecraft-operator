@@ -58,6 +58,9 @@ const (
 var errChecksumMismatch = errors.New("checksum mismatch")
 
 // PluginReconciler reconciles a Plugin object.
+// Note: URL-source plugins download entire JARs (up to MaxJARSize=100MB) into memory
+// during metadata extraction. The default MaxConcurrentReconciles=1 keeps this safe;
+// increasing concurrency will multiply peak memory usage accordingly.
 type PluginReconciler struct {
 	client.Client
 	Scheme       *runtime.Scheme
@@ -197,6 +200,8 @@ func (r *PluginReconciler) syncPluginMetadata(
 			plugin.Status.RepositoryStatus = repositoryStatusUnavailable
 			r.setCondition(plugin, conditionTypeRepositoryAvailable, metav1.ConditionFalse,
 				reasonChecksumMismatch, repoErr.Error())
+			r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionFalse,
+				reasonChecksumMismatch, "Cannot resolve version: checksum mismatch")
 
 			return nil, ctrl.Result{}, nil
 		}
@@ -314,17 +319,18 @@ func (r *PluginReconciler) fetchURLMetadata(
 		return nil, false, errors.Wrap(err, "invalid URL")
 	}
 
-	if plugin.Spec.Source.Checksum == "" {
-		slog.WarnContext(ctx, "URL plugin has no checksum, downloads will not be verified",
-			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
-	}
-
 	// Use cached metadata if URL and checksum haven't changed.
 	if r.urlCacheValid(plugin) {
 		slog.DebugContext(ctx, "Using cached metadata for URL plugin",
 			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
 
 		return convertCachedVersions(plugin.Status.AvailableVersions), true, nil
+	}
+
+	// Warn about missing checksum only when actually downloading (not on cache hits).
+	if plugin.Spec.Source.Checksum == "" {
+		slog.WarnContext(ctx, "URL plugin has no checksum, downloads will not be verified",
+			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
 	}
 
 	// Phase 1: Download JAR. HTTP failure means the repo is unreachable.
