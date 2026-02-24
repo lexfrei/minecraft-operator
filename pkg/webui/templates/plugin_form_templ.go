@@ -14,6 +14,8 @@ type PluginFormData struct {
 	Namespace   string
 	SourceType  string
 	Project     string
+	URL         string
+	Checksum    string
 	Strategy    string
 	Version     string
 	UpdateDelay string
@@ -81,7 +83,7 @@ func PluginForm(data PluginFormData) templ.Component {
 				var templ_7745c5c3_Var3 string
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(data.Error)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 31, Col: 17}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 33, Col: 17}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 				if templ_7745c5c3_Err != nil {
@@ -99,7 +101,7 @@ func PluginForm(data PluginFormData) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(data.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 42, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 44, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -138,7 +140,7 @@ func PluginForm(data PluginFormData) templ.Component {
 					var templ_7745c5c3_Var5 string
 					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(ns)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 65, Col: 27}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 67, Col: 27}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 					if templ_7745c5c3_Err != nil {
@@ -151,7 +153,7 @@ func PluginForm(data PluginFormData) templ.Component {
 					var templ_7745c5c3_Var6 string
 					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(ns)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 65, Col: 43}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 67, Col: 43}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 					if templ_7745c5c3_Err != nil {
@@ -169,7 +171,7 @@ func PluginForm(data PluginFormData) templ.Component {
 					var templ_7745c5c3_Var7 string
 					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(ns)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 67, Col: 27}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 69, Col: 27}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 					if templ_7745c5c3_Err != nil {
@@ -182,7 +184,7 @@ func PluginForm(data PluginFormData) templ.Component {
 					var templ_7745c5c3_Var8 string
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(ns)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 67, Col: 34}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 69, Col: 34}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 					if templ_7745c5c3_Err != nil {
@@ -206,7 +208,7 @@ func PluginForm(data PluginFormData) templ.Component {
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(data.Namespace)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 72, Col: 67}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 74, Col: 67}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -217,7 +219,7 @@ func PluginForm(data PluginFormData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"sourceType\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Source Type *</label> <select id=\"sourceType\" name=\"sourceType\" required style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\"><option value=\"hangar\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"sourceType\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Source Type *</label> <select id=\"sourceType\" name=\"sourceType\" required style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" onchange=\"\n\t\t\t\t\t\t\t\tdocument.getElementById('project-field').style.display = this.value === 'hangar' ? 'block' : 'none';\n\t\t\t\t\t\t\t\tdocument.getElementById('url-fields').style.display = this.value === 'url' ? 'block' : 'none';\n\t\t\t\t\t\t\t\tdocument.getElementById('project').required = this.value === 'hangar';\n\t\t\t\t\t\t\t\tdocument.getElementById('url').required = this.value === 'url';\n\t\t\t\t\t\t\t\"><option value=\"hangar\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -237,94 +239,166 @@ func PluginForm(data PluginFormData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, ">Direct URL</option></select></div><div><label for=\"project\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Project *</label> <input type=\"text\" id=\"project\" name=\"project\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, ">Direct URL</option></select></div><div id=\"project-field\" style=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var10 string
-			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(data.Project)
+			templ_7745c5c3_Var10, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(sourceFieldStyle(data.SourceType, "hangar"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 95, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 97, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\" required style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"EssentialsX\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Project name or slug from the plugin repository</p></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateStrategy\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Strategy *</label> <select id=\"updateStrategy\" name=\"updateStrategy\" required style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" onchange=\"document.getElementById('version-field').style.display = this.value === 'pinned' ? 'block' : 'none';\"><option value=\"latest\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if data.Strategy == "latest" || data.Strategy == "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, " selected")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, ">Latest (auto-update)</option> <option value=\"pinned\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if data.Strategy == "pinned" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " selected")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, ">Pinned (specific version)</option></select></div><div id=\"version-field\" style=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\"><label for=\"project\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Project *</label> <input type=\"text\" id=\"project\" name=\"project\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var11 string
-			templ_7745c5c3_Var11, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(versionFieldStyle(data.Strategy))
+			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(data.Project)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 117, Col: 69}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 103, Col: 27}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\"><label for=\"version\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Version</label> <input type=\"text\" id=\"version\" name=\"version\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.SourceType == "hangar" || data.SourceType == "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, " required")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"EssentialsX/Essentials\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Project slug from Hangar (e.g., EssentialsX/Essentials)</p></div></div><div id=\"url-fields\" style=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var12 string
-			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(data.Version)
+			templ_7745c5c3_Var12, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(sourceFieldStyle(data.SourceType, "url"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 123, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 111, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"1.0.0\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Required when using pinned strategy</p></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateDelay\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Delay</label> <input type=\"text\" id=\"updateDelay\" name=\"updateDelay\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\"><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"url\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Download URL *</label> <input type=\"url\" id=\"url\" name=\"url\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var13 string
-			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(data.UpdateDelay)
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(data.URL)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `plugin_form.templ`, Line: 137, Col: 31}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 119, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"168h\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Grace period before applying new releases (e.g., 168h for 7 days)</p></div></div><div style=\"display: flex; gap: 15px; margin-top: 10px;\"><button type=\"submit\" style=\"background-color: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 4px; font-size: 14px; cursor: pointer; font-weight: 600;\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.SourceType == "url" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, " required")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, " style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"https://github.com/example/plugin/releases/download/v1.0.0/plugin.jar\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Direct HTTPS URL to the plugin JAR file</p></div><div><label for=\"checksum\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">SHA256 Checksum</label> <input type=\"text\" id=\"checksum\" name=\"checksum\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var14 string
+			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(data.Checksum)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 132, Col: 29}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\" pattern=\"[a-fA-F0-9]{64}\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px; font-family: monospace;\" placeholder=\"aabbccdd00112233...\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Optional SHA256 hash for integrity verification (64 hex chars)</p></div></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateStrategy\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Strategy *</label> <select id=\"updateStrategy\" name=\"updateStrategy\" required style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" onchange=\"document.getElementById('version-field').style.display = this.value === 'pinned' ? 'block' : 'none';\"><option value=\"latest\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.Strategy == "latest" || data.Strategy == "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, ">Latest (auto-update)</option> <option value=\"pinned\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.Strategy == "pinned" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, " selected")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, ">Pinned (specific version)</option></select></div><div id=\"version-field\" style=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var15 string
+			templ_7745c5c3_Var15, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(versionFieldStyle(data.Strategy))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 155, Col: 69}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "\"><label for=\"version\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Version</label> <input type=\"text\" id=\"version\" name=\"version\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var16 string
+			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(data.Version)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 161, Col: 27}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"1.0.0\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Required when using pinned strategy</p></div></div><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;\"><div><label for=\"updateDelay\" style=\"display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;\">Update Delay</label> <input type=\"text\" id=\"updateDelay\" name=\"updateDelay\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var17 string
+			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(data.UpdateDelay)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/webui/templates/plugin_form.templ`, Line: 175, Col: 31}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "\" style=\"width: 100%; padding: 10px; background-color: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 14px;\" placeholder=\"168h\"><p style=\"color: var(--text-muted); font-size: 12px; margin-top: 4px;\">Grace period before applying new releases (e.g., 168h for 7 days)</p></div></div><div style=\"display: flex; gap: 15px; margin-top: 10px;\"><button type=\"submit\" style=\"background-color: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 4px; font-size: 14px; cursor: pointer; font-weight: 600;\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if data.IsEdit {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "Update Plugin")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "Update Plugin")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "Create Plugin")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "Create Plugin")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</button> <a href=\"/ui/plugins\" style=\"background-color: var(--bg-tertiary); color: var(--text-primary); padding: 12px 24px; border-radius: 4px; font-size: 14px; text-decoration: none; font-weight: 600;\">Cancel</a></div></form></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "</button> <a href=\"/ui/plugins\" style=\"background-color: var(--bg-tertiary); color: var(--text-primary); padding: 12px 24px; border-radius: 4px; font-size: 14px; text-decoration: none; font-weight: 600;\">Cancel</a></div></form></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -347,6 +421,13 @@ func formTitle(isEdit bool) string {
 
 func versionFieldStyle(strategy string) string {
 	if strategy == "pinned" {
+		return "display: block;"
+	}
+	return "display: none;"
+}
+
+func sourceFieldStyle(currentType, targetType string) string {
+	if currentType == targetType || (currentType == "" && targetType == "hangar") {
 		return "display: block;"
 	}
 	return "display: none;"

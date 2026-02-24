@@ -61,9 +61,10 @@ type MatchedInstanceData struct {
 
 // PluginSourceData contains plugin source information.
 type PluginSourceData struct {
-	Type    string
-	Project string
-	URL     string
+	Type     string
+	Project  string
+	URL      string
+	Checksum string
 }
 
 // PluginCreateData contains data for creating a plugin.
@@ -137,9 +138,10 @@ func (s *PluginService) CreatePlugin(ctx context.Context, data PluginCreateData)
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    data.Source.Type,
-				Project: data.Source.Project,
-				URL:     data.Source.URL,
+				Type:     data.Source.Type,
+				Project:  data.Source.Project,
+				URL:      data.Source.URL,
+				Checksum: data.Source.Checksum,
 			},
 			UpdateStrategy:   data.UpdateStrategy,
 			Version:          data.Version,

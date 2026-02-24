@@ -362,10 +362,24 @@ func (s *Server) parsePluginFormToData(r *http.Request) (service.PluginCreateDat
 	namespace := r.FormValue("namespace")
 	sourceType := r.FormValue("sourceType")
 	project := r.FormValue("project")
+	pluginURL := r.FormValue("url")
+	checksum := r.FormValue("checksum")
 	updateStrategy := r.FormValue("updateStrategy")
 
-	if name == "" || namespace == "" || sourceType == "" || project == "" || updateStrategy == "" {
+	if name == "" || namespace == "" || sourceType == "" || updateStrategy == "" {
 		return service.PluginCreateData{}, errors.New("missing required fields")
+	}
+
+	// Source-type-specific validation.
+	switch sourceType {
+	case "hangar":
+		if project == "" {
+			return service.PluginCreateData{}, errors.New("project is required for hangar source type")
+		}
+	case "url":
+		if pluginURL == "" {
+			return service.PluginCreateData{}, errors.New("URL is required for url source type")
+		}
 	}
 
 	if !isValidKubernetesName(name) {
@@ -380,8 +394,10 @@ func (s *Server) parsePluginFormToData(r *http.Request) (service.PluginCreateDat
 		Name:      name,
 		Namespace: namespace,
 		Source: service.PluginSourceData{
-			Type:    sourceType,
-			Project: project,
+			Type:     sourceType,
+			Project:  project,
+			URL:      pluginURL,
+			Checksum: checksum,
 		},
 		UpdateStrategy: updateStrategy,
 	}

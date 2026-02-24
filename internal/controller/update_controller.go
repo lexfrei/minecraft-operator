@@ -464,8 +464,7 @@ func (r *UpdateReconciler) downloadPluginToServer(
 	namespace := server.Namespace
 	container := containerNamePaperMC
 
-	// Download directly to /data/plugins/update/ using curl with separate args
-	// to avoid shell injection via downloadURL
+	// Download directly to /data/plugins/update/ using curl with separate args to avoid shell injection.
 	outputPath := fmt.Sprintf("/data/plugins/update/%s.jar", pluginName)
 
 	slog.InfoContext(ctx, "Downloading plugin to server",
@@ -474,42 +473,62 @@ func (r *UpdateReconciler) downloadPluginToServer(
 		"url", downloadURL)
 
 	_, err := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
-		[]string{"curl", "-fsSL", "--proto", "=https",
+		[]string{"curl",
+			"--fail", "--silent", "--show-error", "--location",
+			"--proto", "=https",
 			"--max-redirs", strconv.Itoa(plugins.MaxRedirects),
 			"--max-filesize", strconv.Itoa(plugins.MaxJARSize),
-			"-A", "minecraft-operator",
-			"-o", outputPath, "--", downloadURL})
+			"--user-agent", "minecraft-operator",
+			"--output", outputPath, "--", downloadURL})
 	if err != nil {
 		return errors.Wrapf(err, "failed to download plugin %s", pluginName)
 	}
 
-	// Verify checksum if provided.
-	// pluginName is a Kubernetes resource name (RFC 1123: [a-z0-9.-]),
-	// safe for shell interpolation in sh -c strings.
 	if expectedHash != "" {
-		checksumCmd := fmt.Sprintf(
-			"sha256sum /data/plugins/update/%s.jar | awk '{print $1}'",
-			pluginName,
-		)
-
-		output, execErr := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
-			[]string{"sh", "-c", checksumCmd})
-		if execErr != nil {
-			return errors.Wrapf(execErr, "failed to verify checksum for plugin %s", pluginName)
+		if verifyErr := r.verifyPluginChecksum(ctx, namespace, podName, container, pluginName, outputPath, expectedHash); verifyErr != nil {
+			return verifyErr
 		}
-
-		actualHash := strings.ToLower(strings.TrimSpace(string(output)))
-		if actualHash != strings.ToLower(expectedHash) {
-			return errors.Newf("checksum mismatch: expected %s, got %s",
-				expectedHash, actualHash)
-		}
-
-		slog.InfoContext(ctx, "Plugin checksum verified", "plugin", pluginName)
 	}
 
 	slog.InfoContext(ctx, "Plugin downloaded successfully",
-		"server", server.Name,
-		"plugin", pluginName)
+		"server", server.Name, "plugin", pluginName)
+
+	return nil
+}
+
+// verifyPluginChecksum computes SHA256 of the downloaded JAR and compares it to the expected hash.
+// On mismatch, the invalid JAR is removed to prevent PaperMC from loading it.
+// pluginName is a Kubernetes resource name (RFC 1123: [a-z0-9.-]),
+// safe for shell interpolation in sh -c strings.
+func (r *UpdateReconciler) verifyPluginChecksum(
+	ctx context.Context,
+	namespace, podName, container, pluginName, outputPath, expectedHash string,
+) error {
+	checksumCmd := fmt.Sprintf(
+		"sha256sum %s | awk '{print $1}'", outputPath,
+	)
+
+	output, execErr := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
+		[]string{"sh", "-c", checksumCmd})
+	if execErr != nil {
+		return errors.Wrapf(execErr, "failed to verify checksum for plugin %s", pluginName)
+	}
+
+	actualHash := strings.ToLower(strings.TrimSpace(string(output)))
+	if actualHash != strings.ToLower(expectedHash) {
+		// Remove the invalid JAR to prevent PaperMC from loading it on restart.
+		_, rmErr := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
+			[]string{"rm", "--force", outputPath})
+		if rmErr != nil {
+			slog.WarnContext(ctx, "Failed to remove JAR after checksum mismatch",
+				"plugin", pluginName, "error", rmErr)
+		}
+
+		return errors.Newf("checksum mismatch: expected %s, got %s",
+			expectedHash, actualHash)
+	}
+
+	slog.InfoContext(ctx, "Plugin checksum verified", "plugin", pluginName)
 
 	return nil
 }

@@ -1110,10 +1110,79 @@ var _ = Describe("UpdateController", func() {
 				"download URL must come after -- to prevent flag injection")
 
 			// Verify User-Agent header is set to identify the operator in server logs.
-			Expect(mockExec.Calls[0].Command).To(ContainElement("-A"),
-				"curl should set User-Agent header with -A flag")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--user-agent"),
+				"curl should set User-Agent header with --user-agent flag")
 			Expect(mockExec.Calls[0].Command).To(ContainElement("minecraft-operator"),
 				"curl User-Agent should identify as minecraft-operator")
+
+			// Verify all curl flags use full names (project standard: no short flags).
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--fail"),
+				"curl should use --fail, not -f")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--silent"),
+				"curl should use --silent, not -s")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--show-error"),
+				"curl should use --show-error, not -S")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--location"),
+				"curl should use --location, not -L")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--output"),
+				"curl should use --output, not -o")
+			for _, arg := range mockExec.Calls[0].Command {
+				Expect(arg).NotTo(Equal("-fsSL"),
+					"curl must not use combined short flags; use full flag names")
+				Expect(arg).NotTo(Equal("-A"),
+					"curl must not use -A; use --user-agent")
+				Expect(arg).NotTo(Equal("-o"),
+					"curl must not use -o; use --output")
+			}
+		})
+
+		It("should remove JAR from server when checksum verification fails", func() {
+			callCount := 0
+			mockExec := &testutil.MockPodExecutorFunc{
+				ExecFunc: func(_ context.Context, _, _, _ string, cmd []string) ([]byte, error) {
+					callCount++
+					switch {
+					case len(cmd) > 0 && cmd[0] == "curl":
+						return []byte(""), nil
+					case len(cmd) > 0 && cmd[0] == "sh":
+						// sha256sum returns a wrong hash
+						return []byte("0000000000000000000000000000000000000000000000000000000000000000\n"), nil
+					case len(cmd) > 0 && cmd[0] == "rm":
+						return []byte(""), nil
+					default:
+						return nil, nil
+					}
+				},
+			}
+			reconciler := &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: mockExec,
+			}
+
+			server := &mcv1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cleanup-server",
+					Namespace: "default",
+				},
+			}
+
+			err := reconciler.downloadPluginToServer(ctx, server, "test-plugin",
+				"https://example.com/plugin.jar", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("checksum mismatch"))
+
+			// Verify cleanup: rm command was called to remove the invalid JAR.
+			var rmCall *testutil.ExecCall
+			for i := range mockExec.Calls {
+				if len(mockExec.Calls[i].Command) > 0 && mockExec.Calls[i].Command[0] == "rm" {
+					rmCall = &mockExec.Calls[i]
+					break
+				}
+			}
+			Expect(rmCall).NotTo(BeNil(), "rm must be called to remove JAR after checksum mismatch")
+			Expect(rmCall.Command).To(ContainElement("/data/plugins/update/test-plugin.jar"),
+				"rm should target the downloaded JAR file")
 		})
 
 		It("should block download for URL plugin with private/internal download URL", func() {
