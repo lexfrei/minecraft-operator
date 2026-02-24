@@ -8729,6 +8729,7 @@ spec:
                 properties:
                   backupCount:
                     description: BackupCount is the current number of retained VolumeSnapshots.
+                    format: int32
                     type: integer
                   lastBackup:
                     description: LastBackup records the most recent backup attempt.

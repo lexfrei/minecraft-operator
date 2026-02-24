@@ -1,11 +1,11 @@
 /*
 Copyright 2026.
 
-Licensed under the BSD 3-Clause License (the "License");
+Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://opensource.org/licenses/BSD-3-Clause
+    http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -186,9 +186,10 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	if !backupNow && server.Annotations != nil {
 		// Clean up stale or invalid backup-now annotation so it doesn't persist indefinitely.
 		// shouldBackupNow already logged the reason for rejection.
+		// Return error to trigger requeue with backoff if cleanup fails.
 		if _, hasAnnotation := server.Annotations[AnnotationBackupNow]; hasAnnotation {
 			if err := r.removeBackupNowAnnotation(ctx, &server); err != nil {
-				slog.ErrorContext(ctx, "Failed to remove stale backup-now annotation", "error", err)
+				return ctrl.Result{}, errors.Wrap(err, "failed to remove stale backup-now annotation")
 			}
 		}
 	}
@@ -461,13 +462,13 @@ func (r *BackupReconciler) performBackup(
 
 	// Count remaining snapshots. On error, preserve existing count to avoid
 	// recording 0 when snapshots actually exist.
-	backupCount := -1
+	var backupCount int32 = -1
 
 	snapshots, listErr := r.Snapshotter.ListSnapshots(ctx, server.Namespace, server.Name)
 	if listErr != nil {
 		slog.ErrorContext(ctx, "Failed to count snapshots after backup", "error", listErr)
 	} else {
-		backupCount = len(snapshots)
+		backupCount = int32(len(snapshots))
 	}
 
 	completedAt := metav1.NewTime(r.now())
@@ -498,7 +499,7 @@ func (r *BackupReconciler) persistBackupStatus(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
 	record *mcv1beta1.BackupRecord,
-	backupCount int,
+	backupCount int32,
 ) {
 	// Re-fetch the server to get the latest ResourceVersion
 	var latestServer mcv1beta1.PaperMCServer
@@ -721,9 +722,11 @@ func (r *BackupReconciler) shouldRunScheduledBackup(
 		return false
 	}
 
-	// Check if we already have a backup after this trigger
+	// Check if we already have a SUCCESSFUL backup after this trigger.
+	// Failed backups do not satisfy a cron trigger — the scheduled backup must still run.
 	if server.Status.Backup != nil && server.Status.Backup.LastBackup != nil {
-		if !server.Status.Backup.LastBackup.StartedAt.Time.Before(triggerTime) {
+		lastBackup := server.Status.Backup.LastBackup
+		if lastBackup.Successful && !lastBackup.StartedAt.Time.Before(triggerTime) {
 			return false
 		}
 	}

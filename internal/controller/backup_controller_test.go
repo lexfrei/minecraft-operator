@@ -1,11 +1,11 @@
 /*
 Copyright 2026.
 
-Licensed under the BSD 3-Clause License (the "License");
+Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://opensource.org/licenses/BSD-3-Clause
+    http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -534,11 +534,21 @@ func TestBackupReconciler_PreSnapshotHookFailureStillSendsSaveOn(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ctrl.Result{}, result)
 
-	// Critical: save-on MUST still be sent to re-enable auto-save
+	// Critical: save-on MUST still be sent to re-enable auto-save, exactly once.
 	sentCmds := mockRCON.GetSentCommands()
 	assert.Contains(t, sentCmds, "save-all", "save-all should be sent before save-off")
 	assert.Contains(t, sentCmds, "save-off", "save-off should be attempted")
 	assert.Contains(t, sentCmds, "save-on", "save-on MUST be sent even when pre-snapshot hook fails")
+
+	saveOnCount := 0
+	for _, cmd := range sentCmds {
+		if cmd == "save-on" {
+			saveOnCount++
+		}
+	}
+
+	assert.Equal(t, 1, saveOnCount,
+		"save-on must be sent exactly once, not twice (defer must not double-fire)")
 }
 
 func TestUpdateReconciler_BackupBeforeUpdate(t *testing.T) {
@@ -1396,7 +1406,7 @@ func TestBackupReconciler_FailurePreservesExistingBackupCount(t *testing.T) {
 	}, &updatedServer))
 
 	require.NotNil(t, updatedServer.Status.Backup)
-	assert.Equal(t, 5, updatedServer.Status.Backup.BackupCount,
+	assert.Equal(t, int32(5), updatedServer.Status.Backup.BackupCount,
 		"existing backup count should be preserved on failure, not reset to 0")
 }
 
@@ -1560,6 +1570,95 @@ func TestBackupReconciler_InvalidAnnotationCleanedUp(t *testing.T) {
 
 	_, exists := updatedServer.Annotations[AnnotationBackupNow]
 	assert.False(t, exists, "invalid backup-now annotation should be removed")
+}
+
+func TestBackupReconciler_ScheduledBackupRunsAfterFailedManualBackup(t *testing.T) {
+	// A failed manual backup must not prevent a pending cron-triggered backup from running.
+	// The cron trigger check must consider Successful status, not just StartedAt.
+	scheme := newBackupTestScheme()
+	now := time.Now()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
+	})
+
+	// Simulate a failed manual backup in status (StartedAt > cron trigger time).
+	server.Status.Backup = &mcv1beta1.BackupStatus{
+		LastBackup: &mcv1beta1.BackupRecord{
+			StartedAt:  metav1.NewTime(now.Add(-30 * time.Second)),
+			Successful: false,
+			Trigger:    "manual",
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newRCONSecret(), newServerPod(), newServerPVC()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     func() time.Time { return now },
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+	r.initOnce.Do(r.initMaps)
+
+	// Simulate a cron trigger at a time BEFORE the failed manual backup.
+	serverKey := "minecraft/my-server"
+	r.cronTriggerMu.Lock()
+	r.cronTriggerTimes[serverKey] = now.Add(-1 * time.Minute)
+	r.cronTriggerMu.Unlock()
+
+	// shouldRunScheduledBackup must return true despite lastBackup.StartedAt > triggerTime,
+	// because the last backup was NOT successful.
+	assert.True(t, r.shouldRunScheduledBackup(serverKey, server),
+		"scheduled backup should run when last backup was failed, even if StartedAt > triggerTime")
+}
+
+func TestUpdateReconciler_BackupBeforeUpdateSkipsWhenCRDMissing(t *testing.T) {
+	// When VolumeSnapshot CRD is not installed, backupBeforeUpdate should skip
+	// the backup gracefully instead of producing a cryptic error.
+	scheme := newBackupTestScheme()
+
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:      true,
+		BeforeUpdate: boolPtr(true),
+		Retention:    mcv1beta1.BackupRetention{MaxCount: 5},
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server).
+		WithStatusSubresource(server).
+		Build()
+
+	backupR := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: &crdMissingSnapshotter{},
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     time.Now,
+	}
+	backupR.initOnce.Do(backupR.initMaps)
+
+	updateR := &UpdateReconciler{
+		Client:           fakeClient,
+		Scheme:           scheme,
+		BackupReconciler: backupR,
+	}
+
+	// Should NOT error — instead skip backup silently.
+	err := updateR.backupBeforeUpdate(context.Background(), server)
+	require.NoError(t, err)
 }
 
 func TestBackupReconciler_ValidCronPersistsBackupCronValidTrue(t *testing.T) {

@@ -127,7 +127,7 @@ type BackupStatus struct {
 	LastBackup *BackupRecord `json:"lastBackup,omitempty"`
 
 	// BackupCount is the current number of retained VolumeSnapshots.
-	BackupCount int `json:"backupCount"`
+	BackupCount int32 `json:"backupCount"`
 }
 
 // BackupRecord records information about a single backup.
