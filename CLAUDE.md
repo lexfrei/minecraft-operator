@@ -48,9 +48,9 @@ Four main controllers work together:
 
 **Spec:**
 
-- `source`: Plugin repository (hangar/modrinth/spigot/url)
-- `updateStrategy`: `latest` or `pinned` (defines version management behavior)
-- `version`: Specific version when using `pinned` strategy
+- `source`: Plugin repository (`hangar` or `url`; `modrinth`/`spigot` planned but not implemented)
+- `updateStrategy`: `latest`, `auto`, `pin`, or `build-pin` (defines version management behavior)
+- `version`: Specific version when using `pin` or `build-pin` strategy
 - `updateDelay`: Grace period before auto-applying new releases (e.g., `168h` for 7 days)
 - `instanceSelector`: Label selector to match PaperMCServer instances
 - `compatibilityOverride`: Manual compatibility specification for edge cases

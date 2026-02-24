@@ -520,6 +520,7 @@ For plugins using `source.type: url`, all update strategies behave similarly bec
 - Version caching uses a 1-hour TTL — the JAR is re-downloaded when the cache expires
 - URL or checksum changes in the spec trigger immediate re-download
 - All strategies are accepted without warning since there is only one "version" (the JAR at the URL)
+- Changing `spec.version` alone does not invalidate the cache — the cached JAR metadata is used until the TTL expires or the URL/checksum changes
 - To update, change the URL or wait for the cache to expire after uploading a new JAR to the same URL
 
 ```yaml

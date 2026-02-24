@@ -63,6 +63,7 @@ func TestValidateDownloadURL_BlockedHosts(t *testing.T) {
 		{"IPv4-mapped link-local", "https://[::ffff:169.254.169.254]/plugin.jar"},
 		{"IPv4-mapped private 10.x", "https://[::ffff:10.0.0.1]/plugin.jar"},
 		{"IPv4-mapped private 192.168.x", "https://[::ffff:192.168.1.1]/plugin.jar"},
+		{"IPv4-mapped private 172.16.x", "https://[::ffff:172.16.0.1]/plugin.jar"},
 		{"unspecified address", "https://0.0.0.0/plugin.jar"},
 		{"loopback IP with port", "https://127.0.0.1:8080/plugin.jar"},
 		{"mDNS .local domain", "https://myhost.local/plugin.jar"},
