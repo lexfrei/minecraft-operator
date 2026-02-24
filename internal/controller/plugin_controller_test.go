@@ -22,6 +22,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"time"
 
@@ -1615,6 +1617,249 @@ var _ = Describe("Plugin Controller", func() {
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)
 			Expect(errors.IsNotFound(err)).To(BeTrue(),
 				"Plugin should be fully deleted when InstalledJARName is empty (no JAR to delete)")
+		})
+
+		It("should extract JAR metadata for URL source plugin", func() {
+			pluginName := "test-url-jar-metadata"
+			jarBytes := testutil.BuildTestJAR("plugin.yml",
+				"name: URLPlugin\nversion: \"1.5.0\"\napi-version: \"1.21\"\n")
+			expectedHash := testutil.ComputeSHA256(jarBytes)
+
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/java-archive")
+				_, _ = w.Write(jarBytes)
+			}))
+			defer server.Close()
+
+			urlReconciler := &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: mockPlugin,
+				Solver:       solver.NewSimpleSolver(),
+				HTTPClient:   server.Client(),
+			}
+
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  server.URL + "/plugin.jar",
+				},
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-jar": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+			_, err := urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1beta1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.RepositoryStatus).To(Equal("available"))
+			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
+			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("1.5.0"))
+			Expect(plugin.Status.AvailableVersions[0].Hash).To(Equal(expectedHash))
+			Expect(plugin.Status.AvailableVersions[0].DownloadURL).To(Equal(server.URL + "/plugin.jar"))
+			Expect(plugin.Status.AvailableVersions[0].MinecraftVersions).To(ContainElement("1.21"))
+
+			cond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		})
+
+		It("should fallback to spec version when JAR metadata extraction fails for URL plugin", func() {
+			pluginName := "test-url-fallback"
+
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
+
+			urlReconciler := &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: mockPlugin,
+				Solver:       solver.NewSimpleSolver(),
+				HTTPClient:   server.Client(),
+			}
+
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  server.URL + "/missing.jar",
+				},
+				Version:          "1.0.0",
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-fallback": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+			_, err := urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1beta1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.RepositoryStatus).To(Equal("available"),
+				"Metadata extraction failure should use fallback, not mark repo unavailable")
+			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
+			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("1.0.0"),
+				"Should fallback to spec.version")
+		})
+
+		It("should set RepositoryAvailable=False for URL plugin with checksum mismatch", func() {
+			pluginName := "test-url-checksum-mismatch"
+			jarBytes := testutil.BuildTestJAR("plugin.yml", "name: ChecksumPlugin\nversion: \"1.0.0\"\n")
+
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/java-archive")
+				_, _ = w.Write(jarBytes)
+			}))
+			defer server.Close()
+
+			urlReconciler := &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: mockPlugin,
+				Solver:       solver.NewSimpleSolver(),
+				HTTPClient:   server.Client(),
+			}
+
+			wrongChecksum := "0000000000000000000000000000000000000000000000000000000000000000"
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type:     "url",
+					URL:      server.URL + "/plugin.jar",
+					Checksum: wrongChecksum,
+				},
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-checksum": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+			_, err := urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1beta1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.RepositoryStatus).To(Equal("unavailable"))
+			cond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Message).To(ContainSubstring("checksum"),
+				"Error message should indicate checksum mismatch")
+		})
+
+		It("should set RepositoryAvailable=False for URL plugin with HTTP URL", func() {
+			pluginName := "test-url-http-rejected"
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  "http://example.com/plugin.jar",
+				},
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-http": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1beta1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.RepositoryStatus).To(Equal("unavailable"))
+			cond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Message).To(ContainSubstring("HTTPS"),
+				"Error message should indicate HTTPS is required")
+		})
+
+		It("should set RepositoryAvailable=False for URL plugin with empty URL", func() {
+			pluginName := "test-url-empty"
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  "",
+				},
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-empty": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1beta1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.RepositoryStatus).To(Equal("unavailable"))
+			cond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Message).To(ContainSubstring("required"),
+				"Error message should indicate URL is required")
+		})
+
+		It("should warn but succeed for URL plugin without checksum", func() {
+			pluginName := "test-url-no-checksum"
+			jarBytes := testutil.BuildTestJAR("plugin.yml",
+				"name: NoChecksumPlugin\nversion: \"2.0.0\"\n")
+
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/java-archive")
+				_, _ = w.Write(jarBytes)
+			}))
+			defer server.Close()
+
+			urlReconciler := &PluginReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				PluginClient: mockPlugin,
+				Solver:       solver.NewSimpleSolver(),
+				HTTPClient:   server.Client(),
+			}
+
+			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  server.URL + "/plugin.jar",
+				},
+				UpdateStrategy:   "latest",
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-no-checksum": "true"}},
+			})
+			defer deletePlugin(pluginName)
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
+			_, err := urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = urlReconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var plugin mck8slexlav1beta1.Plugin
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
+
+			Expect(plugin.Status.RepositoryStatus).To(Equal("available"),
+				"URL plugin without checksum should still succeed with a warning")
+			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
+			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("2.0.0"))
 		})
 	})
 

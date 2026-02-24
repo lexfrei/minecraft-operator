@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -61,6 +62,7 @@ type PluginReconciler struct {
 	PluginClient plugins.PluginClient
 	Solver       solver.Solver
 	Metrics      metrics.Recorder
+	HTTPClient   *http.Client
 }
 
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=plugins,verbs=get;list;watch;create;update;patch;delete
@@ -244,10 +246,21 @@ func (r *PluginReconciler) fetchPluginMetadata(
 	ctx context.Context,
 	plugin *mcv1beta1.Plugin,
 ) ([]plugins.PluginVersion, error) {
-	if plugin.Spec.Source.Type != "hangar" {
+	switch plugin.Spec.Source.Type {
+	case "url":
+		return r.fetchURLMetadata(ctx, plugin)
+	case "hangar":
+		return r.fetchHangarMetadata(ctx, plugin)
+	default:
 		return nil, errors.Newf("unsupported source type: %s", plugin.Spec.Source.Type)
 	}
+}
 
+// fetchHangarMetadata fetches plugin metadata from the Hangar repository.
+func (r *PluginReconciler) fetchHangarMetadata(
+	ctx context.Context,
+	plugin *mcv1beta1.Plugin,
+) ([]plugins.PluginVersion, error) {
 	apiStart := time.Now()
 
 	versions, err := r.PluginClient.GetVersions(ctx, plugin.Spec.Source.Project)
@@ -261,6 +274,62 @@ func (r *PluginReconciler) fetchPluginMetadata(
 	}
 
 	return versions, nil
+}
+
+// fetchURLMetadata fetches plugin metadata by downloading the JAR from a direct URL.
+func (r *PluginReconciler) fetchURLMetadata(
+	ctx context.Context,
+	plugin *mcv1beta1.Plugin,
+) ([]plugins.PluginVersion, error) {
+	if err := plugins.ValidateDownloadURL(plugin.Spec.Source.URL); err != nil {
+		return nil, errors.Wrap(err, "invalid URL")
+	}
+
+	if plugin.Spec.Source.Checksum == "" {
+		slog.WarnContext(ctx, "URL plugin has no checksum, downloads will not be verified",
+			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
+	}
+
+	jarMeta, err := plugins.FetchJARMetadata(ctx, plugin.Spec.Source.URL, r.HTTPClient)
+	if err != nil {
+		slog.WarnContext(ctx, "Failed to extract JAR metadata, using spec fields as fallback",
+			"plugin", plugin.Name, "error", err)
+
+		pv := plugins.BuildURLVersion(
+			plugin.Spec.Source.URL, plugin.Spec.Version, plugin.Spec.Source.Checksum,
+		)
+		pv.ReleaseDate = time.Now()
+
+		return []plugins.PluginVersion{pv}, nil
+	}
+
+	// Verify checksum if provided.
+	if plugin.Spec.Source.Checksum != "" && jarMeta.SHA256 != plugin.Spec.Source.Checksum {
+		return nil, errors.Newf("checksum mismatch: expected %s, got %s",
+			plugin.Spec.Source.Checksum, jarMeta.SHA256)
+	}
+
+	version := jarMeta.Version
+	if version == "" {
+		version = plugin.Spec.Version
+	}
+
+	if version == "" {
+		version = "0.0.0"
+	}
+
+	var mcVersions []string
+	if jarMeta.APIVersion != "" {
+		mcVersions = []string{jarMeta.APIVersion}
+	}
+
+	return []plugins.PluginVersion{{
+		Version:           version,
+		ReleaseDate:       time.Now(),
+		DownloadURL:       plugin.Spec.Source.URL,
+		Hash:              jarMeta.SHA256,
+		MinecraftVersions: mcVersions,
+	}}, nil
 }
 
 // buildMatchedInstances constructs the list of matched instances.
@@ -300,9 +369,14 @@ func convertToPluginVersionInfo(versions []plugins.PluginVersion) []mcv1beta1.Pl
 	now := metav1.Now()
 
 	for i, v := range versions {
+		mcVersions := v.MinecraftVersions
+		if mcVersions == nil {
+			mcVersions = []string{}
+		}
+
 		infos[i] = mcv1beta1.PluginVersionInfo{
 			Version:           v.Version,
-			MinecraftVersions: v.MinecraftVersions,
+			MinecraftVersions: mcVersions,
 			DownloadURL:       v.DownloadURL,
 			Hash:              v.Hash,
 			CachedAt:          now,
