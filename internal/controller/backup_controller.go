@@ -118,6 +118,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			skipMetrics = true
 			r.removeBackupCronJob(req.String())
 			r.consumeCronTrigger(req.String())
+			r.backupMu.Delete(req.String())
 			slog.InfoContext(ctx, "PaperMCServer not found, removed backup cron if existed")
 
 			return ctrl.Result{}, nil
@@ -129,6 +130,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// Check if backup is enabled
 	if server.Spec.Backup == nil || !server.Spec.Backup.Enabled {
 		r.removeBackupCronJob(req.String())
+		r.backupMu.Delete(req.String())
 
 		return ctrl.Result{}, nil
 	}

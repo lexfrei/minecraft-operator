@@ -1665,6 +1665,56 @@ func TestBackupReconciler_MaxCountDefaultWhenZero(t *testing.T) {
 		"should retain exactly defaultMaxBackupCount snapshots when MaxCount is zero/unset")
 }
 
+func TestBackupReconciler_ServerDeletionCleansBackupMu(t *testing.T) {
+	// Verify that backupMu sync.Map entries are cleaned up when server is deleted,
+	// preventing unbounded memory growth over the operator's lifetime.
+	scheme := newBackupTestScheme()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Retention: mcv1beta1.BackupRetention{MaxCount: 5},
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newRCONSecret(), newServerPod(), newServerPVC()).
+		WithStatusSubresource(server).
+		Build()
+
+	mockRCON := rcon.NewMockClient()
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: backup.NewSnapshotter(fakeClient),
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		nowFunc:     time.Now,
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			return mockRCON, nil
+		},
+	}
+	r.initOnce.Do(r.initMaps)
+
+	key := types.NamespacedName{Name: "my-server", Namespace: "minecraft"}
+
+	// Trigger a backup to populate backupMu.
+	_ = r.performBackup(context.Background(), server.DeepCopy(), "test")
+
+	// Verify mutex entry exists.
+	_, loaded := r.backupMu.Load(key.String())
+	require.True(t, loaded, "backupMu entry should exist after backup")
+
+	// Delete the server from the fake client.
+	require.NoError(t, fakeClient.Delete(context.Background(), server))
+
+	// Reconcile after deletion — should clean up backupMu.
+	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: key})
+	require.NoError(t, err)
+
+	// Verify mutex entry is cleaned up.
+	_, loaded = r.backupMu.Load(key.String())
+	assert.False(t, loaded, "backupMu entry should be cleaned up after server deletion")
+}
+
 func TestBackupReconciler_ConcurrentBackupsSerialized(t *testing.T) {
 	// Verify that the per-server mutex prevents concurrent backup execution.
 	reconciler, server, tracker := setupConcurrencyTest(t)
