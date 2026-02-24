@@ -1664,7 +1664,49 @@ func serverStatusEqual(a, b *mcv1beta1.PaperMCServerStatus) bool {
 		return false
 	}
 
+	if !backupStatusEqual(a.Backup, b.Backup) {
+		return false
+	}
+
 	return conditionsEqual(a.Conditions, b.Conditions)
+}
+
+// backupStatusEqual compares two BackupStatus pointers.
+func backupStatusEqual(a, b *mcv1beta1.BackupStatus) bool {
+	if (a == nil) != (b == nil) {
+		return false
+	}
+
+	if a == nil {
+		return true
+	}
+
+	if a.BackupCount != b.BackupCount {
+		return false
+	}
+
+	if (a.LastBackup == nil) != (b.LastBackup == nil) {
+		return false
+	}
+
+	if a.LastBackup != nil && b.LastBackup != nil {
+		if a.LastBackup.SnapshotName != b.LastBackup.SnapshotName ||
+			a.LastBackup.Successful != b.LastBackup.Successful ||
+			a.LastBackup.Trigger != b.LastBackup.Trigger ||
+			!a.LastBackup.StartedAt.Equal(&b.LastBackup.StartedAt) {
+			return false
+		}
+
+		if (a.LastBackup.CompletedAt == nil) != (b.LastBackup.CompletedAt == nil) {
+			return false
+		}
+
+		if a.LastBackup.CompletedAt != nil && !a.LastBackup.CompletedAt.Equal(b.LastBackup.CompletedAt) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // conditionsEqual compares two condition slices order-independently, keyed by Type.

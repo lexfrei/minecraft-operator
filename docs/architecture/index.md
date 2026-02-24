@@ -4,7 +4,7 @@ This section covers the internal architecture of Minecraft Operator.
 
 ## Overview
 
-The operator consists of three main controllers that work together:
+The operator consists of four main controllers that work together:
 
 ```mermaid
 graph TB
@@ -17,6 +17,7 @@ graph TB
         PC[Plugin Controller]
         SC[PaperMCServer Controller]
         UC[Update Controller]
+        BC[Backup Controller]
     end
 
     subgraph "External APIs"
@@ -28,6 +29,7 @@ graph TB
         STS[StatefulSet]
         SVC[Service]
         PVC[PersistentVolumeClaim]
+        VS[VolumeSnapshot]
     end
 
     Plugin --> PC
@@ -43,6 +45,11 @@ graph TB
 
     UC --> Server
     UC --> STS
+    UC --> BC
+
+    BC --> Server
+    BC --> VS
+    BC --> PVC
 ```
 
 ## Controllers
@@ -52,6 +59,7 @@ graph TB
 | **Plugin Controller** | Fetches plugin metadata, runs compatibility solver |
 | **PaperMCServer Controller** | Manages StatefulSet, Service, resolves versions |
 | **Update Controller** | Executes scheduled updates with graceful shutdown |
+| **Backup Controller** | Creates VolumeSnapshot backups with RCON consistency hooks |
 
 ## Sections
 
@@ -108,10 +116,11 @@ The operator uses a constraint solver to find compatible versions:
 
 Updates are applied safely:
 
-1. RCON `save-all` command saves world data
-2. RCON `stop` command gracefully stops the server
-3. Pod termination respects `terminationGracePeriodSeconds`
-4. StatefulSet recreates the pod with new version
+1. Pre-update VolumeSnapshot backup (when `backup.beforeUpdate` is enabled)
+2. RCON `save-all` command saves world data
+3. RCON `stop` command gracefully stops the server
+4. Pod termination respects `terminationGracePeriodSeconds`
+5. StatefulSet recreates the pod with new version
 
 ## Technology Stack
 

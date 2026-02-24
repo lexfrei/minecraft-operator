@@ -86,6 +86,71 @@ type ServiceConfig struct {
 	LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
 }
 
+// BackupSpec configures VolumeSnapshot-based backups for the Minecraft server.
+type BackupSpec struct {
+	// Enabled determines if backups are enabled.
+	Enabled bool `json:"enabled"`
+
+	// Schedule is the cron schedule for periodic backups (e.g., "0 */6 * * *").
+	// +optional
+	Schedule string `json:"schedule,omitempty"`
+
+	// BeforeUpdate creates a backup before any server update is applied.
+	// +optional
+	// +kubebuilder:default=true
+	BeforeUpdate *bool `json:"beforeUpdate,omitempty"`
+
+	// VolumeSnapshotClassName is the VolumeSnapshotClass to use for creating snapshots.
+	// If empty, the cluster default VolumeSnapshotClass is used.
+	// +optional
+	VolumeSnapshotClassName string `json:"volumeSnapshotClassName,omitempty"`
+
+	// Retention defines how many backup snapshots to keep.
+	// +optional
+	Retention BackupRetention `json:"retention,omitempty"`
+}
+
+// BackupRetention defines backup retention policy.
+type BackupRetention struct {
+	// MaxCount is the maximum number of VolumeSnapshots to retain per server.
+	// Oldest snapshots are deleted first when the limit is exceeded.
+	// +optional
+	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=1
+	MaxCount int32 `json:"maxCount,omitempty"`
+}
+
+// BackupStatus represents the observed backup state for the server.
+type BackupStatus struct {
+	// LastBackup records the most recent backup attempt.
+	// +optional
+	LastBackup *BackupRecord `json:"lastBackup,omitempty"`
+
+	// BackupCount is the current number of retained VolumeSnapshots.
+	BackupCount int32 `json:"backupCount"`
+}
+
+// BackupRecord records information about a single backup.
+type BackupRecord struct {
+	// SnapshotName is the name of the VolumeSnapshot resource.
+	// Empty when the backup failed before snapshot creation.
+	// +optional
+	SnapshotName string `json:"snapshotName,omitempty"`
+
+	// StartedAt is when the backup process started.
+	StartedAt metav1.Time `json:"startedAt"`
+
+	// CompletedAt is when the backup process completed.
+	// +optional
+	CompletedAt *metav1.Time `json:"completedAt,omitempty"`
+
+	// Successful indicates if the backup completed successfully.
+	Successful bool `json:"successful"`
+
+	// Trigger describes what triggered the backup (scheduled, before-update, manual).
+	Trigger string `json:"trigger"`
+}
+
 // PaperMCServerSpec defines the desired state of PaperMCServer.
 type PaperMCServerSpec struct {
 	// UpdateStrategy defines the update strategy for Paper version.
@@ -124,6 +189,10 @@ type PaperMCServerSpec struct {
 	// Service configures the Kubernetes Service for this server.
 	// +optional
 	Service ServiceConfig `json:"service,omitempty"`
+
+	// Backup configures VolumeSnapshot-based backups.
+	// +optional
+	Backup *BackupSpec `json:"backup,omitempty"`
 
 	// PodTemplate is the template for the StatefulSet pod.
 	PodTemplate corev1.PodTemplateSpec `json:"podTemplate"`
@@ -270,6 +339,10 @@ type PaperMCServerStatus struct {
 	// UpdateBlocked indicates if updates are blocked due to compatibility issues.
 	// +optional
 	UpdateBlocked *UpdateBlockedStatus `json:"updateBlocked,omitempty"`
+
+	// Backup represents the observed backup state.
+	// +optional
+	Backup *BackupStatus `json:"backup,omitempty"`
 
 	// Conditions represent the current state of the PaperMCServer resource.
 	// +listType=map

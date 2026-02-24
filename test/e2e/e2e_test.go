@@ -37,6 +37,35 @@ import (
 // namespace where the project is deployed in
 const namespace = "minecraft-operator-system"
 
+// kindClusterContext returns the kubectl context for the Kind cluster.
+// Kind contexts are named "kind-{cluster-name}".
+func kindClusterContext() string {
+	cluster := "kind"
+	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
+		cluster = v
+	}
+
+	return "kind-" + cluster
+}
+
+// kubectlCmd creates a kubectl command with the Kind cluster context.
+// All kubectl commands in e2e tests must specify --context to prevent
+// accidentally targeting the wrong cluster.
+func kubectlCmd(args ...string) *exec.Cmd {
+	fullArgs := append([]string{"--context", kindClusterContext()}, args...)
+
+	return exec.Command("kubectl", fullArgs...)
+}
+
+// helmCmd creates a helm command with the Kind cluster kube-context.
+// All helm commands in e2e tests must specify --kube-context to prevent
+// accidentally targeting the wrong cluster.
+func helmCmd(args ...string) *exec.Cmd {
+	fullArgs := append([]string{"--kube-context", kindClusterContext()}, args...)
+
+	return exec.Command("helm", fullArgs...)
+}
+
 // serviceAccountName created for the project
 const serviceAccountName = "minecraft-operator-controller-manager"
 
@@ -54,19 +83,19 @@ var _ = Describe("Manager", Ordered, func() {
 	// and deploying the controller (CRDs are applied automatically by the operator at startup).
 	BeforeAll(func() {
 		By("creating manager namespace")
-		cmd := exec.Command("kubectl", "create", "ns", namespace)
+		cmd := kubectlCmd("create", "ns", namespace)
 		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
 
 		By("labeling the namespace to enforce the restricted security policy")
-		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
+		cmd = kubectlCmd("label", "--overwrite", "ns", namespace,
 			"pod-security.kubernetes.io/enforce=restricted")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
 		By("deploying the controller-manager (CRDs are applied automatically at startup)")
 		imageRepo, imageTag := parseImage(projectImage)
-		cmd = exec.Command("helm", "install", "minecraft-operator",
+		cmd = helmCmd("install", "minecraft-operator",
 			"./charts/minecraft-operator",
 			"--namespace", namespace,
 			"--set", fmt.Sprintf("image.repository=%s", imageRepo),
@@ -79,16 +108,16 @@ var _ = Describe("Manager", Ordered, func() {
 	// and deleting the namespace.
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
-		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
+		cmd := kubectlCmd("delete", "pod", "curl-metrics", "--namespace", namespace)
 		_, _ = utils.Run(cmd)
 
 		By("undeploying the controller-manager")
-		cmd = exec.Command("helm", "uninstall", "minecraft-operator",
+		cmd = helmCmd("uninstall", "minecraft-operator",
 			"--namespace", namespace)
 		_, _ = utils.Run(cmd)
 
 		By("removing manager namespace")
-		cmd = exec.Command("kubectl", "delete", "ns", namespace)
+		cmd = kubectlCmd("delete", "ns", namespace)
 		_, _ = utils.Run(cmd)
 	})
 
@@ -98,7 +127,7 @@ var _ = Describe("Manager", Ordered, func() {
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
 			By("Fetching controller manager pod logs")
-			cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
+			cmd := kubectlCmd("logs", controllerPodName, "--namespace", namespace)
 			controllerLogs, err := utils.Run(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Controller logs:\n %s", controllerLogs)
@@ -107,7 +136,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("Fetching Kubernetes events")
-			cmd = exec.Command("kubectl", "get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
+			cmd = kubectlCmd("get", "events", "--namespace", namespace, "--sort-by=.lastTimestamp")
 			eventsOutput, err := utils.Run(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Kubernetes events:\n%s", eventsOutput)
@@ -116,7 +145,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("Fetching curl-metrics logs")
-			cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
+			cmd = kubectlCmd("logs", "curl-metrics", "--namespace", namespace)
 			metricsOutput, err := utils.Run(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Metrics logs:\n %s", metricsOutput)
@@ -125,7 +154,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("Fetching controller manager pod description")
-			cmd = exec.Command("kubectl", "describe", "pod", controllerPodName, "-n", namespace)
+			cmd = kubectlCmd("describe", "pod", controllerPodName, "--namespace", namespace)
 			podDescription, err := utils.Run(cmd)
 			if err == nil {
 				fmt.Println("Pod description:\n", podDescription)
@@ -143,13 +172,13 @@ var _ = Describe("Manager", Ordered, func() {
 			By("validating that the controller-manager pod is running as expected")
 			verifyControllerUp := func(g Gomega) {
 				// Get the name of the controller-manager pod
-				cmd := exec.Command("kubectl", "get",
-					"pods", "-l", "control-plane=controller-manager",
-					"-o", "go-template={{ range .items }}"+
+				cmd := kubectlCmd("get",
+					"pods", "--selector", "control-plane=controller-manager",
+					"--output", "go-template={{ range .items }}"+
 						"{{ if not .metadata.deletionTimestamp }}"+
 						"{{ .metadata.name }}"+
 						"{{ \"\\n\" }}{{ end }}{{ end }}",
-					"-n", namespace,
+					"--namespace", namespace,
 				)
 
 				podOutput, err := utils.Run(cmd)
@@ -160,9 +189,9 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(controllerPodName).To(ContainSubstring("controller-manager"))
 
 				// Validate the pod's status
-				cmd = exec.Command("kubectl", "get",
-					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
-					"-n", namespace,
+				cmd = kubectlCmd("get",
+					"pods", controllerPodName, "--output", "jsonpath={.status.phase}",
+					"--namespace", namespace,
 				)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -173,7 +202,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
-			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
+			cmd := kubectlCmd("create", "clusterrolebinding", metricsRoleBindingName,
 				"--clusterrole=minecraft-operator-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
@@ -181,7 +210,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
 
 			By("validating that the metrics service is available")
-			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
+			cmd = kubectlCmd("get", "service", metricsServiceName, "--namespace", namespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
 
@@ -192,7 +221,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for the metrics endpoint to be ready")
 			verifyMetricsEndpointReady := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace)
+				cmd := kubectlCmd("get", "endpoints", metricsServiceName, "--namespace", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("8443"), "Metrics endpoint is not ready")
@@ -201,7 +230,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("verifying that the controller manager is serving the metrics server")
 			verifyMetricsServerStarted := func(g Gomega) {
-				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
+				cmd := kubectlCmd("logs", controllerPodName, "--namespace", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("Serving metrics server"),
@@ -210,7 +239,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyMetricsServerStarted).Should(Succeed())
 
 			By("creating the curl-metrics pod to access the metrics endpoint")
-			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
+			cmd = kubectlCmd("run", "curl-metrics", "--restart=Never",
 				"--namespace", namespace,
 				"--image=curlimages/curl:latest",
 				"--overrides",
@@ -242,9 +271,9 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for the curl-metrics pod to complete.")
 			verifyCurlUp := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pods", "curl-metrics",
-					"-o", "jsonpath={.status.phase}",
-					"-n", namespace)
+				cmd := kubectlCmd("get", "pods", "curl-metrics",
+					"--output", "jsonpath={.status.phase}",
+					"--namespace", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
@@ -269,18 +298,18 @@ var _ = Describe("Manager", Ordered, func() {
 
 		AfterEach(func() {
 			// Clean up CR and associated resources
-			cmd := exec.Command("kubectl", "delete", "papermcserver", serverName,
-				"-n", namespace, "--ignore-not-found")
+			cmd := kubectlCmd("delete", "papermcserver", serverName,
+				"--namespace", namespace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 
-			cmd = exec.Command("kubectl", "delete", "secret", serverName+"-rcon",
-				"-n", namespace, "--ignore-not-found")
+			cmd = kubectlCmd("delete", "secret", serverName+"-rcon",
+				"--namespace", namespace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 
 			// Wait for cleanup to complete
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
-					"-n", namespace)
+				cmd := kubectlCmd("get", "statefulset", serverName,
+					"--namespace", namespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred(), "StatefulSet should be deleted")
 			}, 60*time.Second).Should(Succeed())
@@ -288,10 +317,10 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("should create StatefulSet and Service when PaperMCServer is created", func() {
 			By("creating RCON secret")
-			cmd := exec.Command("kubectl", "create", "secret", "generic",
+			cmd := kubectlCmd("create", "secret", "generic",
 				serverName+"-rcon",
 				"--from-literal=password=test-pass",
-				"-n", namespace)
+				"--namespace", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -332,15 +361,15 @@ spec:
         - name: EULA
           value: "TRUE"`, serverName, namespace, serverName)
 
-			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd = kubectlCmd("apply", "--filename", "-")
 			cmd.Stdin = strings.NewReader(serverYAML)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying StatefulSet is created")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
-					"-n", namespace, "-o", "jsonpath={.metadata.name}")
+				cmd := kubectlCmd("get", "statefulset", serverName,
+					"--namespace", namespace, "--output", "jsonpath={.metadata.name}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal(serverName))
@@ -348,17 +377,17 @@ spec:
 
 			By("verifying Service is created")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "service", serverName,
-					"-n", namespace, "-o", "jsonpath={.metadata.name}")
+				cmd := kubectlCmd("get", "service", serverName,
+					"--namespace", namespace, "--output", "jsonpath={.metadata.name}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal(serverName))
 			}, 30*time.Second).Should(Succeed())
 
 			By("verifying StatefulSet has correct image (not :latest)")
-			cmd = exec.Command("kubectl", "get", "statefulset", serverName,
-				"-n", namespace,
-				"-o", "jsonpath={.spec.template.spec.containers[0].image}")
+			cmd = kubectlCmd("get", "statefulset", serverName,
+				"--namespace", namespace,
+				"--output", "jsonpath={.spec.template.spec.containers[0].image}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).NotTo(ContainSubstring(":latest"),
@@ -369,10 +398,10 @@ spec:
 
 		It("should clean up StatefulSet and Service when PaperMCServer is deleted", func() {
 			By("creating RCON secret")
-			cmd := exec.Command("kubectl", "create", "secret", "generic",
+			cmd := kubectlCmd("create", "secret", "generic",
 				serverName+"-rcon",
 				"--from-literal=password=test-pass",
-				"-n", namespace)
+				"--namespace", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -410,37 +439,37 @@ spec:
         - name: EULA
           value: "TRUE"`, serverName, namespace, serverName)
 
-			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd = kubectlCmd("apply", "--filename", "-")
 			cmd.Stdin = strings.NewReader(serverYAML)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("waiting for StatefulSet to appear")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
-					"-n", namespace)
+				cmd := kubectlCmd("get", "statefulset", serverName,
+					"--namespace", namespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 			}, 60*time.Second).Should(Succeed())
 
 			By("deleting the PaperMCServer CR")
-			cmd = exec.Command("kubectl", "delete", "papermcserver", serverName,
-				"-n", namespace)
+			cmd = kubectlCmd("delete", "papermcserver", serverName,
+				"--namespace", namespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying StatefulSet is removed via owner reference cascade")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "statefulset", serverName,
-					"-n", namespace)
+				cmd := kubectlCmd("get", "statefulset", serverName,
+					"--namespace", namespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred(), "StatefulSet should be deleted")
 			}, 60*time.Second).Should(Succeed())
 
 			By("verifying Service is removed")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "service", serverName,
-					"-n", namespace)
+				cmd := kubectlCmd("get", "service", serverName,
+					"--namespace", namespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred(), "Service should be deleted")
 			}, 30*time.Second).Should(Succeed())
@@ -451,21 +480,21 @@ spec:
 		const badCronServer = "e2e-bad-cron"
 
 		AfterEach(func() {
-			cmd := exec.Command("kubectl", "delete", "papermcserver", badCronServer,
-				"-n", namespace, "--ignore-not-found")
+			cmd := kubectlCmd("delete", "papermcserver", badCronServer,
+				"--namespace", namespace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 
-			cmd = exec.Command("kubectl", "delete", "secret", badCronServer+"-rcon",
-				"-n", namespace, "--ignore-not-found")
+			cmd = kubectlCmd("delete", "secret", badCronServer+"-rcon",
+				"--namespace", namespace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 		})
 
 		It("should set CronScheduleValid=False for invalid cron and continue operating", func() {
 			By("creating RCON secret")
-			cmd := exec.Command("kubectl", "create", "secret", "generic",
+			cmd := kubectlCmd("create", "secret", "generic",
 				badCronServer+"-rcon",
 				"--from-literal=password=test-pass",
-				"-n", namespace)
+				"--namespace", namespace)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -503,16 +532,16 @@ spec:
         - name: EULA
           value: "TRUE"`, badCronServer, namespace, badCronServer)
 
-			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd = kubectlCmd("apply", "--filename", "-")
 			cmd.Stdin = strings.NewReader(serverYAML)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying CronScheduleValid condition is set to False")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "papermcserver", badCronServer,
-					"-n", namespace,
-					"-o", "jsonpath={.status.conditions[?(@.type=='CronScheduleValid')].status}")
+				cmd := kubectlCmd("get", "papermcserver", badCronServer,
+					"--namespace", namespace,
+					"--output", "jsonpath={.status.conditions[?(@.type=='CronScheduleValid')].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("False"),
@@ -520,12 +549,210 @@ spec:
 			}, 60*time.Second).Should(Succeed())
 
 			By("verifying operator pod is still running (not crash-looping)")
-			cmd = exec.Command("kubectl", "get", "pods", "-l", "control-plane=controller-manager",
-				"-n", namespace, "-o", "jsonpath={.items[0].status.phase}")
+			cmd = kubectlCmd("get", "pods", "--selector", "control-plane=controller-manager",
+				"--namespace", namespace, "--output", "jsonpath={.items[0].status.phase}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("Running"),
 				"Operator should continue running despite invalid cron")
+		})
+	})
+
+	Context("Backup lifecycle", func() {
+		const backupServer = "e2e-backup-server"
+
+		AfterEach(func() {
+			// Clean up VolumeSnapshots
+			cmd := kubectlCmd("delete", "volumesnapshot",
+				"--selector=mc.k8s.lex.la/server-name="+backupServer,
+				"--namespace", namespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			// Clean up CR and associated resources
+			cmd = kubectlCmd("delete", "papermcserver", backupServer,
+				"--namespace", namespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			cmd = kubectlCmd("delete", "secret", backupServer+"-rcon",
+				"--namespace", namespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			// Wait for cleanup
+			Eventually(func(g Gomega) {
+				cmd := kubectlCmd("get", "statefulset", backupServer,
+					"--namespace", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred(), "StatefulSet should be deleted")
+			}, 60*time.Second).Should(Succeed())
+		})
+
+		It("should create VolumeSnapshot when backup-now annotation is set", func() {
+			By("creating RCON secret")
+			cmd := kubectlCmd("create", "secret", "generic",
+				backupServer+"-rcon",
+				"--from-literal=password=test-pass",
+				"--namespace", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating PaperMCServer with backup enabled (no backup-now annotation yet)")
+			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1beta1
+kind: PaperMCServer
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  updateStrategy: "latest"
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+  gracefulShutdown:
+    timeout: 60s
+  rcon:
+    enabled: true
+    port: 25575
+    passwordSecret:
+      name: %s-rcon
+      key: password
+  backup:
+    enabled: true
+    retention:
+      maxCount: 5
+  podTemplate:
+    spec:
+      containers:
+      - name: minecraft
+        image: docker.io/lexfrei/papermc:1.21.1-91
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        env:
+        - name: EULA
+          value: "TRUE"`, backupServer, namespace, backupServer)
+
+			cmd = kubectlCmd("apply", "--filename", "-")
+			cmd.Stdin = strings.NewReader(serverYAML)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for PVC to be created by StatefulSet")
+			Eventually(func(g Gomega) {
+				cmd := kubectlCmd("get", "pvc",
+					fmt.Sprintf("data-%s-0", backupServer),
+					"--namespace", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}, 2*time.Minute).Should(Succeed())
+
+			By("applying backup-now annotation after PVC exists")
+			cmd = kubectlCmd("annotate", "papermcserver", backupServer,
+				fmt.Sprintf("mc.k8s.lex.la/backup-now=%d", time.Now().Unix()),
+				"--namespace", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying VolumeSnapshot is created with correct labels")
+			Eventually(func(g Gomega) {
+				cmd := kubectlCmd("get", "volumesnapshot",
+					"--selector=mc.k8s.lex.la/server-name="+backupServer,
+					"--namespace", namespace,
+					"--output", "jsonpath={.items[0].metadata.labels.mc\\.k8s\\.lex\\.la/backup-trigger}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("manual"),
+					"Backup trigger label should be 'manual'")
+			}, 2*time.Minute).Should(Succeed())
+
+			By("verifying backup-now annotation was removed")
+			Eventually(func(g Gomega) {
+				cmd := kubectlCmd("get", "papermcserver", backupServer,
+					"--namespace", namespace,
+					"--output", "jsonpath={.metadata.annotations.mc\\.k8s\\.lex\\.la/backup-now}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(BeEmpty(),
+					"backup-now annotation should be removed after backup")
+			}, 30*time.Second).Should(Succeed())
+
+			By("verifying backup status is updated")
+			Eventually(func(g Gomega) {
+				cmd := kubectlCmd("get", "papermcserver", backupServer,
+					"--namespace", namespace,
+					"--output", "jsonpath={.status.backup.lastBackup.trigger}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("manual"),
+					"Backup status trigger should be 'manual'")
+			}, 30*time.Second).Should(Succeed())
+		})
+
+		It("should set BackupCronValid condition for invalid backup cron", func() {
+			By("creating RCON secret")
+			cmd := kubectlCmd("create", "secret", "generic",
+				backupServer+"-rcon",
+				"--from-literal=password=test-pass",
+				"--namespace", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating PaperMCServer with invalid backup cron")
+			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1beta1
+kind: PaperMCServer
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  updateStrategy: "latest"
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+  gracefulShutdown:
+    timeout: 60s
+  rcon:
+    enabled: true
+    port: 25575
+    passwordSecret:
+      name: %s-rcon
+      key: password
+  backup:
+    enabled: true
+    schedule: "invalid-cron-expression"
+  podTemplate:
+    spec:
+      containers:
+      - name: minecraft
+        image: docker.io/lexfrei/papermc:1.21.1-91
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+        env:
+        - name: EULA
+          value: "TRUE"`, backupServer, namespace, backupServer)
+
+			cmd = kubectlCmd("apply", "--filename", "-")
+			cmd.Stdin = strings.NewReader(serverYAML)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying BackupCronValid condition is set to False")
+			Eventually(func(g Gomega) {
+				cmd := kubectlCmd("get", "papermcserver", backupServer,
+					"--namespace", namespace,
+					"--output", "jsonpath={.status.conditions[?(@.type=='BackupCronValid')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("False"),
+					"BackupCronValid should be False for invalid cron")
+			}, 60*time.Second).Should(Succeed())
 		})
 	})
 })
@@ -550,11 +777,11 @@ func serviceAccountToken() (string, error) {
 	var out string
 	verifyTokenCreation := func(g Gomega) {
 		// Execute kubectl command to create the token
-		cmd := exec.Command("kubectl", "create", "--raw", fmt.Sprintf(
+		cmd := kubectlCmd("create", "--raw", fmt.Sprintf(
 			"/api/v1/namespaces/%s/serviceaccounts/%s/token",
 			namespace,
 			serviceAccountName,
-		), "-f", tokenRequestFile)
+		), "--filename", tokenRequestFile)
 
 		output, err := cmd.CombinedOutput()
 		g.Expect(err).NotTo(HaveOccurred())
@@ -574,7 +801,7 @@ func serviceAccountToken() (string, error) {
 // getMetricsOutput retrieves and returns the logs from the curl pod used to access the metrics endpoint.
 func getMetricsOutput() (string, error) {
 	By("getting the curl-metrics logs")
-	cmd := exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
+	cmd := kubectlCmd("logs", "curl-metrics", "--namespace", namespace)
 	return utils.Run(cmd)
 }
 

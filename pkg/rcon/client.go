@@ -13,6 +13,7 @@ import (
 // Client is an interface for RCON client operations.
 type Client interface {
 	Connect(ctx context.Context) error
+	SendCommand(ctx context.Context, command string) (string, error)
 	GracefulShutdown(ctx context.Context, warnings []string, warningInterval time.Duration) error
 	Close() error
 }

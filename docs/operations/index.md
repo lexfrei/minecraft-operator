@@ -99,16 +99,36 @@ Open http://localhost:8082/ui
 
 ### Backup World Data
 
-World data is stored on PVCs. Back up using your preferred method:
+The operator supports built-in VolumeSnapshot backups. Enable them in your PaperMCServer spec:
 
-```bash
-# Example: Copy to local machine
-kubectl cp minecraft/survival-0:/data/world ./backup/world
+```yaml
+spec:
+  backup:
+    enabled: true
+    schedule: "0 */6 * * *"
+    retention:
+      maxCount: 10
 ```
 
-!!! tip "Scheduled Backups"
+When RCON is enabled, backups use RCON hooks (`save-all`/`save-off`/`save-on`) for data consistency. Without RCON, snapshots are crash-consistent only.
 
-    Consider using Velero or similar tools for scheduled PVC backups.
+**Trigger a manual backup:**
+
+```bash
+kubectl annotate papermcserver survival mc.k8s.lex.la/backup-now="$(date +%s)" \
+  --namespace minecraft
+```
+
+**List existing snapshots:**
+
+```bash
+kubectl get volumesnapshots -l mc.k8s.lex.la/server-name=survival \
+  --namespace minecraft
+```
+
+!!! tip "Pre-Update Backups"
+
+    Set `backup.beforeUpdate: true` (default) to automatically create a snapshot before any server update.
 
 ### Scale Down for Maintenance
 

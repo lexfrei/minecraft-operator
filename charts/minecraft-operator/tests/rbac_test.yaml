@@ -104,6 +104,39 @@ tests:
               - patch
               - update
 
+  # ClusterRole: VolumeSnapshot permissions for backups
+  - it: should grant VolumeSnapshot management permissions
+    template: templates/rbac/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - snapshot.storage.k8s.io
+            resources:
+              - volumesnapshots
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - watch
+
+  - it: should grant VolumeSnapshotClass read permissions
+    template: templates/rbac/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - snapshot.storage.k8s.io
+            resources:
+              - volumesnapshotclasses
+            verbs:
+              - get
+              - list
+              - watch
+
   # ClusterRoleBinding: references correct SA
   - it: should bind ClusterRole to controller ServiceAccount
     template: templates/manager-rolebinding.yaml

@@ -59,12 +59,13 @@ const (
 // UpdateReconciler reconciles PaperMCServer resources for scheduled updates.
 type UpdateReconciler struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	PaperClient  PaperAPI
-	PluginClient plugins.PluginClient
-	PodExecutor  PodExecutor
-	Metrics      metrics.Recorder
-	cron         mccron.Scheduler
+	Scheme           *runtime.Scheme
+	PaperClient      PaperAPI
+	PluginClient     plugins.PluginClient
+	PodExecutor      PodExecutor
+	Metrics          metrics.Recorder
+	BackupReconciler *BackupReconciler
+	cron             mccron.Scheduler
 
 	// nowFunc returns current time; override in tests for deterministic behavior.
 	nowFunc func() time.Time
@@ -72,13 +73,6 @@ type UpdateReconciler struct {
 	// Track cron entries per server
 	cronEntriesMu sync.RWMutex
 	cronEntries   map[string]cronEntryInfo
-}
-
-// cronEntryInfo stores both the cron entry ID and the spec string
-// to avoid needing to retrieve the spec from the scheduler.
-type cronEntryInfo struct {
-	ID   cron.EntryID
-	Spec string
 }
 
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers,verbs=get;list;watch;update;patch
@@ -710,12 +704,57 @@ func (r *UpdateReconciler) createRCONClient(
 	return rconClient, nil
 }
 
+// backupBeforeUpdate creates a VolumeSnapshot backup before applying updates.
+// Silently skips if BackupReconciler is nil, backup is not enabled, or beforeUpdate is false.
+func (r *UpdateReconciler) backupBeforeUpdate(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+) error {
+	if r.BackupReconciler == nil {
+		return nil
+	}
+
+	if server.Spec.Backup == nil || !server.Spec.Backup.Enabled ||
+		(server.Spec.Backup.BeforeUpdate != nil && !*server.Spec.Backup.BeforeUpdate) {
+		return nil
+	}
+
+	// Check VolumeSnapshot API availability before attempting backup.
+	// The user explicitly enabled beforeUpdate, so we must abort the update
+	// if backups are impossible — proceeding without a backup violates the contract.
+	// Uses isSnapshotCRDMissing (no side effects) instead of isSnapshotAPIUnavailable
+	// to avoid mutating the caller's server object across controller boundaries.
+	if r.BackupReconciler.isSnapshotCRDMissing(ctx, server.Namespace, server.Name) {
+		slog.ErrorContext(ctx, "Pre-update backup impossible: VolumeSnapshot API unavailable",
+			"server", server.Name)
+
+		return errors.New("pre-update backup failed: VolumeSnapshot API unavailable in cluster")
+	}
+
+	slog.InfoContext(ctx, "Creating pre-update backup", "server", server.Name)
+
+	return r.BackupReconciler.PerformBackup(ctx, server, "before-update")
+}
+
 // performPluginOnlyUpdate handles updates when only plugins changed (Paper version unchanged).
 func (r *UpdateReconciler) performPluginOnlyUpdate(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
 ) error {
 	slog.InfoContext(ctx, "Starting plugin-only update", "server", server.Name)
+
+	// Step 0: Pre-update backup (if enabled). Abort update on failure to
+	// avoid data loss — the user explicitly requested backup protection.
+	//
+	// Note: the backup's PostSnapshotHook sends "save-on" to re-enable auto-save.
+	// There is a brief window between "save-on" and the graceful shutdown's "save-all"
+	// where new data may be written. The backup thus captures the state at snapshot time,
+	// not the exact pre-update state. This trade-off is acceptable because (a) the window
+	// is typically milliseconds, and (b) keeping auto-save disabled until shutdown would
+	// risk data loss if the update process crashes.
+	if err := r.backupBeforeUpdate(ctx, server); err != nil {
+		return errors.Wrap(err, "pre-update backup failed, aborting update")
+	}
 
 	// Step 1: Delete plugins marked for deletion (PendingDeletion=true)
 	if err := r.deleteMarkedPlugins(ctx, server); err != nil {
@@ -807,6 +846,13 @@ func (r *UpdateReconciler) performCombinedUpdate(
 	server *mcv1beta1.PaperMCServer,
 ) error {
 	slog.InfoContext(ctx, "Starting combined Paper and plugins update", "server", server.Name)
+
+	// Step 0: Pre-update backup (if enabled). Abort update on failure to
+	// avoid data loss — the user explicitly requested backup protection.
+	// See performPluginOnlyUpdate for the save-on/save-all window trade-off.
+	if err := r.backupBeforeUpdate(ctx, server); err != nil {
+		return errors.Wrap(err, "pre-update backup failed, aborting update")
+	}
 
 	// Step 1: Delete plugins marked for deletion (PendingDeletion=true)
 	if err := r.deleteMarkedPlugins(ctx, server); err != nil {

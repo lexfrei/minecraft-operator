@@ -47,10 +47,12 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/internal/controller"
 	"github.com/lexfrei/minecraft-operator/internal/crdmanager"
 	"github.com/lexfrei/minecraft-operator/pkg/api"
+	"github.com/lexfrei/minecraft-operator/pkg/backup"
 	mccron "github.com/lexfrei/minecraft-operator/pkg/cron"
 	mcmetrics "github.com/lexfrei/minecraft-operator/pkg/metrics"
 	"github.com/lexfrei/minecraft-operator/pkg/paper"
@@ -76,6 +78,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(mck8slexlav1beta1.AddToScheme(scheme))
+	utilruntime.Must(volumesnapshotv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -332,20 +335,49 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Setup Backup controller
+	backupCronScheduler := mccron.NewRealScheduler()
+	backupReconciler := &controller.BackupReconciler{
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		Snapshotter: backup.NewSnapshotter(mgr.GetClient()),
+		Metrics:     metricsRecorder,
+	}
+	backupReconciler.SetCron(backupCronScheduler)
+
+	if err := backupReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Backup")
+		os.Exit(1)
+	}
+
+	// Register backup cron scheduler for graceful shutdown with the manager
+	if err := mgr.Add(mccron.NewCronRunnable(backupCronScheduler)); err != nil {
+		setupLog.Error(err, "unable to register backup cron scheduler runnable")
+		os.Exit(1)
+	}
+
 	// Setup Update controller with real cron scheduler
 	updateReconciler := &controller.UpdateReconciler{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		PaperClient:  paperClient,
-		PluginClient: pluginClient,
-		PodExecutor:  podExecutor,
-		Metrics:      metricsRecorder,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		PaperClient:      paperClient,
+		PluginClient:     pluginClient,
+		PodExecutor:      podExecutor,
+		Metrics:          metricsRecorder,
+		BackupReconciler: backupReconciler,
 	}
 	updateReconciler.SetCron(cronScheduler)
 	if err := updateReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Update")
 		os.Exit(1)
 	}
+
+	// Register update cron scheduler for graceful shutdown with the manager
+	if err := mgr.Add(mccron.NewCronRunnable(cronScheduler)); err != nil {
+		setupLog.Error(err, "unable to register update cron scheduler runnable")
+		os.Exit(1)
+	}
+
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

@@ -22,7 +22,7 @@ spec:
 **Required** — Defines how Paper version updates are handled.
 
 | Value | Description |
-|-------|-------------|
+| --- | --- |
 | `latest` | Always use newest Paper version from Docker Hub (ignores plugin compatibility) |
 | `auto` | Constraint solver picks best version compatible with all plugins |
 | `pin` | Stay on specific version, auto-update to latest build |
@@ -73,7 +73,7 @@ spec:
 **Required** — Defines when to check and apply updates.
 
 | Field | Description |
-|-------|-------------|
+| --- | --- |
 | `checkCron` | Cron expression for checking updates |
 | `maintenanceWindow.enabled` | Enable scheduled updates |
 | `maintenanceWindow.cron` | Cron expression for applying updates |
@@ -96,7 +96,7 @@ spec:
 **Required** — Configures graceful server shutdown.
 
 | Field | Description |
-|-------|-------------|
+| --- | --- |
 | `timeout` | Shutdown timeout (should match `terminationGracePeriodSeconds`) |
 
 ```yaml
@@ -115,7 +115,7 @@ spec:
 **Required** — Configures RCON for graceful shutdown commands.
 
 | Field | Description | Default |
-|-------|-------------|---------|
+| --- | --- | --- |
 | `enabled` | Enable RCON | — |
 | `passwordSecret.name` | Secret name | — |
 | `passwordSecret.key` | Key in Secret | — |
@@ -143,7 +143,7 @@ kubectl create secret generic my-server-rcon \
 **Optional** — Configures the Kubernetes Service for the server.
 
 | Field | Description | Default |
-|-------|-------------|---------|
+| --- | --- | --- |
 | `type` | Service type | `LoadBalancer` |
 | `annotations` | Custom annotations | — |
 | `loadBalancerIP` | Static IP for LoadBalancer | — |
@@ -157,6 +157,39 @@ spec:
     loadBalancerIP: "192.168.1.100"
 ```
 
+### backup
+
+**Optional** — Configures VolumeSnapshot-based backups with RCON consistency hooks.
+
+| Field | Description | Default |
+| --- | --- | --- |
+| `enabled` | Enable backups | — |
+| `schedule` | Cron schedule for periodic backups | — |
+| `beforeUpdate` | Create backup before any server update | `true` |
+| `volumeSnapshotClassName` | VolumeSnapshotClass to use | cluster default |
+| `retention.maxCount` | Maximum snapshots to retain per server | `10` |
+
+```yaml
+spec:
+  backup:
+    enabled: true
+    schedule: "0 */6 * * *"        # Every 6 hours
+    beforeUpdate: true              # Backup before updates
+    volumeSnapshotClassName: csi-hostpath-snapclass
+    retention:
+      maxCount: 10
+```
+
+When RCON is enabled, the operator uses RCON hooks (`save-all`, `save-off`, `save-on`) to ensure world data consistency before creating the VolumeSnapshot. Without RCON, snapshots are crash-consistent only — recent unsaved data may be lost.
+
+**Manual trigger:**
+
+```bash
+kubectl annotate papermcserver my-server \
+  mc.k8s.lex.la/backup-now="$(date +%s)" \
+  --namespace minecraft
+```
+
 ### podTemplate
 
 **Required** — Template for the StatefulSet pod.
@@ -164,7 +197,7 @@ spec:
 This is a standard Kubernetes `PodTemplateSpec`. Key fields:
 
 | Field | Description |
-|-------|-------------|
+| --- | --- |
 | `spec.containers[0].resources` | CPU/memory requests and limits |
 | `spec.containers[0].env` | Environment variables |
 | `spec.volumes` | Additional volumes |
@@ -278,12 +311,37 @@ status:
         - "1.20.6"
 ```
 
+### backup (status)
+
+Observed backup state for the server.
+
+```yaml
+status:
+  backup:
+    backupCount: 5
+    lastBackup:
+      snapshotName: "survival-backup-1708742400"
+      startedAt: "2026-02-24T00:00:00Z"
+      completedAt: "2026-02-24T00:00:05Z"
+      successful: true
+      trigger: "scheduled"
+```
+
+| Field | Description |
+| --- | --- |
+| `backupCount` | Current number of retained VolumeSnapshots |
+| `lastBackup.snapshotName` | Name of the VolumeSnapshot resource (empty when backup failed before snapshot creation) |
+| `lastBackup.startedAt` | When the backup process started |
+| `lastBackup.completedAt` | When the backup completed |
+| `lastBackup.successful` | Whether the backup succeeded |
+| `lastBackup.trigger` | What triggered the backup (`scheduled`, `before-update`, `manual`) |
+
 ### conditions
 
 Standard Kubernetes conditions.
 
 | Type | Description |
-|------|-------------|
+| --- | --- |
 | `Ready` | Server reconciled successfully |
 | `StatefulSetReady` | StatefulSet has ready replicas |
 | `UpdateAvailable` | New Paper version/build available |
@@ -291,6 +349,8 @@ Standard Kubernetes conditions.
 | `Updating` | Update currently in progress |
 | `SolverRunning` | Constraint solver is executing |
 | `CronScheduleValid` | Maintenance window cron is valid |
+| `BackupCronValid` | Backup cron schedule is valid |
+| `BackupReady` | VolumeSnapshot API is available for backups |
 
 ## Complete Example
 
@@ -315,6 +375,14 @@ spec:
 
   gracefulShutdown:
     timeout: 300s
+
+  backup:
+    enabled: true
+    schedule: "0 */6 * * *"
+    beforeUpdate: true
+    volumeSnapshotClassName: "csi-hostpath-snapclass"
+    retention:
+      maxCount: 10
 
   rcon:
     enabled: true

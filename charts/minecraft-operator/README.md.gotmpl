@@ -15,6 +15,7 @@
 - Automatic version management for Paper and plugins
 - Constraint solver ensures plugin compatibility
 - Scheduled updates with graceful RCON shutdown
+- VolumeSnapshot-based backups with RCON consistency hooks
 - Declarative plugin management via label selectors
 - Built-in Web UI for monitoring
 - Multi-arch container images (amd64, arm64)
@@ -128,6 +129,36 @@ spec:
 | `auto` | Solver finds compatible version |
 | `pin` | Fixed version, auto-update builds |
 | `build-pin` | Fully pinned version and build |
+
+## Backups
+
+Enable VolumeSnapshot-based backups in the PaperMCServer spec:
+
+```yaml
+spec:
+  backup:
+    enabled: true
+    schedule: "0 */6 * * *"     # Every 6 hours
+    beforeUpdate: true           # Backup before any update
+    volumeSnapshotClassName: "" # Optional: specific VolumeSnapshotClass
+    retention:
+      maxCount: 10               # Keep last 10 snapshots
+```
+
+When RCON is enabled, the operator uses RCON hooks (`save-all`, `save-off`, `save-on`)
+to ensure data consistency before creating a VolumeSnapshot from the server PVC.
+Without RCON, snapshots are crash-consistent only.
+
+Trigger a manual backup:
+
+```bash
+kubectl annotate papermcserver my-server \
+  mc.k8s.lex.la/backup-now="$(date +%s)" \
+  --namespace minecraft
+```
+
+**Requirements:** A CSI driver with VolumeSnapshot support must be installed in
+the cluster (e.g., `csi-driver-host-path`, cloud provider CSI drivers).
 
 ## Web UI
 

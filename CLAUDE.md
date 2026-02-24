@@ -17,11 +17,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Core Components
 
-Three main controllers work together:
+Four main controllers work together:
 
 1. **Plugin Controller**: Watches Plugin CRDs, fetches metadata from plugin repositories (Hangar/Modrinth), runs constraint solver to find best compatible version for ALL matched servers, updates Plugin.status
 2. **PaperMCServer Controller**: Watches PaperMCServer CRDs, finds all matched Plugins via selectors, ensures StatefulSet exists, runs solver for Paper version upgrades
 3. **Update Controller**: Triggers on cron schedule, performs graceful RCON shutdown, downloads JARs to `plugins/update/`, deletes pod for StatefulSet recreation
+4. **Backup Controller**: Manages VolumeSnapshot-based backups with RCON hooks (`save-all`/`save-off`/`save-on`) for data consistency. Supports scheduled (cron), pre-update, and manual (annotation) triggers with configurable retention
 
 ### Critical Relationships
 
@@ -35,6 +36,11 @@ Three main controllers work together:
 - Plugin spec/status changes → trigger PaperMCServer reconciliation for all matched servers
 - PaperMCServer label changes → trigger Plugin reconciliation for all potentially matching Plugins
 - Optimization: Use owner references, cache selector matching, debounce reconciliations
+
+### Annotations
+
+- `mc.k8s.lex.la/apply-now`: Unix timestamp — triggers immediate update outside maintenance window
+- `mc.k8s.lex.la/backup-now`: Unix timestamp — triggers immediate VolumeSnapshot backup outside cron schedule
 
 ## CRD Design
 
@@ -68,6 +74,7 @@ Three main controllers work together:
 - `updateSchedule.maintenanceWindow.cron`: When to actually apply updates
 - `gracefulShutdown.timeout`: Must match StatefulSet `terminationGracePeriodSeconds`
 - `rcon`: RCON configuration for graceful shutdown
+- `backup`: VolumeSnapshot backup configuration (schedule, retention, beforeUpdate)
 - `podTemplate`: StatefulSet pod spec
 
 **Status:**
@@ -80,6 +87,7 @@ Three main controllers work together:
 - `availableUpdate`: Solver result for next possible update
 - `lastUpdate`: History of previous update attempt
 - `updateBlocked`: Indicates if updates are blocked due to compatibility issues
+- `backup`: Backup status (lastBackup record, backupCount)
 
 ## Constraint Solver
 

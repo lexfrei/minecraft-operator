@@ -11,6 +11,7 @@ A Kubernetes operator for managing [PaperMC](https://papermc.io/) servers with a
 - **Plugin Compatibility Solver** — Constraint solver ensures all plugins work with the selected Paper version
 - **Scheduled Updates** — Cron-based maintenance windows with graceful RCON shutdown
 - **Declarative Plugin Management** — Plugins matched to servers via label selectors
+- **VolumeSnapshot Backups** — Cron-scheduled and on-demand backups with RCON consistency hooks and retention policy
 - **Self-Managed CRDs** — CRDs embedded in the operator binary, applied at startup via server-side apply
 - **Web UI** — Built-in dashboard for monitoring servers and plugins
 - **Hangar Integration** — Automatic plugin downloads from PaperMC Hangar repository
@@ -112,13 +113,43 @@ See [Update Strategies Guide](docs/configuration/update-strategies.md) for detai
 
 ## Architecture
 
-Three controllers work together:
+Four controllers work together:
 
 1. **Plugin Controller** — Fetches plugin metadata from Hangar, runs compatibility solver, updates Plugin status
 2. **PaperMCServer Controller** — Manages StatefulSet and Service, resolves Paper version based on update strategy
 3. **Update Controller** — Executes scheduled updates during maintenance windows with graceful RCON shutdown
+4. **Backup Controller** — Creates VolumeSnapshots with RCON save hooks for data consistency, supports cron scheduling, manual triggers, and retention
 
 For detailed architecture and constraint solver algorithms, see [DESIGN.md](DESIGN.md).
+
+## Backups
+
+Enable VolumeSnapshot-based backups:
+
+```yaml
+spec:
+  backup:
+    enabled: true
+    schedule: "0 */6 * * *"     # Every 6 hours
+    beforeUpdate: true           # Backup before any update
+    retention:
+      maxCount: 10               # Keep last 10 snapshots
+```
+
+When RCON is enabled, the operator uses RCON hooks (`save-all`, `save-off`, `save-on`)
+to flush data to disk and disable auto-save before creating a VolumeSnapshot.
+Without RCON, snapshots are crash-consistent only.
+
+Trigger a manual backup:
+
+```bash
+kubectl annotate papermcserver my-server \
+  mc.k8s.lex.la/backup-now="$(date +%s)" \
+  --namespace minecraft
+```
+
+**Requirements:** A CSI driver with VolumeSnapshot support must be installed in
+the cluster.
 
 ## Helm Configuration
 

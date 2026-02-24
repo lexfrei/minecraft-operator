@@ -64,6 +64,11 @@ technical_stack:
       version: "v1.3.5"
       purpose: "RCON protocol implementation for graceful server shutdown"
 
+    external-snapshotter:
+      package: "github.com/kubernetes-csi/external-snapshotter/client/v8"
+      version: "v8.4.0"
+      purpose: "VolumeSnapshot API types for backup functionality"
+
     errors:
       package: "github.com/cockroachdb/errors"
       version: "v1.11.3"
@@ -183,6 +188,7 @@ structure:
       - "internal/controller/plugin_controller.go - Plugin reconciliation"
       - "internal/controller/papermcserver_controller.go - PaperMCServer reconciliation"
       - "internal/controller/update_controller.go - Maintenance window updates"
+      - "internal/controller/backup_controller.go - VolumeSnapshot backup scheduling and execution"
 
     pkg:
       - "pkg/solver/ - Constraint solver implementation"
@@ -197,6 +203,9 @@ structure:
       - "pkg/registry/ - Docker Hub Registry API client"
       - "pkg/registry/client.go - Docker Hub tag listing and verification"
       - "pkg/registry/types.go - Docker Hub API response types"
+      - "pkg/backup/ - VolumeSnapshot backup functionality"
+      - "pkg/backup/snapshotter.go - VolumeSnapshot creation and retention"
+      - "pkg/backup/hooks.go - RCON pre/post snapshot hooks"
       - "pkg/rcon/ - RCON integration"
       - "pkg/rcon/client.go - RCON client wrapper"
       - "pkg/selector/ - Label selector matching"
@@ -265,6 +274,7 @@ custom_resources:
       - "updateSchedule.maintenanceWindow.cron - Update application schedule"
       - "gracefulShutdown.timeout - Must match terminationGracePeriodSeconds"
       - "rcon - RCON configuration for graceful shutdown"
+      - "backup - VolumeSnapshot backup configuration (schedule, retention, beforeUpdate)"
       - "podTemplate - StatefulSet pod specification"
     status_fields:
       - "currentPaperVersion - Observed running version"
@@ -275,6 +285,7 @@ custom_resources:
       - "availableUpdate - Solver result for next update"
       - "lastUpdate - History of previous update"
       - "updateBlocked - Update blocking information (blocked bool, reason string, blockedBy)"
+      - "backup - Backup status (lastBackup record, backupCount)"
 
 environment_variables:
   # RCON Configuration (per-server, from Secret)
@@ -1174,6 +1185,31 @@ decisions:
       helm_value: "crds.manage (default: true)"
       operator_flag: "--manage-crds (default: true)"
 
+  - id: ADR-031
+    date: 2026-02-24
+    status: accepted
+    decision: "VolumeSnapshot-based backups with RCON consistency hooks"
+    reasoning: "Minecraft world data must be flushed to disk before snapshot to avoid corruption. Using Kubernetes VolumeSnapshot API provides native, storage-agnostic backup mechanism. RCON hooks (save-all, save-off before snapshot; save-on after) ensure data consistency. Separate BackupReconciler keeps backup logic decoupled from update logic."
+    alternatives:
+      - "Velero: External dependency, not integrated with RCON hooks, overkill for single-PVC snapshots"
+      - "File-level backup (tar/rsync): Requires sidecar, slower, not crash-consistent without RCON hooks"
+      - "Embed backup in UpdateReconciler: Violates single responsibility, complicates update logic"
+    impact: "New BackupReconciler, new pkg/backup/ package, BackupSpec/BackupStatus in PaperMCServer CRD, VolumeSnapshot RBAC, external-snapshotter client dependency"
+    components:
+      backup_controller: "internal/controller/backup_controller.go - Cron scheduling, manual trigger, orchestration"
+      snapshotter: "pkg/backup/snapshotter.go - VolumeSnapshot CRUD with labels and owner references"
+      hooks: "pkg/backup/hooks.go - RCON pre/post snapshot hooks (save-all/save-off/save-on)"
+      triggers:
+        - "Scheduled: cron expression in spec.backup.schedule"
+        - "Before update: automatic when spec.backup.beforeUpdate=true (default)"
+        - "Manual: annotation mc.k8s.lex.la/backup-now with Unix timestamp"
+      retention: "spec.backup.retention.maxCount (default: 10), oldest snapshots deleted first"
+      owner_references: "VolumeSnapshots have ownerReference to PaperMCServer for cascade deletion"
+    edge_cases:
+      crd_missing: "When VolumeSnapshot CRD (snapshot.storage.k8s.io) is not installed: scheduled/manual backups set BackupReady=False condition and skip; pre-update backups return error to abort the update (user explicitly requested backup protection)"
+      post_snapshot_guarantee: "PostSnapshotHook (save-on) always runs via defer, even on panic or PreSnapshotHook failure, with a 10s timeout to prevent indefinite blocking"
+      concurrent_backups: "Per-server mutex (sync.Map) serializes backup execution; no two backups for the same server run in parallel"
+
 phases:
   phase_1_mvp:
     description: "Minimum viable product"
@@ -1218,7 +1254,6 @@ phases:
     features:
       - "Multi-cluster federation"
       - "GitOps integration (Flux/ArgoCD)"
-      - "Backup/restore integration"
       - "Advanced scheduling (blue-green)"
       - "Plugin dependency graph visualization"
 

@@ -8,6 +8,7 @@ require (
 	github.com/cockroachdb/errors v1.12.0
 	github.com/go-logr/logr v1.4.3
 	github.com/gorcon/rcon v1.4.0
+	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.4.0
 	github.com/lexfrei/go-hangar v0.0.0-20251031132727-083bf84be6ba
 	github.com/lexfrei/goPaperMC v0.0.3
 	github.com/oapi-codegen/runtime v1.1.2

@@ -36,4 +36,9 @@ const (
 	// Value should be a Unix timestamp (seconds since epoch) of when the annotation was set.
 	// Annotations older than 5 minutes are ignored to prevent stale triggers.
 	AnnotationApplyNow = "mc.k8s.lex.la/apply-now"
+
+	// AnnotationBackupNow triggers immediate VolumeSnapshot backup.
+	// Value should be a Unix timestamp (seconds since epoch) of when the annotation was set.
+	// Annotations older than 5 minutes are ignored to prevent stale triggers.
+	AnnotationBackupNow = "mc.k8s.lex.la/backup-now"
 )

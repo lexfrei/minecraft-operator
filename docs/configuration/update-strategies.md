@@ -835,6 +835,27 @@ updateSchedule:
 - `maintenanceWindow.cron`: When to actually apply updates
 - Allows discovery without immediate application
 
+### Pre-Update Backups
+
+When `spec.backup.beforeUpdate` is `true` (the default), the operator automatically creates a VolumeSnapshot before applying any server or plugin update. If the backup fails for any reason, the update is aborted to prevent data loss. This includes:
+
+- RCON hook failures (save-all, save-off)
+- VolumeSnapshot creation errors
+- VolumeSnapshot CRD not installed in the cluster
+
+```yaml
+spec:
+  backup:
+    enabled: true
+    beforeUpdate: true  # Default — backup before every update
+```
+
+This ensures you always have a recovery point before any change.
+
+> **Note:** If `backup.enabled: true` and `beforeUpdate: true` but the VolumeSnapshot CRD
+> (`snapshot.storage.k8s.io`) is not installed in the cluster, updates will be blocked until
+> the CRD is installed or `beforeUpdate` is set to `false`.
+
 ### Graceful Shutdown
 
 All updates use graceful shutdown via RCON:
