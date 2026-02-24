@@ -450,6 +450,21 @@ spec:
   instanceSelector:
     matchLabels:
       env: staging
+---
+# URL-based plugin source (direct JAR download)
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: Plugin
+metadata:
+  name: custom-plugin-url
+spec:
+  source:
+    type: url
+    url: "https://github.com/user/repo/releases/download/v1.0/custom-plugin-1.0.jar"
+    checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  updateStrategy: pinned
+  instanceSelector:
+    matchLabels:
+      app: minecraft
 ```
 
 ## Constraint Solver

@@ -575,11 +575,15 @@ func (r *UpdateReconciler) applyPluginUpdates(
 		}
 
 		// Re-validate URL before download as defense-in-depth against SSRF.
-		if err := plugins.ValidateDownloadURL(downloadURL); err != nil {
-			downloadErrors = append(downloadErrors,
-				errors.Wrapf(err, "plugin %s download URL validation failed", pluginName))
+		// Only applies to user-provided URLs (type: url); API-sourced URLs
+		// (Hangar, Modrinth) are trusted from their respective APIs.
+		if plugin.Spec.Source.Type == "url" {
+			if err := plugins.ValidateDownloadURL(downloadURL); err != nil {
+				downloadErrors = append(downloadErrors,
+					errors.Wrapf(err, "plugin %s download URL validation failed", pluginName))
 
-			continue
+				continue
+			}
 		}
 
 		// Download plugin

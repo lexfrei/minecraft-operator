@@ -54,9 +54,6 @@ type JARMetadata struct {
 	Version string
 	// APIVersion is the Minecraft API version (e.g. "1.21").
 	APIVersion string
-	// SHA256 is the computed hash of the downloaded JAR.
-	// Only set by FetchJARMetadata; ParseJARMetadata leaves this empty.
-	SHA256 string
 }
 
 // pluginYML represents the relevant fields from a Minecraft plugin.yml or paper-plugin.yml.
@@ -153,7 +150,8 @@ func isBlockedHost(host string) bool {
 	}
 
 	// Cloud provider metadata endpoints.
-	if lower == "metadata.google.internal" {
+	if lower == "metadata.google.internal" ||
+		lower == "instance-data.ec2.internal" {
 		return true
 	}
 

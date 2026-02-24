@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/lexfrei/minecraft-operator/pkg/plugins"
@@ -55,7 +56,8 @@ func TestValidateDownloadURL_BlockedHosts(t *testing.T) {
 		{"localhost hostname", "https://localhost/plugin.jar"},
 		{"kubernetes service DNS", "https://kubernetes.default.svc/plugin.jar"},
 		{"kubernetes cluster-local DNS", "https://myservice.default.svc.cluster.local/plugin.jar"},
-		{"cloud metadata endpoint", "https://metadata.google.internal/computeMetadata/v1/"},
+		{"GCP metadata endpoint", "https://metadata.google.internal/computeMetadata/v1/"},
+		{"AWS metadata endpoint", "https://instance-data.ec2.internal/latest/meta-data/"},
 		{"IPv6 loopback", "https://[::1]/plugin.jar"},
 		{"unspecified address", "https://0.0.0.0/plugin.jar"},
 		{"loopback IP with port", "https://127.0.0.1:8080/plugin.jar"},
@@ -188,7 +190,6 @@ func TestParseJARMetadata(t *testing.T) {
 		assert.Equal(t, "TestPlugin", meta.Name)
 		assert.Equal(t, "2.5.0", meta.Version)
 		assert.Equal(t, "1.21", meta.APIVersion)
-		assert.Empty(t, meta.SHA256, "ParseJARMetadata should not set SHA256")
 	})
 
 	t.Run("returns error for invalid ZIP", func(t *testing.T) {
@@ -203,6 +204,17 @@ func TestParseJARMetadata(t *testing.T) {
 		_, err := plugins.ParseJARMetadata(jarBytes)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin.yml")
+	})
+
+	t.Run("rejects oversized plugin.yml to prevent zip bomb", func(t *testing.T) {
+		// Create a plugin.yml that decompresses to >10MB (maxPluginYMLSize).
+		// Repeated content compresses extremely well in ZIP, keeping the test fast.
+		oversized := strings.Repeat("key: value\n", 1024*1024+1) // ~11MB
+		jarBytes := testutil.BuildTestJAR("plugin.yml", oversized)
+
+		_, err := plugins.ParseJARMetadata(jarBytes)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds maximum size")
 	})
 }
 

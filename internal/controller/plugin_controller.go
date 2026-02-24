@@ -410,8 +410,12 @@ func (r *PluginReconciler) resolveVersionWithFallback(
 
 // urlCacheValid checks whether cached URL metadata is still valid.
 // Returns true if the cached DownloadURL matches the current spec URL,
-// the cache is not older than urlCacheTTL, spec.version hasn't changed,
-// and (if a checksum is specified) the cached hash matches the spec checksum.
+// the cache is not older than urlCacheTTL, and (if a checksum is specified)
+// the cached hash matches the spec checksum.
+//
+// Note: spec.version changes are not tracked here. If the user changes
+// spec.version (used as fallback when JAR has no version metadata),
+// the change takes effect when the cache expires (urlCacheTTL).
 func (r *PluginReconciler) urlCacheValid(plugin *mcv1beta1.Plugin) bool {
 	if len(plugin.Status.AvailableVersions) == 0 {
 		return false
@@ -424,13 +428,6 @@ func (r *PluginReconciler) urlCacheValid(plugin *mcv1beta1.Plugin) bool {
 
 	// Expire cache after TTL. Zero CachedAt is treated as expired.
 	if cached.CachedAt.IsZero() || time.Since(cached.CachedAt.Time) > urlCacheTTL {
-		return false
-	}
-
-	// Invalidate cache when spec.version changes. This is used as a fallback
-	// version when the JAR has no version in plugin.yml. Conservative check:
-	// may cause an extra download if spec.version differs from JAR version.
-	if plugin.Spec.Version != "" && cached.Version != plugin.Spec.Version {
 		return false
 	}
 
