@@ -1,17 +1,7 @@
 /*
-Copyright 2025.
+Copyright 2026, Aleksei Sviridkin.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: BSD-3-Clause
 */
 
 package testutil
@@ -54,4 +44,35 @@ func (m *MockPodExecutor) ExecInPod(
 	})
 
 	return m.Output, m.Err
+}
+
+// MockPodExecutorFunc records calls and delegates to a custom function for responses.
+// Use this when different commands need different outputs (e.g., curl → sha256sum → rm).
+type MockPodExecutorFunc struct {
+	mu       sync.Mutex
+	Calls    []ExecCall
+	ExecFunc func(ctx context.Context, namespace, podName, container string, command []string) ([]byte, error)
+}
+
+// ExecInPod records the call and delegates to ExecFunc.
+func (m *MockPodExecutorFunc) ExecInPod(
+	ctx context.Context,
+	namespace, podName, container string,
+	command []string,
+) ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Calls = append(m.Calls, ExecCall{
+		Namespace: namespace,
+		PodName:   podName,
+		Container: container,
+		Command:   command,
+	})
+
+	if m.ExecFunc != nil {
+		return m.ExecFunc(ctx, namespace, podName, container, command)
+	}
+
+	return nil, nil
 }

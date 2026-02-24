@@ -1,17 +1,7 @@
 /*
-Copyright 2025.
+Copyright 2026, Aleksei Sviridkin.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: BSD-3-Clause
 */
 
 package controller
@@ -22,11 +12,14 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
+	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/rcon"
 	"github.com/lexfrei/minecraft-operator/pkg/testutil"
 	. "github.com/onsi/ginkgo/v2"
@@ -1066,6 +1059,53 @@ var _ = Describe("UpdateController", func() {
 		})
 	})
 
+	Context("httpClient fallback behavior", func() {
+		It("should use HTTPClient field when set", func() {
+			customClient := &http.Client{Timeout: 42 * time.Second}
+			reconciler := &UpdateReconciler{
+				Client:     k8sClient,
+				Scheme:     k8sClient.Scheme(),
+				HTTPClient: customClient,
+			}
+			Expect(reconciler.httpClient()).To(Equal(customClient))
+		})
+
+		It("should create default client with timeout when HTTPClient is nil", func() {
+			reconciler := &UpdateReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			defaultClient := reconciler.httpClient()
+			Expect(defaultClient).NotTo(BeNil())
+			Expect(defaultClient.Timeout).To(Equal(downloadTimeout))
+		})
+	})
+
+	Context("curl timeout flags", func() {
+		It("should include connect-timeout and max-time flags", func() {
+			mockExec := &testutil.MockPodExecutor{}
+			reconciler := &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: mockExec,
+			}
+
+			server := &mcv1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-timeout-server", Namespace: "default",
+				},
+			}
+			_ = reconciler.downloadPluginToServer(ctx, server, "test-plugin",
+				"https://example.com/plugin.jar", "")
+
+			Expect(mockExec.Calls).To(HaveLen(1))
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--connect-timeout"),
+				"curl should set connection timeout")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--max-time"),
+				"curl should set maximum transfer time")
+		})
+	})
+
 	Context("PodExecutor-based plugin operations", func() {
 		It("should use PodExecutor for downloading plugins instead of kubectl", func() {
 			mockExec := &testutil.MockPodExecutor{}
@@ -1092,6 +1132,176 @@ var _ = Describe("UpdateController", func() {
 			Expect(mockExec.Calls[0].Namespace).To(Equal("default"))
 			Expect(mockExec.Calls[0].Container).To(Equal("papermc"))
 			Expect(mockExec.Calls[0].Command).To(ContainElement("curl"))
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--proto"),
+				"curl should restrict protocol to HTTPS to prevent redirect-based SSRF")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("=https"),
+				"curl --proto flag should only allow HTTPS")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--max-filesize"),
+				"curl should limit download size to prevent PVC exhaustion")
+			Expect(mockExec.Calls[0].Command).To(ContainElement(strconv.Itoa(plugins.MaxJARSize)),
+				"curl --max-filesize should match MaxJARSize constant")
+			// Verify -- separator prevents URL-as-flag injection.
+			// The downloadURL must come AFTER -- to prevent a malicious URL
+			// starting with "-" from being interpreted as a curl flag.
+			dashDashIdx := -1
+			urlIdx := -1
+			for i, arg := range mockExec.Calls[0].Command {
+				if arg == "--" {
+					dashDashIdx = i
+				}
+				if arg == "https://example.com/plugin.jar" {
+					urlIdx = i
+				}
+			}
+			Expect(dashDashIdx).To(BeNumerically(">", 0), "curl args must include -- separator")
+			Expect(urlIdx).To(BeNumerically(">", dashDashIdx),
+				"download URL must come after -- to prevent flag injection")
+
+			// Verify User-Agent header is set to identify the operator in server logs.
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--user-agent"),
+				"curl should set User-Agent header with --user-agent flag")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("minecraft-operator"),
+				"curl User-Agent should identify as minecraft-operator")
+
+			// Verify all curl flags use full names (project standard: no short flags).
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--fail"),
+				"curl should use --fail, not -f")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--silent"),
+				"curl should use --silent, not -s")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--show-error"),
+				"curl should use --show-error, not -S")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--location"),
+				"curl should use --location, not -L")
+			Expect(mockExec.Calls[0].Command).To(ContainElement("--output"),
+				"curl should use --output, not -o")
+			for _, arg := range mockExec.Calls[0].Command {
+				Expect(arg).NotTo(Equal("-fsSL"),
+					"curl must not use combined short flags; use full flag names")
+				Expect(arg).NotTo(Equal("-A"),
+					"curl must not use -A; use --user-agent")
+				Expect(arg).NotTo(Equal("-o"),
+					"curl must not use -o; use --output")
+			}
+		})
+
+		It("should remove JAR from server when checksum verification fails", func() {
+			callCount := 0
+			mockExec := &testutil.MockPodExecutorFunc{
+				ExecFunc: func(_ context.Context, _, _, _ string, cmd []string) ([]byte, error) {
+					callCount++
+					switch {
+					case len(cmd) > 0 && cmd[0] == "curl":
+						return []byte(""), nil
+					case len(cmd) > 0 && cmd[0] == "sha256sum":
+						// sha256sum returns wrong hash in "<hash>  <path>" format
+						return []byte("0000000000000000000000000000000000000000000000000000000000000000  /data/plugins/update/test-plugin.jar\n"), nil
+					case len(cmd) > 0 && cmd[0] == "rm":
+						return []byte(""), nil
+					default:
+						return nil, nil
+					}
+				},
+			}
+			reconciler := &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: mockExec,
+			}
+
+			server := &mcv1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cleanup-server",
+					Namespace: "default",
+				},
+			}
+
+			err := reconciler.downloadPluginToServer(ctx, server, "test-plugin",
+				"https://example.com/plugin.jar", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("checksum mismatch"))
+
+			// Verify cleanup: rm command was called to remove the invalid JAR.
+			var rmCall *testutil.ExecCall
+			for i := range mockExec.Calls {
+				if len(mockExec.Calls[i].Command) > 0 && mockExec.Calls[i].Command[0] == "rm" {
+					rmCall = &mockExec.Calls[i]
+					break
+				}
+			}
+			Expect(rmCall).NotTo(BeNil(), "rm must be called to remove JAR after checksum mismatch")
+			Expect(rmCall.Command).To(ContainElement("/data/plugins/update/test-plugin.jar"),
+				"rm should target the downloaded JAR file")
+		})
+
+		It("should block download for URL plugin with private/internal download URL", func() {
+			mockExec := &testutil.MockPodExecutor{}
+			reconciler := &UpdateReconciler{
+				Client:      k8sClient,
+				Scheme:      k8sClient.Scheme(),
+				PodExecutor: mockExec,
+			}
+
+			// Create a Plugin with URL source and a blocked download URL in status.
+			pluginName := "test-ssrf-url-plugin"
+			plugin := &mcv1beta1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pluginName,
+					Namespace: testNamespace,
+				},
+				Spec: mcv1beta1.PluginSpec{
+					Source: mcv1beta1.PluginSource{
+						Type: "url",
+						URL:  "https://169.254.169.254/latest/meta-data/",
+					},
+					UpdateStrategy:   "latest",
+					InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"ssrf-test": "true"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, plugin) }()
+
+			// Set status with blocked download URL.
+			plugin.Status = mcv1beta1.PluginStatus{
+				AvailableVersions: []mcv1beta1.PluginVersionInfo{
+					{
+						Version:           "1.0.0",
+						DownloadURL:       "https://169.254.169.254/latest/meta-data/",
+						Hash:              "abc123",
+						MinecraftVersions: []string{"1.21"},
+						CachedAt:          metav1.Now(),
+						ReleasedAt:        metav1.Now(),
+					},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, plugin)).To(Succeed())
+
+			server := &mcv1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ssrf-server",
+					Namespace: testNamespace,
+				},
+				Status: mcv1beta1.PaperMCServerStatus{
+					Plugins: []mcv1beta1.ServerPluginStatus{
+						{
+							PluginRef: mcv1beta1.PluginRef{
+								Name:      pluginName,
+								Namespace: testNamespace,
+							},
+							ResolvedVersion: "1.0.0",
+						},
+					},
+				},
+			}
+
+			ctx := context.Background()
+			err := reconciler.applyPluginUpdates(ctx, server)
+			// The function should return an error because the download URL is blocked.
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("blocked"))
+
+			// PodExecutor should NOT have been called (download blocked before execution).
+			Expect(mockExec.Calls).To(BeEmpty(),
+				"PodExecutor should not be called for SSRF-blocked download URLs")
 		})
 
 		It("should use PodExecutor for deleting plugin JARs instead of kubectl", func() {
@@ -1125,8 +1335,11 @@ var _ = Describe("UpdateController", func() {
 			Expect(mockExec.Calls).To(HaveLen(1))
 			Expect(mockExec.Calls[0].PodName).To(Equal("test-exec-server-0"))
 			Expect(mockExec.Calls[0].Container).To(Equal("papermc"))
-			// Verify the rm command is in the command args
-			Expect(mockExec.Calls[0].Command[2]).To(ContainSubstring("rm -f /data/plugins/test-plugin-1.0.jar"))
+			// Verify rm uses direct args (no sh -c) to avoid shell injection.
+			Expect(mockExec.Calls[0].Command[0]).To(Equal("rm"))
+			Expect(mockExec.Calls[0].Command[1]).To(Equal("--force"))
+			Expect(mockExec.Calls[0].Command).To(ContainElement("/data/plugins/test-plugin-1.0.jar"))
+			Expect(mockExec.Calls[0].Command).To(ContainElement("/data/plugins/update/test-plugin-1.0.jar"))
 		})
 	})
 
@@ -1711,9 +1924,11 @@ var _ = Describe("UpdateController", func() {
 			By("verifying rm command deletes from both directories")
 			Expect(mockExecutor.Calls).To(HaveLen(1))
 			rmCommand := mockExecutor.Calls[0].Command
-			fullCmd := rmCommand[len(rmCommand)-1] // last arg to "sh -c" is the command string
-			Expect(fullCmd).To(ContainSubstring("/data/plugins/plugin-both-dirs.jar"))
-			Expect(fullCmd).To(ContainSubstring("/data/plugins/update/plugin-both-dirs.jar"))
+			// rm now uses direct args (no sh -c) to avoid shell injection.
+			Expect(rmCommand[0]).To(Equal("rm"))
+			Expect(rmCommand[1]).To(Equal("--force"))
+			Expect(rmCommand).To(ContainElement("/data/plugins/plugin-both-dirs.jar"))
+			Expect(rmCommand).To(ContainElement("/data/plugins/update/plugin-both-dirs.jar"))
 		})
 
 		It("should immediately mark as deleted when InstalledJARName is empty", func() {

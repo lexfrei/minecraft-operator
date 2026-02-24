@@ -27,10 +27,11 @@ spec:
 **Required** — Defines where to fetch the plugin.
 
 | Field | Description |
-|-------|-------------|
+| --- | --- |
 | `type` | Repository type (see supported sources below) |
 | `project` | Plugin identifier (for hangar) |
-| `url` | Direct download URL (planned) |
+| `url` | Direct download URL (for type: url) |
+| `checksum` | Optional SHA256 hash for integrity verification (for type: url) |
 
 ```yaml
 spec:
@@ -44,12 +45,49 @@ spec:
     **Currently implemented:**
 
     - `hangar` — PaperMC Hangar ([hangar.papermc.io](https://hangar.papermc.io))
+    - `url` — Direct URL download (GitHub releases, private repos, etc.)
 
     **Planned (not yet implemented):**
 
     - `modrinth` — [#2](https://github.com/lexfrei/minecraft-operator/issues/2)
     - `spigot` — [#3](https://github.com/lexfrei/minecraft-operator/issues/3)
-    - `url` — [#4](https://github.com/lexfrei/minecraft-operator/issues/4)
+
+#### URL Source
+
+For plugins not published on marketplaces, use `type: url` with a direct HTTPS download link.
+
+The operator downloads the JAR and extracts metadata (name, version, API version) from
+`plugin.yml` or `paper-plugin.yml` inside the archive. If extraction fails, `spec.version`
+is used as fallback.
+
+```yaml
+spec:
+  source:
+    type: url
+    url: "https://github.com/example/plugin/releases/download/v1.0.0/plugin-1.0.0.jar"
+    checksum: "aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233"
+```
+
+!!! info "Checksum Verification"
+
+    The `checksum` field accepts a SHA256 hex string (64 characters). If provided, the
+    operator verifies the downloaded JAR against this hash. If omitted, the operator
+    logs a warning but proceeds with the unverified download.
+
+!!! note "Update Strategy for URL Sources"
+
+    For URL sources, there is only one version (the JAR at the URL), so strategy
+    differences only affect how the solver processes compatibility. Use `latest` for
+    simplicity. Note that `updateDelay` is measured from the time the operator first
+    downloads the JAR, not from the plugin's actual release date. Validation happens
+    at reconciliation time, not at CR creation time (webhook validation is planned).
+
+!!! note "URL Metadata Caching"
+
+    The operator caches URL plugin metadata for **1 hour** to avoid re-downloading
+    the JAR on every reconciliation cycle. The cache is invalidated when `spec.source.url`
+    or `spec.source.checksum` changes. Changes to `spec.version` (the fallback version)
+    take effect when the cache expires.
 
 ### updateStrategy
 
@@ -176,7 +214,7 @@ status:
         - "1.20.4"
         - "1.21.1"
       downloadURL: "https://..."
-      hash: "sha256:abc123..."
+      hash: "aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233"
       cachedAt: "2024-01-15T10:00:00Z"
       releasedAt: "2024-01-10T12:00:00Z"
 ```
@@ -289,6 +327,25 @@ spec:
         values:
           - creative
           - build
+
+---
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: Plugin
+metadata:
+  name: custom-plugin
+  namespace: minecraft
+spec:
+  source:
+    type: url
+    url: "https://github.com/example/plugin/releases/download/v1.2.0/plugin-1.2.0.jar"
+    checksum: "aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233"
+
+  version: "1.2.0"  # Fallback if plugin.yml extraction fails
+  updateStrategy: "latest"
+
+  instanceSelector:
+    matchLabels:
+      environment: production
 ```
 
 ## Plugin Deletion

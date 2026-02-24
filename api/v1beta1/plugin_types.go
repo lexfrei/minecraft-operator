@@ -1,17 +1,7 @@
 /*
-Copyright 2025.
+Copyright 2026, Aleksei Sviridkin.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: BSD-3-Clause
 */
 
 package v1beta1
@@ -23,16 +13,22 @@ import (
 // PluginSource defines the source of a plugin.
 type PluginSource struct {
 	// Type specifies the plugin repository type.
-	// +kubebuilder:validation:Enum=hangar;modrinth;spigot;url
+	// +kubebuilder:validation:Enum=hangar;url
 	Type string `json:"type"`
 
-	// Project is the plugin project identifier (for hangar/modrinth/spigot).
+	// Project is the plugin project identifier (for hangar).
 	// +optional
 	Project string `json:"project,omitempty"`
 
 	// URL is the direct download URL (for type: url).
 	// +optional
 	URL string `json:"url,omitempty"`
+
+	// Checksum is the expected SHA256 hash of the JAR file (for type: url).
+	// If not provided, the operator logs a warning about unverified downloads.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[a-fA-F0-9]{64}$`
+	Checksum string `json:"checksum,omitempty"`
 }
 
 // CompatibilityOverride allows manual compatibility specification.

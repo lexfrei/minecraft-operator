@@ -49,10 +49,8 @@ const (
 
 // Defines values for PluginSourceType.
 const (
-	Hangar   PluginSourceType = "hangar"
-	Modrinth PluginSourceType = "modrinth"
-	Spigot   PluginSourceType = "spigot"
-	Url      PluginSourceType = "url"
+	Hangar PluginSourceType = "hangar"
+	Url    PluginSourceType = "url"
 )
 
 // Defines values for RepositoryStatus.
@@ -362,8 +360,6 @@ type PluginDetail struct {
 	// SourceType Type of plugin repository.
 	//
 	// - **hangar**: PaperMC Hangar repository (hangar.papermc.io)
-	// - **modrinth**: Modrinth repository (modrinth.com)
-	// - **spigot**: SpigotMC repository (spigotmc.org)
 	// - **url**: Direct URL download (no version management)
 	SourceType PluginSourceType `json:"sourceType"`
 
@@ -393,15 +389,17 @@ type PluginListResponse struct {
 
 // PluginSource Plugin source configuration
 type PluginSource struct {
+	// Checksum Expected SHA256 hash of the JAR file (for url type).
+	// If not provided, downloads will not be verified.
+	Checksum *string `json:"checksum,omitempty"`
+
 	// Project Project identifier in the repository.
-	// Required for hangar, modrinth, and spigot types.
+	// Required for hangar type.
 	Project *string `json:"project,omitempty"`
 
 	// Type Type of plugin repository.
 	//
 	// - **hangar**: PaperMC Hangar repository (hangar.papermc.io)
-	// - **modrinth**: Modrinth repository (modrinth.com)
-	// - **spigot**: SpigotMC repository (spigotmc.org)
 	// - **url**: Direct URL download (no version management)
 	Type PluginSourceType `json:"type"`
 
@@ -413,8 +411,6 @@ type PluginSource struct {
 // PluginSourceType Type of plugin repository.
 //
 // - **hangar**: PaperMC Hangar repository (hangar.papermc.io)
-// - **modrinth**: Modrinth repository (modrinth.com)
-// - **spigot**: SpigotMC repository (spigotmc.org)
 // - **url**: Direct URL download (no version management)
 type PluginSourceType string
 
@@ -448,8 +444,6 @@ type PluginSummary struct {
 	// SourceType Type of plugin repository.
 	//
 	// - **hangar**: PaperMC Hangar repository (hangar.papermc.io)
-	// - **modrinth**: Modrinth repository (modrinth.com)
-	// - **spigot**: SpigotMC repository (spigotmc.org)
 	// - **url**: Direct URL download (no version management)
 	SourceType PluginSourceType `json:"sourceType"`
 

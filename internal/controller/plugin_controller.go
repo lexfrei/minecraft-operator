@@ -1,24 +1,18 @@
 /*
-Copyright 2025.
+Copyright 2026, Aleksei Sviridkin.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: BSD-3-Clause
 */
 
 package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"log/slog"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -52,15 +46,36 @@ const (
 	repositoryStatusAvailable   = "available"
 	repositoryStatusUnavailable = "unavailable"
 	repositoryStatusOrphaned    = "orphaned"
+
+	// urlCacheTTL is the maximum age of cached URL plugin metadata before re-fetching.
+	urlCacheTTL = 1 * time.Hour
+
+	reasonChecksumMismatch = "ChecksumMismatch"
 )
 
+// errChecksumMismatch is a sentinel error for checksum verification failures.
+// This is a permanent user error that should not trigger periodic requeue.
+var errChecksumMismatch = errors.New("checksum mismatch")
+
+// errInvalidURL is a sentinel error for URL validation failures (bad scheme, SSRF, empty URL).
+// This is a permanent user error that should not trigger periodic requeue.
+var errInvalidURL = errors.New("invalid URL")
+
+// errUnsupportedSourceType is a sentinel error for unimplemented source types.
+// This is a permanent user error that should not trigger periodic requeue.
+var errUnsupportedSourceType = errors.New("unsupported source type")
+
 // PluginReconciler reconciles a Plugin object.
+// Note: URL-source plugins download entire JARs (up to MaxJARSize=100MB) into memory
+// during metadata extraction. The default MaxConcurrentReconciles=1 keeps this safe;
+// increasing concurrency will multiply peak memory usage accordingly.
 type PluginReconciler struct {
 	client.Client
 	Scheme       *runtime.Scheme
 	PluginClient plugins.PluginClient
 	Solver       solver.Solver
 	Metrics      metrics.Recorder
+	HTTPClient   *http.Client
 }
 
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=plugins,verbs=get;list;watch;create;update;patch;delete
@@ -183,11 +198,59 @@ func (r *PluginReconciler) syncPluginMetadata(
 	ctx context.Context,
 	plugin *mcv1beta1.Plugin,
 ) ([]plugins.PluginVersion, ctrl.Result, error) {
-	allVersions, repoErr := r.fetchPluginMetadata(ctx, plugin)
+	allVersions, cacheHit, repoErr := r.fetchPluginMetadata(ctx, plugin)
 
 	if repoErr != nil {
+		// Checksum mismatch is a permanent user error — do not requeue periodically.
+		// The user must fix spec.source.checksum; the watch triggers re-reconciliation.
+		if errors.Is(repoErr, errChecksumMismatch) {
+			slog.ErrorContext(ctx, "Checksum verification failed", "error", repoErr, "plugin", plugin.Name)
+			plugin.Status.RepositoryStatus = repositoryStatusUnavailable
+			r.setCondition(plugin, conditionTypeRepositoryAvailable, metav1.ConditionFalse,
+				reasonChecksumMismatch, repoErr.Error())
+			r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionFalse,
+				reasonChecksumMismatch, "Cannot resolve version: checksum mismatch")
+
+			return nil, ctrl.Result{}, nil
+		}
+
+		// Invalid URL (bad scheme, SSRF-blocked host, empty) is a permanent user error.
+		// The user must fix spec.source.url; the watch triggers re-reconciliation.
+		if errors.Is(repoErr, errInvalidURL) {
+			slog.ErrorContext(ctx, "URL validation failed", "error", repoErr, "plugin", plugin.Name)
+			plugin.Status.RepositoryStatus = repositoryStatusUnavailable
+			r.setCondition(plugin, conditionTypeRepositoryAvailable, metav1.ConditionFalse,
+				reasonUnavailable, repoErr.Error())
+			r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionFalse,
+				reasonUnavailable, "Cannot resolve version: invalid URL")
+
+			return nil, ctrl.Result{}, nil
+		}
+
+		// Unsupported source type (e.g. modrinth, spigot) is a permanent user error.
+		// The user must change spec.source.type; the watch triggers re-reconciliation.
+		if errors.Is(repoErr, errUnsupportedSourceType) {
+			slog.ErrorContext(ctx, "Unsupported source type", "error", repoErr, "plugin", plugin.Name,
+				"sourceType", plugin.Spec.Source.Type)
+			plugin.Status.RepositoryStatus = repositoryStatusUnavailable
+			r.setCondition(plugin, conditionTypeRepositoryAvailable, metav1.ConditionFalse,
+				reasonUnavailable, repoErr.Error())
+			r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionFalse,
+				reasonUnavailable, "Cannot resolve version: unsupported source type")
+
+			return nil, ctrl.Result{}, nil
+		}
+
 		slog.ErrorContext(ctx, "Failed to fetch plugin metadata, using cached versions", "error", repoErr)
+
 		return r.handleRepositoryError(plugin, repoErr)
+	}
+
+	// On cache hit, skip updating timestamps and version info —
+	// the status already contains the correct cached data.
+	// Refreshing CachedAt here would prevent TTL from ever expiring.
+	if cacheHit {
+		return allVersions, ctrl.Result{}, nil
 	}
 
 	// Repository available - update cache
@@ -240,14 +303,32 @@ func (r *PluginReconciler) findMatchedServers(
 }
 
 // fetchPluginMetadata fetches plugin metadata from the repository.
+// Returns the versions, a cacheHit flag (true if cached data was used without
+// re-downloading), and an error. When cacheHit is true, the caller should
+// skip updating LastFetched and AvailableVersions to preserve TTL correctness.
 func (r *PluginReconciler) fetchPluginMetadata(
 	ctx context.Context,
 	plugin *mcv1beta1.Plugin,
-) ([]plugins.PluginVersion, error) {
-	if plugin.Spec.Source.Type != "hangar" {
-		return nil, errors.Newf("unsupported source type: %s", plugin.Spec.Source.Type)
+) ([]plugins.PluginVersion, bool, error) {
+	switch plugin.Spec.Source.Type {
+	case "url":
+		versions, cacheHit, err := r.fetchURLMetadata(ctx, plugin)
+		return versions, cacheHit, err
+	case "hangar":
+		versions, err := r.fetchHangarMetadata(ctx, plugin)
+		return versions, false, err
+	default:
+		return nil, false, errors.Mark(
+			errors.Newf("source type %q is not yet implemented", plugin.Spec.Source.Type),
+			errUnsupportedSourceType)
 	}
+}
 
+// fetchHangarMetadata fetches plugin metadata from the Hangar repository.
+func (r *PluginReconciler) fetchHangarMetadata(
+	ctx context.Context,
+	plugin *mcv1beta1.Plugin,
+) ([]plugins.PluginVersion, error) {
 	apiStart := time.Now()
 
 	versions, err := r.PluginClient.GetVersions(ctx, plugin.Spec.Source.Project)
@@ -261,6 +342,171 @@ func (r *PluginReconciler) fetchPluginMetadata(
 	}
 
 	return versions, nil
+}
+
+// fetchURLMetadata fetches plugin metadata by downloading the JAR from a direct URL.
+// Uses a two-phase approach: DownloadJAR (HTTP failure = repo unavailable) then
+// ParseJARMetadata (parse failure = fallback with computed hash, repo available).
+// Cached metadata is returned if the URL has not changed since the last fetch.
+func (r *PluginReconciler) fetchURLMetadata(
+	ctx context.Context,
+	plugin *mcv1beta1.Plugin,
+) ([]plugins.PluginVersion, bool, error) {
+	if err := plugins.ValidateDownloadURL(plugin.Spec.Source.URL); err != nil {
+		return nil, false, errors.Mark(errors.Wrap(err, "invalid URL"), errInvalidURL)
+	}
+
+	// Use cached metadata if URL and checksum haven't changed.
+	if r.urlCacheValid(plugin) {
+		slog.DebugContext(ctx, "Using cached metadata for URL plugin",
+			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
+
+		return convertCachedVersions(plugin.Status.AvailableVersions), true, nil
+	}
+
+	// Warn about missing checksum only when actually downloading (not on cache hits).
+	if plugin.Spec.Source.Checksum == "" {
+		slog.WarnContext(ctx, "URL plugin has no checksum, downloads will not be verified",
+			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
+	}
+
+	// Phase 1: Download JAR. HTTP failure means the repo is unreachable.
+	apiStart := time.Now()
+
+	jarBytes, downloadErr := plugins.DownloadJAR(ctx, plugin.Spec.Source.URL, r.HTTPClient)
+
+	if r.Metrics != nil {
+		r.Metrics.RecordPluginAPICall(plugin.Spec.Source.Type, downloadErr, time.Since(apiStart))
+	}
+
+	if downloadErr != nil {
+		return nil, false, errors.Wrap(downloadErr, "failed to download JAR")
+	}
+
+	// Compute SHA256 once for both checksum verification and metadata.
+	sha256Hex := fmt.Sprintf("%x", sha256.Sum256(jarBytes))
+
+	// Verify checksum if provided (normalize to lowercase for comparison).
+	if plugin.Spec.Source.Checksum != "" {
+		specChecksum := strings.ToLower(plugin.Spec.Source.Checksum)
+		if sha256Hex != specChecksum {
+			return nil, false, errors.Mark(
+				errors.Newf("checksum mismatch: expected %s, got %s", specChecksum, sha256Hex),
+				errChecksumMismatch)
+		}
+	}
+
+	// Phase 2: Parse JAR metadata. Parse failure falls back to spec fields
+	// with the computed hash (JAR was downloaded successfully).
+	versions := r.resolveURLVersion(ctx, plugin, jarBytes, sha256Hex)
+
+	// Preserve ReleaseDate from cache if the JAR content hasn't changed.
+	// This ensures updateDelay works correctly across cache refreshes —
+	// without this, ReleasedAt would reset to "now" on every refetch,
+	// making updateDelay ineffective for URL plugins.
+	if len(plugin.Status.AvailableVersions) > 0 && len(versions) > 0 {
+		cached := plugin.Status.AvailableVersions[0]
+		// Only preserve ReleaseDate when both hashes are non-empty and match.
+		// Empty hashes indicate missing metadata and should not be treated as equal.
+		if cached.Hash != "" && strings.EqualFold(cached.Hash, versions[0].Hash) && !cached.ReleasedAt.IsZero() {
+			versions[0].ReleaseDate = cached.ReleasedAt.Time
+		}
+	}
+
+	return versions, false, nil
+}
+
+// resolveURLVersion parses JAR metadata and builds the version info.
+// Falls back to spec fields if the JAR cannot be parsed as a valid plugin archive.
+func (r *PluginReconciler) resolveURLVersion(
+	ctx context.Context,
+	plugin *mcv1beta1.Plugin,
+	jarBytes []byte,
+	sha256Hex string,
+) []plugins.PluginVersion {
+	jarMeta, parseErr := plugins.ParseJARMetadata(jarBytes)
+	if parseErr != nil {
+		slog.WarnContext(ctx, "Failed to parse JAR metadata, using spec fields as fallback",
+			"plugin", plugin.Name, "error", parseErr)
+
+		version := r.resolveVersionWithFallback(ctx, plugin, "")
+
+		return []plugins.PluginVersion{{
+			Version:     version,
+			DownloadURL: plugin.Spec.Source.URL,
+			Hash:        sha256Hex,
+		}}
+	}
+
+	version := r.resolveVersionWithFallback(ctx, plugin, jarMeta.Version)
+
+	var mcVersions []string
+	if jarMeta.APIVersion != "" {
+		mcVersions = []string{jarMeta.APIVersion}
+	}
+
+	return []plugins.PluginVersion{{
+		Version:           version,
+		DownloadURL:       plugin.Spec.Source.URL,
+		Hash:              sha256Hex,
+		MinecraftVersions: mcVersions,
+	}}
+}
+
+// resolveVersionWithFallback determines the plugin version using JAR metadata,
+// spec.version, or "0.0.0" placeholder (with warning) as fallbacks.
+func (r *PluginReconciler) resolveVersionWithFallback(
+	ctx context.Context,
+	plugin *mcv1beta1.Plugin,
+	jarVersion string,
+) string {
+	if jarVersion != "" {
+		return jarVersion
+	}
+
+	if plugin.Spec.Version != "" {
+		return plugin.Spec.Version
+	}
+
+	slog.WarnContext(ctx, "No version available for URL plugin, using placeholder",
+		"plugin", plugin.Name, "version", "0.0.0")
+
+	return "0.0.0"
+}
+
+// urlCacheValid checks whether cached URL metadata is still valid.
+// Returns true if the cached DownloadURL matches the current spec URL,
+// the cache is not older than urlCacheTTL, and (if a checksum is specified)
+// the cached hash matches the spec checksum.
+//
+// Note: spec.version changes are not tracked here. If the user changes
+// spec.version (used as fallback when JAR has no version metadata),
+// the change takes effect when the cache expires (urlCacheTTL).
+func (r *PluginReconciler) urlCacheValid(plugin *mcv1beta1.Plugin) bool {
+	if len(plugin.Status.AvailableVersions) == 0 {
+		return false
+	}
+
+	cached := plugin.Status.AvailableVersions[0]
+	if cached.DownloadURL != plugin.Spec.Source.URL {
+		return false
+	}
+
+	// Expire cache after TTL. Zero CachedAt is treated as expired.
+	if cached.CachedAt.IsZero() || time.Since(cached.CachedAt.Time) > urlCacheTTL {
+		return false
+	}
+
+	if plugin.Spec.Source.Checksum != "" {
+		specChecksum := strings.ToLower(plugin.Spec.Source.Checksum)
+		cachedHash := strings.ToLower(cached.Hash)
+
+		if cachedHash != specChecksum {
+			return false
+		}
+	}
+
+	return true
 }
 
 // buildMatchedInstances constructs the list of matched instances.
@@ -300,13 +546,23 @@ func convertToPluginVersionInfo(versions []plugins.PluginVersion) []mcv1beta1.Pl
 	now := metav1.Now()
 
 	for i, v := range versions {
+		mcVersions := v.MinecraftVersions
+		if mcVersions == nil {
+			mcVersions = []string{}
+		}
+
+		releasedAt := metav1.NewTime(v.ReleaseDate)
+		if v.ReleaseDate.IsZero() {
+			releasedAt = now
+		}
+
 		infos[i] = mcv1beta1.PluginVersionInfo{
 			Version:           v.Version,
-			MinecraftVersions: v.MinecraftVersions,
+			MinecraftVersions: mcVersions,
 			DownloadURL:       v.DownloadURL,
 			Hash:              v.Hash,
 			CachedAt:          now,
-			ReleasedAt:        metav1.NewTime(v.ReleaseDate),
+			ReleasedAt:        releasedAt,
 		}
 	}
 
@@ -366,6 +622,16 @@ func statusEqual(a, b *mcv1beta1.PluginStatus) bool {
 		return false
 	}
 
+	// Compare LastFetched timestamps.
+	switch {
+	case a.LastFetched == nil && b.LastFetched == nil:
+		// both nil, equal
+	case a.LastFetched == nil || b.LastFetched == nil:
+		return false
+	case !a.LastFetched.Equal(b.LastFetched):
+		return false
+	}
+
 	if len(a.MatchedInstances) != len(b.MatchedInstances) {
 		return false
 	}
@@ -395,6 +661,7 @@ func statusEqual(a, b *mcv1beta1.PluginStatus) bool {
 		if a.AvailableVersions[i].Version != b.AvailableVersions[i].Version ||
 			a.AvailableVersions[i].DownloadURL != b.AvailableVersions[i].DownloadURL ||
 			a.AvailableVersions[i].Hash != b.AvailableVersions[i].Hash ||
+			!a.AvailableVersions[i].CachedAt.Equal(&b.AvailableVersions[i].CachedAt) ||
 			!a.AvailableVersions[i].ReleasedAt.Equal(&b.AvailableVersions[i].ReleasedAt) ||
 			!minecraftVersionsEqual(a.AvailableVersions[i].MinecraftVersions, b.AvailableVersions[i].MinecraftVersions) {
 			return false

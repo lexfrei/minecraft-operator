@@ -63,11 +63,11 @@ This document covers the system architecture and design decisions of Minecraft O
                  │            │
         ┌────────┴────────┐   │
         │                 │   │
-┌───────▼──────┐  ┌──────▼───▼───────┐
-│  Plugin APIs │  │  Minecraft Pods   │
-│  - Hangar    │  │  + RCON           │
-│  - Modrinth  │  │  + StatefulSet    │
-└──────────────┘  └───────────────────┘
+┌────────▼───────┐  ┌──────▼───▼───────┐
+│  Plugin APIs   │  │  Minecraft Pods   │
+│  - Hangar      │  │  + RCON           │
+│  - URL (JAR)   │  │  + StatefulSet    │
+└────────────────┘  └───────────────────┘
 ```
 
 ## Component Interactions
@@ -103,7 +103,7 @@ This document covers the system architecture and design decisions of Minecraft O
 
 **Reconciliation loop**:
 
-1. Fetch metadata from plugin repository (Hangar)
+1. Fetch metadata from plugin source (Hangar/URL)
 2. Find all PaperMCServer instances matching `instanceSelector`
 3. Run constraint solver to find best compatible version
 4. Update Plugin.status with resolved version and matched instances

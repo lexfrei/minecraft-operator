@@ -79,8 +79,8 @@ Minecraft Operator is a Kubernetes operator for managing PaperMC servers with a 
 ┌───────▼──────┐  ┌──────▼───▼───────┐
 │  Plugin APIs │  │  Minecraft Pods   │
 │  - Hangar    │  │  + RCON           │
-│  - Modrinth  │  │  + StatefulSet    │
-│  - SpigotMC  │  │                   │
+│  - URL (JAR) │  │  + StatefulSet    │
+│              │  │                   │
 └──────────────┘  └───────────────────┘
 
 Relationships:
@@ -126,7 +126,7 @@ metadata:
 spec:
   # Plugin source
   source:
-    type: hangar  # Currently only hangar, planned: modrinth, spigot, url
+    type: hangar  # Supported: hangar, url. Planned: modrinth, spigot
     project: "EssentialsX"
 
   # Update strategy for version management
@@ -450,6 +450,21 @@ spec:
   instanceSelector:
     matchLabels:
       env: staging
+---
+# URL-based plugin source (direct JAR download)
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: Plugin
+metadata:
+  name: custom-plugin-url
+spec:
+  source:
+    type: url
+    url: "https://github.com/user/repo/releases/download/v1.0/custom-plugin-1.0.jar"
+    checksum: "aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344"
+  updateStrategy: pin
+  instanceSelector:
+    matchLabels:
+      app: minecraft
 ```
 
 ## Constraint Solver
@@ -460,7 +475,7 @@ For each Plugin resource, find the optimal plugin version that is compatible wit
 
 ### Input Data
 
-From platform APIs we receive (see `pkg/plugins/client.go`):
+From platform APIs and URL JAR metadata we receive (see `pkg/plugins/client.go`):
 
 ```go
 type PluginVersion struct {
@@ -659,8 +674,8 @@ Currently implemented as simple linear search (`SimpleSolver`). SAT solver plann
                  │
                  ▼
 ┌─────────────────────────────────────────┐
-│  Fetch plugin metadata from API          │
-│  (Hangar/Modrinth/etc, with caching)     │
+│  Fetch plugin metadata from source        │
+│  (Hangar/URL, with caching)              │
 └────────────────┬────────────────────────┘
                  │
                  ▼
@@ -1187,8 +1202,11 @@ rules:
 - **API keys** (for CurseForge in future): Via Secret
 - **Network policies**: Operator can only access:
   - Kubernetes API
-  - Plugin repository APIs (Hangar, Modrinth, etc)
+  - Plugin repository APIs (Hangar) and direct URL endpoints
   - RCON port of pods (25575)
+- **URL source SSRF protection**: The operator validates URLs against a blocklist of private/internal hosts (RFC 1918 IPs, loopback, link-local, decimal-encoded IPs, Kubernetes DNS, cloud metadata endpoints, `.local`/`.internal` TLDs). Redirects are checked against the same blocklist. In-pod `curl` downloads use `--proto =https` to prevent protocol downgrade.
+- **URL source memory scaling**: `DownloadJAR` holds the entire JAR (up to 100MB) in memory during metadata extraction. With concurrent reconciliations, peak memory scales as `num_url_plugins * jar_size`. For clusters with many URL plugins, consider setting `MaxConcurrentReconciles` on the Plugin controller or increasing operator memory limits.
+  - **DNS rebinding limitation**: Hostname validation occurs before DNS resolution. A malicious hostname could resolve to a private IP at connection time (TOCTOU). This is an accepted risk for MVP because: (1) Plugin CRDs require RBAC access, limiting who can set URLs; (2) Kubernetes NetworkPolicy can restrict operator egress; (3) Fixing this requires a custom `http.Transport` with `DialContext` that checks resolved IPs, which adds complexity. The `curl` in-pod path has the same limitation.
 
 ## Future Development
 
@@ -1202,6 +1220,7 @@ rules:
 - ✅ RCON graceful shutdown
 - ✅ Cron-based updates
 - ✅ Persistent cache in status
+- ✅ URL-based plugin source with JAR metadata extraction and SSRF protection
 
 ### Phase 2
 
@@ -1209,7 +1228,6 @@ rules:
 - SAT solver integration for optimization
 - Enhanced Web UI (basic web UI exists in `pkg/webui/`)
 - Webhook validation for CRDs (validate selector correctness)
-- URL-based plugin support with manual compatibility override
 
 ### Phase 3
 

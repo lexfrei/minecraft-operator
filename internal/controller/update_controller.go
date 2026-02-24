@@ -1,17 +1,7 @@
 /*
-Copyright 2025.
+Copyright 2026, Aleksei Sviridkin.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: BSD-3-Clause
 */
 
 package controller
@@ -24,6 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +45,13 @@ const (
 	reasonCronInvalid              = "InvalidCronExpression"
 	reasonCronValid                = "CronScheduleConfigured"
 	containerNamePaperMC           = "papermc"
+
+	// downloadTimeout is the HTTP timeout for downloading Paper JAR files.
+	downloadTimeout = 5 * time.Minute
+
+	// maxPaperJARSize is the maximum allowed size for Paper server JARs (500MB).
+	// Paper JARs are larger than plugin JARs; use a generous limit.
+	maxPaperJARSize = 500 * 1024 * 1024
 )
 
 // UpdateReconciler reconciles PaperMCServer resources for scheduled updates.
@@ -65,6 +63,7 @@ type UpdateReconciler struct {
 	PodExecutor      PodExecutor
 	Metrics          metrics.Recorder
 	BackupReconciler *BackupReconciler
+	HTTPClient       *http.Client
 	cron             mccron.Scheduler
 
 	// nowFunc returns current time; override in tests for deterministic behavior.
@@ -390,14 +389,15 @@ func (r *UpdateReconciler) removeCronJob(serverKey string) {
 
 // downloadFile downloads a file from URL to targetPath with context support.
 func (r *UpdateReconciler) downloadFile(ctx context.Context, url, targetPath string) error {
-	// Create HTTP request with context
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return errors.Wrap(err, "failed to create download request")
 	}
 
-	// Execute request
-	resp, err := http.DefaultClient.Do(req)
+	req.Header.Set("User-Agent", "minecraft-operator")
+
+	httpCl := r.httpClient()
+	resp, err := httpCl.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "failed to download file")
 	}
@@ -407,12 +407,10 @@ func (r *UpdateReconciler) downloadFile(ctx context.Context, url, targetPath str
 		}
 	}()
 
-	// Check status code
 	if resp.StatusCode != http.StatusOK {
 		return errors.Newf("download failed with status %d", resp.StatusCode)
 	}
 
-	// Create target file
 	outFile, err := os.Create(targetPath)
 	if err != nil {
 		return errors.Wrap(err, "failed to create target file")
@@ -423,13 +421,26 @@ func (r *UpdateReconciler) downloadFile(ctx context.Context, url, targetPath str
 		}
 	}()
 
-	// Copy data
-	_, err = io.Copy(outFile, resp.Body)
+	// Limit read size to prevent PVC exhaustion.
+	limitedReader := io.LimitReader(resp.Body, maxPaperJARSize)
+	_, err = io.Copy(outFile, limitedReader)
 	if err != nil {
 		return errors.Wrap(err, "failed to write file")
 	}
 
 	return nil
+}
+
+// httpClient returns an HTTP client with a reasonable timeout.
+// Uses the reconciler's HTTPClient field if set, otherwise creates a default one.
+func (r *UpdateReconciler) httpClient() *http.Client {
+	if r.HTTPClient != nil {
+		return r.HTTPClient
+	}
+
+	return &http.Client{
+		Timeout: downloadTimeout,
+	}
 }
 
 // verifyChecksum verifies the SHA256 checksum of a file.
@@ -473,8 +484,7 @@ func (r *UpdateReconciler) downloadPluginToServer(
 	namespace := server.Namespace
 	container := containerNamePaperMC
 
-	// Download directly to /data/plugins/update/ using curl with separate args
-	// to avoid shell injection via downloadURL
+	// Download directly to /data/plugins/update/ using curl with separate args to avoid shell injection.
 	outputPath := fmt.Sprintf("/data/plugins/update/%s.jar", pluginName)
 
 	slog.InfoContext(ctx, "Downloading plugin to server",
@@ -483,36 +493,65 @@ func (r *UpdateReconciler) downloadPluginToServer(
 		"url", downloadURL)
 
 	_, err := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
-		[]string{"curl", "-fsSL", "-o", outputPath, downloadURL})
+		[]string{"curl",
+			"--fail", "--silent", "--show-error", "--location",
+			"--proto", "=https",
+			"--max-redirs", strconv.Itoa(plugins.MaxRedirects),
+			"--max-filesize", strconv.Itoa(plugins.MaxJARSize),
+			"--connect-timeout", "30",
+			"--max-time", "300",
+			"--user-agent", "minecraft-operator",
+			"--output", outputPath, "--", downloadURL})
 	if err != nil {
 		return errors.Wrapf(err, "failed to download plugin %s", pluginName)
 	}
 
-	// Verify checksum if provided
 	if expectedHash != "" {
-		checksumCmd := fmt.Sprintf(
-			"sha256sum /data/plugins/update/%s.jar | awk '{print $1}'",
-			pluginName,
-		)
-
-		output, execErr := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
-			[]string{"sh", "-c", checksumCmd})
-		if execErr != nil {
-			return errors.Wrapf(execErr, "failed to verify checksum for plugin %s", pluginName)
+		if verifyErr := r.verifyPluginChecksum(ctx, namespace, podName, container, pluginName, outputPath, expectedHash); verifyErr != nil {
+			return verifyErr
 		}
-
-		actualHash := strings.TrimSpace(string(output))
-		if actualHash != expectedHash {
-			return errors.Newf("checksum mismatch: expected %s, got %s",
-				expectedHash, actualHash)
-		}
-
-		slog.InfoContext(ctx, "Plugin checksum verified", "plugin", pluginName)
 	}
 
 	slog.InfoContext(ctx, "Plugin downloaded successfully",
-		"server", server.Name,
-		"plugin", pluginName)
+		"server", server.Name, "plugin", pluginName)
+
+	return nil
+}
+
+// verifyPluginChecksum computes SHA256 of the downloaded JAR and compares it to the expected hash.
+// On mismatch, the invalid JAR is removed to prevent PaperMC from loading it.
+func (r *UpdateReconciler) verifyPluginChecksum(
+	ctx context.Context,
+	namespace, podName, container, pluginName, outputPath, expectedHash string,
+) error {
+	// Use sha256sum with direct args (no sh -c) to avoid shell injection.
+	// Output format: "<hash>  <filename>\n" — extract hash before first space.
+	output, execErr := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
+		[]string{"sha256sum", outputPath})
+	if execErr != nil {
+		return errors.Wrapf(execErr, "failed to verify checksum for plugin %s", pluginName)
+	}
+
+	// sha256sum output: "<hex>  <path>\n" — take only the hash part.
+	actualHash := strings.ToLower(strings.TrimSpace(string(output)))
+	if spaceIdx := strings.IndexByte(actualHash, ' '); spaceIdx > 0 {
+		actualHash = actualHash[:spaceIdx]
+	}
+
+	if actualHash != strings.ToLower(expectedHash) {
+		// Remove the invalid JAR to prevent PaperMC from loading it on restart.
+		_, rmErr := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
+			[]string{"rm", "--force", outputPath})
+		if rmErr != nil {
+			slog.WarnContext(ctx, "Failed to remove JAR after checksum mismatch",
+				"plugin", pluginName, "error", rmErr)
+		}
+
+		return errors.Newf("checksum mismatch: expected %s, got %s",
+			expectedHash, actualHash)
+	}
+
+	slog.InfoContext(ctx, "Plugin checksum verified", "plugin", pluginName)
 
 	return nil
 }
@@ -571,6 +610,16 @@ func (r *UpdateReconciler) applyPluginUpdates(
 		if downloadURL == "" {
 			slog.InfoContext(ctx, "Plugin has no download URL, skipping",
 				"plugin", pluginName, "version", pluginStatus.ResolvedVersion)
+			continue
+		}
+
+		// Validate download URL before every download as defense-in-depth against SSRF.
+		// For URL-source plugins, this guards against status tampering.
+		// For API-sourced plugins (Hangar), this guards against compromised API responses.
+		if err := plugins.ValidateDownloadURL(downloadURL); err != nil {
+			downloadErrors = append(downloadErrors,
+				errors.Wrapf(err, "plugin %s download URL validation failed", pluginName))
+
 			continue
 		}
 
@@ -1141,17 +1190,17 @@ func (r *UpdateReconciler) deletePluginJAR(
 	namespace := server.Namespace
 	container := containerNamePaperMC
 
-	// Delete from both plugins/ and update/ directories
-	rmCmd := fmt.Sprintf("rm -f /data/plugins/%s /data/plugins/update/%s",
-		plugin.InstalledJARName, plugin.InstalledJARName)
+	pluginPath := "/data/plugins/" + plugin.InstalledJARName
+	updatePath := "/data/plugins/update/" + plugin.InstalledJARName
 
 	slog.InfoContext(ctx, "Deleting plugin JAR",
 		"server", server.Name,
 		"plugin", plugin.PluginRef.Name,
 		"jar", plugin.InstalledJARName)
 
+	// Use direct args (no sh -c) to avoid shell injection.
 	_, err := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
-		[]string{"sh", "-c", rmCmd})
+		[]string{"rm", "--force", pluginPath, updatePath})
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to delete plugin JAR",
 			"error", err,

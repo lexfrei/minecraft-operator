@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Four main controllers work together:
 
-1. **Plugin Controller**: Watches Plugin CRDs, fetches metadata from plugin repositories (Hangar/Modrinth), runs constraint solver to find best compatible version for ALL matched servers, updates Plugin.status
+1. **Plugin Controller**: Watches Plugin CRDs, fetches metadata from plugin repositories (Hangar, direct URL) or extracts from JARs, runs constraint solver to find best compatible version for ALL matched servers, updates Plugin.status
 2. **PaperMCServer Controller**: Watches PaperMCServer CRDs, finds all matched Plugins via selectors, ensures StatefulSet exists, runs solver for Paper version upgrades
 3. **Update Controller**: Triggers on cron schedule, performs graceful RCON shutdown, downloads JARs to `plugins/update/`, deletes pod for StatefulSet recreation
 4. **Backup Controller**: Manages VolumeSnapshot-based backups with RCON hooks (`save-all`/`save-off`/`save-on`) for data consistency. Supports scheduled (cron), pre-update, and manual (annotation) triggers with configurable retention
@@ -29,7 +29,7 @@ Four main controllers work together:
 - **Plugin → PaperMCServer**: Many-to-many via `instanceSelector` (label selector)
 - **Selector Conflict Resolution**: When multiple Plugins with same `source.project` match same servers:
   - If any has `updateStrategy: latest`: constraint solver picks optimal version
-  - If all have `updateStrategy: pinned`: highest semver wins (with warning)
+  - If all have `updateStrategy: pin`: highest semver wins (with warning)
 
 ### Cross-Resource Triggers
 
@@ -48,9 +48,9 @@ Four main controllers work together:
 
 **Spec:**
 
-- `source`: Plugin repository (hangar/modrinth/spigot/url)
-- `updateStrategy`: `latest` or `pinned` (defines version management behavior)
-- `version`: Specific version when using `pinned` strategy
+- `source`: Plugin repository (`hangar` or `url`; `modrinth`/`spigot` planned but not implemented). For `url` type, includes `url` (HTTPS download URL) and optional `checksum` (SHA256 hex string for integrity verification)
+- `updateStrategy`: `latest`, `auto`, `pin`, or `build-pin` (defines version management behavior). For URL-source plugins, all strategies behave similarly since only one version exists (the JAR at the URL)
+- `version`: Specific version when using `pin` or `build-pin` strategy (also used as fallback version for URL-source plugins when JAR has no plugin.yml version)
 - `updateDelay`: Grace period before auto-applying new releases (e.g., `168h` for 7 days)
 - `instanceSelector`: Label selector to match PaperMCServer instances
 - `compatibilityOverride`: Manual compatibility specification for edge cases
@@ -519,7 +519,7 @@ All architectural decisions are documented as ADRs in `.architecture.yaml` (sing
 - **Datapack support**: Out of scope (no compatibility versions)
 - **Paid plugins**: Nice-to-have, not in MVP (would need auth via Secret)
 - **Manual approval**: Not implemented (fully automated updates with updateDelay)
-- **Selector conflicts**: Resolved via version priority (latest > pinned, highest semver for all-pinned) (ADR-019)
+- **Selector conflicts**: Resolved via version priority (latest > pin, highest semver for all-pin) (ADR-019)
 
 See `.architecture.yaml` for complete ADR history and technical stack details.
 
