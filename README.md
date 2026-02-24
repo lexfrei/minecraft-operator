@@ -144,7 +144,8 @@ Trigger a manual backup:
 
 ```bash
 kubectl annotate papermcserver my-server \
-  mc.k8s.lex.la/backup-now="$(date +%s)"
+  mc.k8s.lex.la/backup-now="$(date +%s)" \
+  --namespace minecraft
 ```
 
 **Requirements:** A CSI driver with VolumeSnapshot support must be installed in

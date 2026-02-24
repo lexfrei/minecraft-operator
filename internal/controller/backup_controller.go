@@ -83,6 +83,11 @@ type BackupReconciler struct {
 	cronTriggerMu    sync.RWMutex
 	cronTriggerTimes map[string]time.Time
 
+	// backupMu serializes backup execution per server to prevent concurrent
+	// VolumeSnapshot creation when BackupReconciler and UpdateReconciler
+	// both trigger backups for the same server simultaneously.
+	backupMu sync.Map // map[string]*sync.Mutex — key is "namespace/name"
+
 	// initOnce ensures maps are initialized exactly once.
 	initOnce sync.Once
 }
@@ -289,8 +294,18 @@ func (r *BackupReconciler) isSnapshotAPIUnavailable(
 	return false
 }
 
+// getServerBackupMu returns a per-server mutex for serializing backup execution.
+func (r *BackupReconciler) getServerBackupMu(server *mcv1beta1.PaperMCServer) *sync.Mutex {
+	key := server.Namespace + "/" + server.Name
+	actual, _ := r.backupMu.LoadOrStore(key, &sync.Mutex{})
+
+	//nolint:forcetypeassert // LoadOrStore always stores *sync.Mutex
+	return actual.(*sync.Mutex)
+}
+
 // PerformBackup creates a VolumeSnapshot with RCON hooks for the given server.
 // This is exported so UpdateReconciler can call it for pre-update backups.
+// Concurrent calls for the same server are serialized via a per-server mutex.
 func (r *BackupReconciler) PerformBackup(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
@@ -307,6 +322,12 @@ func (r *BackupReconciler) performBackup(
 	server *mcv1beta1.PaperMCServer,
 	trigger string,
 ) error {
+	// Serialize backup execution per server to prevent concurrent VolumeSnapshot creation
+	// when BackupReconciler and UpdateReconciler both trigger backups simultaneously.
+	mu := r.getServerBackupMu(server)
+	mu.Lock()
+	defer mu.Unlock()
+
 	now := r.now()
 	startedAt := metav1.NewTime(now)
 
@@ -385,6 +406,14 @@ func (r *BackupReconciler) performBackup(
 
 			return errors.Wrap(err, "pre-snapshot hook failed")
 		}
+
+		// Guarantee save-on runs even on panic (e.g., nil pointer in Snapshotter).
+		// Leaving auto-save disabled permanently would cause data loss.
+		defer func() {
+			if postErr := backup.PostSnapshotHook(ctx, rconClient); postErr != nil {
+				slog.ErrorContext(ctx, "Post-snapshot hook failed", "error", postErr)
+			}
+		}()
 	}
 
 	snapshotClass := ""
@@ -404,13 +433,6 @@ func (r *BackupReconciler) performBackup(
 			*metav1.NewControllerRef(server, mcv1beta1.GroupVersion.WithKind("PaperMCServer")),
 		},
 	})
-
-	// Post-snapshot hook: save-on (always run, even if snapshot creation failed)
-	if rconClient != nil {
-		if postErr := backup.PostSnapshotHook(ctx, rconClient); postErr != nil {
-			slog.ErrorContext(ctx, "Post-snapshot hook failed", "error", postErr)
-		}
-	}
 
 	if err != nil {
 		r.persistBackupStatus(ctx, server, &mcv1beta1.BackupRecord{

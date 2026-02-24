@@ -186,7 +186,8 @@ When RCON is enabled, the operator uses RCON hooks (`save-all`, `save-off`, `sav
 
 ```bash
 kubectl annotate papermcserver my-server \
-  mc.k8s.lex.la/backup-now="$(date +%s)"
+  mc.k8s.lex.la/backup-now="$(date +%s)" \
+  --namespace minecraft
 ```
 
 ### podTemplate

@@ -586,14 +586,12 @@ spec:
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("creating PaperMCServer with backup enabled and backup-now annotation")
+			By("creating PaperMCServer with backup enabled (no backup-now annotation yet)")
 			serverYAML := fmt.Sprintf(`apiVersion: mc.k8s.lex.la/v1beta1
 kind: PaperMCServer
 metadata:
   name: %s
   namespace: %s
-  annotations:
-    mc.k8s.lex.la/backup-now: "%d"
 spec:
   updateStrategy: "latest"
   updateSchedule:
@@ -627,20 +625,28 @@ spec:
             cpu: "500m"
         env:
         - name: EULA
-          value: "TRUE"`, backupServer, namespace, time.Now().Unix(), backupServer)
+          value: "TRUE"`, backupServer, namespace, backupServer)
 
 			cmd = kubectlCmd("apply", "--filename", "-")
 			cmd.Stdin = strings.NewReader(serverYAML)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("waiting for StatefulSet to appear")
+			By("waiting for PVC to be created by StatefulSet")
 			Eventually(func(g Gomega) {
-				cmd := kubectlCmd("get", "statefulset", backupServer,
+				cmd := kubectlCmd("get", "pvc",
+					fmt.Sprintf("data-%s-0", backupServer),
 					"--namespace", namespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-			}, 60*time.Second).Should(Succeed())
+			}, 2*time.Minute).Should(Succeed())
+
+			By("applying backup-now annotation after PVC exists")
+			cmd = kubectlCmd("annotate", "papermcserver", backupServer,
+				fmt.Sprintf("mc.k8s.lex.la/backup-now=%d", time.Now().Unix()),
+				"--namespace", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying VolumeSnapshot is created with correct labels")
 			Eventually(func(g Gomega) {

@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -1662,6 +1663,124 @@ func TestBackupReconciler_MaxCountDefaultWhenZero(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, defaultMaxBackupCount, len(snapshots),
 		"should retain exactly defaultMaxBackupCount snapshots when MaxCount is zero/unset")
+}
+
+func TestBackupReconciler_ConcurrentBackupsSerialized(t *testing.T) {
+	// Verify that the per-server mutex prevents concurrent backup execution.
+	reconciler, server, tracker := setupConcurrencyTest(t)
+
+	// Launch two concurrent backups for the SAME server.
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	for i := range 2 {
+		go func(trigger string) {
+			defer wg.Done()
+			_ = reconciler.performBackup(context.Background(), server.DeepCopy(), trigger)
+		}(fmt.Sprintf("concurrent-%d", i))
+	}
+
+	wg.Wait()
+
+	assert.LessOrEqual(t, tracker.maxObserved(), 1,
+		"per-server mutex must serialize backups")
+}
+
+// concurrencyTracker records peak concurrency during snapshot creation.
+type concurrencyTracker struct {
+	mu      sync.Mutex
+	max     int
+	current int
+}
+
+func (ct *concurrencyTracker) enter() {
+	ct.mu.Lock()
+	ct.current++
+	if ct.current > ct.max {
+		ct.max = ct.current
+	}
+	ct.mu.Unlock()
+
+	time.Sleep(50 * time.Millisecond)
+
+	ct.mu.Lock()
+	ct.current--
+	ct.mu.Unlock()
+}
+
+func (ct *concurrencyTracker) maxObserved() int {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+
+	return ct.max
+}
+
+func setupConcurrencyTest(t *testing.T) (*BackupReconciler, *mcv1beta1.PaperMCServer, *concurrencyTracker) {
+	t.Helper()
+
+	scheme := newBackupTestScheme()
+	server := newTestServer(&mcv1beta1.BackupSpec{
+		Enabled:   true,
+		Retention: mcv1beta1.BackupRetention{MaxCount: 20},
+	})
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(server, newRCONSecret(), newServerPod(), newServerPVC()).
+		WithStatusSubresource(server).
+		Build()
+
+	tracker := &concurrencyTracker{}
+	snapshotter := &concurrencyTrackingSnapshotter{
+		inner:      backup.NewSnapshotter(fakeClient),
+		onSnapshot: tracker.enter,
+	}
+
+	r := &BackupReconciler{
+		Client:      fakeClient,
+		Scheme:      scheme,
+		Snapshotter: snapshotter,
+		Metrics:     &metrics.NoopRecorder{},
+		cron:        testutil.NewMockCronScheduler(),
+		rconClientFactory: func(_, _ string, _ int) (rcon.Client, error) {
+			mock := rcon.NewMockClient()
+			mock.ConnectDelay = 10 * time.Millisecond
+			return mock, nil
+		},
+		nowFunc: time.Now,
+	}
+	r.initOnce.Do(r.initMaps)
+
+	return r, server, tracker
+}
+
+// concurrencyTrackingSnapshotter wraps a real Snapshotter and calls onSnapshot
+// during CreateSnapshot to expose timing for concurrency tests.
+type concurrencyTrackingSnapshotter struct {
+	inner      backup.Snapshotter
+	onSnapshot func()
+}
+
+func (s *concurrencyTrackingSnapshotter) CreateSnapshot(
+	ctx context.Context, req backup.SnapshotRequest,
+) (string, error) {
+	if s.onSnapshot != nil {
+		s.onSnapshot()
+	}
+
+	return s.inner.CreateSnapshot(ctx, req)
+}
+
+func (s *concurrencyTrackingSnapshotter) ListSnapshots(
+	ctx context.Context, namespace, serverName string,
+) ([]volumesnapshotv1.VolumeSnapshot, error) {
+	return s.inner.ListSnapshots(ctx, namespace, serverName)
+}
+
+func (s *concurrencyTrackingSnapshotter) DeleteOldSnapshots(
+	ctx context.Context, namespace, serverName string, maxCount int,
+) (int, error) {
+	return s.inner.DeleteOldSnapshots(ctx, namespace, serverName, maxCount)
 }
 
 func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {
