@@ -64,6 +64,9 @@ func TestValidateDownloadURL_BlockedHosts(t *testing.T) {
 		{"IPv4-mapped private 10.x", "https://[::ffff:10.0.0.1]/plugin.jar"},
 		{"IPv4-mapped private 192.168.x", "https://[::ffff:192.168.1.1]/plugin.jar"},
 		{"IPv4-mapped private 172.16.x", "https://[::ffff:172.16.0.1]/plugin.jar"},
+		{"decimal-encoded loopback", "https://2130706433/plugin.jar"},
+		{"decimal-encoded private 10.x", "https://167772161/plugin.jar"},
+		{"decimal-encoded link-local", "https://2852039166/plugin.jar"},
 		{"unspecified address", "https://0.0.0.0/plugin.jar"},
 		{"loopback IP with port", "https://127.0.0.1:8080/plugin.jar"},
 		{"mDNS .local domain", "https://myhost.local/plugin.jar"},
@@ -174,6 +177,20 @@ func TestDownloadJAR(t *testing.T) {
 
 		_, err := plugins.DownloadJAR(ctx, server.URL+"/plugin.jar", server.Client())
 		require.Error(t, err)
+	})
+
+	t.Run("sends User-Agent header", func(t *testing.T) {
+		var receivedUA string
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			receivedUA = r.Header.Get("User-Agent")
+			w.Header().Set("Content-Type", "application/java-archive")
+			_, _ = w.Write(testutil.BuildTestJAR("plugin.yml", "name: Test\n"))
+		}))
+		defer server.Close()
+
+		_, err := plugins.DownloadJAR(context.Background(), server.URL+"/plugin.jar", server.Client())
+		require.NoError(t, err)
+		assert.Equal(t, "minecraft-operator", receivedUA)
 	})
 
 	t.Run("uses SafeHTTPClient when nil client provided", func(t *testing.T) {

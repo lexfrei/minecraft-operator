@@ -1204,7 +1204,8 @@ rules:
   - Kubernetes API
   - Plugin repository APIs (Hangar) and direct URL endpoints
   - RCON port of pods (25575)
-- **URL source SSRF protection**: The operator validates URLs against a blocklist of private/internal hosts (RFC 1918 IPs, loopback, link-local, Kubernetes DNS, cloud metadata endpoints, `.local`/`.internal` TLDs). Redirects are checked against the same blocklist. In-pod `curl` downloads use `--proto =https` to prevent protocol downgrade.
+- **URL source SSRF protection**: The operator validates URLs against a blocklist of private/internal hosts (RFC 1918 IPs, loopback, link-local, decimal-encoded IPs, Kubernetes DNS, cloud metadata endpoints, `.local`/`.internal` TLDs). Redirects are checked against the same blocklist. In-pod `curl` downloads use `--proto =https` to prevent protocol downgrade.
+- **URL source memory scaling**: `DownloadJAR` holds the entire JAR (up to 100MB) in memory during metadata extraction. With concurrent reconciliations, peak memory scales as `num_url_plugins * jar_size`. For clusters with many URL plugins, consider setting `MaxConcurrentReconciles` on the Plugin controller or increasing operator memory limits.
   - **DNS rebinding limitation**: Hostname validation occurs before DNS resolution. A malicious hostname could resolve to a private IP at connection time (TOCTOU). This is an accepted risk for MVP because: (1) Plugin CRDs require RBAC access, limiting who can set URLs; (2) Kubernetes NetworkPolicy can restrict operator egress; (3) Fixing this requires a custom `http.Transport` with `DialContext` that checks resolved IPs, which adds complexity. The `curl` in-pod path has the same limitation.
 
 ## Future Development

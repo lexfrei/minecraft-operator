@@ -577,8 +577,9 @@ func (r *UpdateReconciler) applyPluginUpdates(
 		}
 
 		// Re-validate URL before download as defense-in-depth against SSRF.
-		// Only applies to user-provided URLs (type: url); API-sourced URLs
-		// (Hangar, Modrinth) are trusted from their respective APIs.
+		// For URL-source plugins, the download URL in status originates from spec.source.url
+		// (validated at reconcile time); this re-check guards against status tampering.
+		// API-sourced URLs (Hangar) are trusted from their respective APIs.
 		if plugin.Spec.Source.Type == "url" {
 			if err := plugins.ValidateDownloadURL(downloadURL); err != nil {
 				downloadErrors = append(downloadErrors,

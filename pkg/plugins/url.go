@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -138,6 +139,13 @@ func isBlockedHost(host string) bool {
 			ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 	}
 
+	// Block decimal-encoded IPs (e.g., "2130706433" = 127.0.0.1).
+	// Some HTTP clients resolve all-numeric hostnames as 32-bit integers.
+	if ip := parseDecimalIP(hostname); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() || ip.IsUnspecified()
+	}
+
 	// Block known dangerous hostnames.
 	lower := strings.ToLower(hostname)
 
@@ -165,6 +173,37 @@ func isBlockedHost(host string) bool {
 	return false
 }
 
+// parseDecimalIP checks if a hostname is a decimal-encoded IPv4 address
+// (e.g., "2130706433" for 127.0.0.1). Returns the parsed IP or nil.
+func parseDecimalIP(hostname string) net.IP {
+	// Must be all ASCII digits and not empty.
+	if hostname == "" {
+		return nil
+	}
+
+	for _, c := range hostname {
+		if c < '0' || c > '9' {
+			return nil
+		}
+	}
+
+	// Parse as a big integer to avoid overflow on 32-bit-exceeding values.
+	n := new(big.Int)
+	if _, ok := n.SetString(hostname, 10); !ok {
+		return nil
+	}
+
+	// Valid IPv4 fits in 32 bits (0 to 4294967295).
+	maxIPv4 := new(big.Int).SetUint64(1<<32 - 1)
+	if n.Sign() < 0 || n.Cmp(maxIPv4) > 0 {
+		return nil
+	}
+
+	v := n.Uint64()
+	//nolint:gosec // Value is bounded to uint32 range by the check above.
+	return net.IPv4(byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+}
+
 // DownloadJAR downloads a JAR from the given URL and returns the raw bytes.
 // Uses SafeHTTPClient if httpClient is nil.
 // Note: the entire JAR (up to maxJARSize) is held in memory. With concurrent
@@ -178,6 +217,8 @@ func DownloadJAR(ctx context.Context, jarURL string, httpClient *http.Client) ([
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create HTTP request")
 	}
+
+	req.Header.Set("User-Agent", "minecraft-operator")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

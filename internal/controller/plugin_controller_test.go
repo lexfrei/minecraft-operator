@@ -1302,6 +1302,17 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(plugin.Status.RepositoryStatus).To(Equal("orphaned"))
 			Expect(plugin.Status.AvailableVersions).To(HaveLen(2),
 				"Cached versions should be preserved")
+
+			// Verify all fields survive the cache round-trip (convertToPluginVersionInfo → convertCachedVersions).
+			cached := plugin.Status.AvailableVersions
+			Expect(cached[0].Version).To(Equal("2.21.0"))
+			Expect(cached[0].DownloadURL).To(Equal("https://example.com/plugin-2.21.0.jar"))
+			Expect(cached[0].Hash).To(Equal("abc123"))
+			Expect(cached[0].MinecraftVersions).To(ConsistOf("1.20.4", "1.21.0", "1.21.1"))
+			Expect(cached[1].Version).To(Equal("2.21.2"))
+			Expect(cached[1].DownloadURL).To(Equal("https://example.com/plugin-2.21.2.jar"))
+			Expect(cached[1].Hash).To(Equal("def456"))
+			Expect(cached[1].MinecraftVersions).To(ConsistOf("1.21.0", "1.21.1", "1.21.4"))
 		})
 
 		It("should build MatchedInstances from label selector", func() {
