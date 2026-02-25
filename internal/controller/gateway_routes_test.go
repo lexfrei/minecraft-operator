@@ -351,6 +351,41 @@ var _ = Describe("Gateway API Routes", func() {
 		})
 	})
 
+	Context("no-op update optimization", func() {
+		It("should not update TCPRoute when nothing changed", func() {
+			server := createServer("gw-noop-tcp", &mck8slexlav1beta1.GatewayConfig{
+				Enabled: true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
+					{Name: "gw", Namespace: "gw-ns"},
+				},
+				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
+			})
+
+			// First call — creates the route
+			err := reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Read ResourceVersion after create
+			var route gatewayv1alpha2.TCPRoute
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-tcp", Namespace: ns,
+			}, &route)).To(Succeed())
+			rvAfterCreate := route.ResourceVersion
+
+			// Second call — should be a no-op
+			err = reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// ResourceVersion should NOT change (no update was issued)
+			var routeAfter gatewayv1alpha2.TCPRoute
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-tcp", Namespace: ns,
+			}, &routeAfter)).To(Succeed())
+			Expect(routeAfter.ResourceVersion).To(Equal(rvAfterCreate),
+				"TCPRoute should not be updated when nothing changed")
+		})
+	})
+
 	Context("with owner references", func() {
 		It("should set owner reference on created routes", func() {
 			server := createServer("gw-owner", &mck8slexlav1beta1.GatewayConfig{

@@ -603,6 +603,38 @@ func TestParsePluginFormRejectsUnknownSourceType(t *testing.T) {
 	}
 }
 
+func TestParsePluginFormPassesBuildForBuildPin(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	form := url.Values{
+		"name":           {"my-plugin"},
+		"namespace":      {"default"},
+		"sourceType":     {"hangar"},
+		"project":        {"SomeProject"},
+		"updateStrategy": {"build-pin"},
+		"version":        {"1.0.0"},
+		"build":          {"42"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	data, err := srv.parsePluginFormToData(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if data.Build != 42 {
+		t.Errorf("expected build=42, got %d", data.Build)
+	}
+
+	if data.Version != "1.0.0" {
+		t.Errorf("expected version=1.0.0, got %q", data.Version)
+	}
+}
+
 func TestHandleServerStatus_NegativeAttempt_ShouldClampOrReject(t *testing.T) {
 	// BUG: handleServerStatus parses attempt parameter with fmt.Sscanf
 	// without bounds checking. A negative value (e.g., -999) bypasses

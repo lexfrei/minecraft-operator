@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"maps"
 	"reflect"
+	"slices"
 
 	"github.com/cockroachdb/errors"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -26,8 +27,7 @@ import (
 )
 
 const (
-	minecraftGamePort = 25565
-	dnsPort           = 53
+	dnsPort = 53
 )
 
 // ensureNetworkPolicy creates, updates, or deletes a NetworkPolicy for a PaperMCServer
@@ -163,7 +163,7 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 	nsPeer := sameNamespacePeer(server.Namespace)
 
 	// Minecraft port rule with same-namespace baseline + custom allowFrom
-	mcPort := intstr.FromInt32(minecraftGamePort)
+	mcPort := intstr.FromInt32(minecraftPort)
 	mcRule := networkingv1.NetworkPolicyIngressRule{
 		Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcpProto, Port: &mcPort}},
 		From:  []networkingv1.NetworkPolicyPeer{nsPeer},
@@ -210,7 +210,7 @@ func buildPluginIngressRules(
 		port := intstr.FromInt32(portNum)
 		rules = append(rules, networkingv1.NetworkPolicyIngressRule{
 			Ports: []networkingv1.NetworkPolicyPort{{Protocol: &proto, Port: &port}},
-			From:  fromPeers,
+			From:  slices.Clone(fromPeers),
 		})
 	}
 

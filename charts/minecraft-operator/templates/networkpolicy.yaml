@@ -45,6 +45,9 @@ spec:
         - protocol: TCP
           port: 6443
     # RCON connections to managed Minecraft server pods (any namespace)
+    # RCON egress to managed Minecraft pods.
+    # Port 25575 is the default; servers with custom RCON ports
+    # may need additional egress rules via networkPolicy.extraEgress.
     - to:
         - podSelector:
             matchLabels:
