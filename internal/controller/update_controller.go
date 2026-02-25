@@ -8,12 +8,8 @@ package controller
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,13 +41,6 @@ const (
 	reasonCronInvalid              = "InvalidCronExpression"
 	reasonCronValid                = "CronScheduleConfigured"
 	containerNamePaperMC           = "papermc"
-
-	// downloadTimeout is the HTTP timeout for downloading Paper JAR files.
-	downloadTimeout = 5 * time.Minute
-
-	// maxPaperJARSize is the maximum allowed size for Paper server JARs (500MB).
-	// Paper JARs are larger than plugin JARs; use a generous limit.
-	maxPaperJARSize = 500 * 1024 * 1024
 )
 
 // UpdateReconciler reconciles PaperMCServer resources for scheduled updates.
@@ -63,7 +52,6 @@ type UpdateReconciler struct {
 	PodExecutor      PodExecutor
 	Metrics          metrics.Recorder
 	BackupReconciler *BackupReconciler
-	HTTPClient       *http.Client
 	cron             mccron.Scheduler
 
 	// nowFunc returns current time; override in tests for deterministic behavior.
@@ -385,91 +373,6 @@ func (r *UpdateReconciler) removeCronJob(serverKey string) {
 		r.cron.Remove(entry.ID)
 		delete(r.cronEntries, serverKey)
 	}
-}
-
-// downloadFile downloads a file from URL to targetPath with context support.
-func (r *UpdateReconciler) downloadFile(ctx context.Context, url, targetPath string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return errors.Wrap(err, "failed to create download request")
-	}
-
-	req.Header.Set("User-Agent", "minecraft-operator")
-
-	httpCl := r.httpClient()
-	resp, err := httpCl.Do(req)
-	if err != nil {
-		return errors.Wrap(err, "failed to download file")
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			err = errors.CombineErrors(err, errors.Wrap(closeErr, "failed to close response body"))
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return errors.Newf("download failed with status %d", resp.StatusCode)
-	}
-
-	outFile, err := os.Create(targetPath)
-	if err != nil {
-		return errors.Wrap(err, "failed to create target file")
-	}
-	defer func() {
-		if closeErr := outFile.Close(); closeErr != nil {
-			err = errors.CombineErrors(err, errors.Wrap(closeErr, "failed to close output file"))
-		}
-	}()
-
-	// Limit read size to prevent PVC exhaustion.
-	limitedReader := io.LimitReader(resp.Body, maxPaperJARSize)
-	_, err = io.Copy(outFile, limitedReader)
-	if err != nil {
-		return errors.Wrap(err, "failed to write file")
-	}
-
-	return nil
-}
-
-// httpClient returns an HTTP client with a reasonable timeout.
-// Uses the reconciler's HTTPClient field if set, otherwise creates a default one.
-func (r *UpdateReconciler) httpClient() *http.Client {
-	if r.HTTPClient != nil {
-		return r.HTTPClient
-	}
-
-	return &http.Client{
-		Timeout: downloadTimeout,
-	}
-}
-
-// verifyChecksum verifies the SHA256 checksum of a file.
-func (r *UpdateReconciler) verifyChecksum(filePath, expectedHash string) error {
-	// Open file
-	file, err := os.Open(filePath)
-	if err != nil {
-		return errors.Wrap(err, "failed to open file for checksum")
-	}
-	defer func() {
-		if closeErr := file.Close(); closeErr != nil {
-			err = errors.CombineErrors(err, errors.Wrap(closeErr, "failed to close file"))
-		}
-	}()
-
-	// Compute SHA256
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return errors.Wrap(err, "failed to compute checksum")
-	}
-
-	actualHash := fmt.Sprintf("%x", hash.Sum(nil))
-
-	// Compare
-	if actualHash != expectedHash {
-		return errors.Newf("checksum mismatch: expected %s, got %s", expectedHash, actualHash)
-	}
-
-	return nil
 }
 
 // downloadPluginToServer downloads a plugin JAR to the server's /data/plugins/update/ directory.
