@@ -80,6 +80,59 @@ spec:
                   If set with pin strategy, it serves as a minimum build; operator will still auto-update to newer builds.
                   If set with build-pin strategy, operator will pin to this exact build.
                 type: integer
+              gateway:
+                description: |-
+                  Gateway configures optional Gateway API TCPRoute/UDPRoute for game traffic.
+                  Requires Gateway API CRDs (experimental channel) installed in the cluster.
+                properties:
+                  enabled:
+                    description: Enabled determines if Gateway API routes are created
+                      for this server.
+                    type: boolean
+                  parentRefs:
+                    description: ParentRefs are references to the Gateway(s) that
+                      routes should attach to.
+                    items:
+                      description: GatewayParentRef references a Gateway that routes
+                        should attach to.
+                      properties:
+                        name:
+                          description: Name is the name of the Gateway.
+                          type: string
+                        namespace:
+                          description: Namespace is the namespace of the Gateway.
+                          type: string
+                        sectionName:
+                          description: SectionName is the name of a specific listener
+                            on the Gateway to attach to.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  tcpRoute:
+                    description: TCPRoute configures the TCPRoute resource for game
+                      traffic.
+                    properties:
+                      enabled:
+                        description: Enabled determines if this route type is created.
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
+                  udpRoute:
+                    description: UDPRoute configures the UDPRoute resource for game
+                      traffic.
+                    properties:
+                      enabled:
+                        description: Enabled determines if this route type is created.
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
+                required:
+                - enabled
+                type: object
               gracefulShutdown:
                 description: GracefulShutdown configures graceful server shutdown.
                 properties:
