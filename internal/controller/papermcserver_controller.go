@@ -97,6 +97,7 @@ type PaperMCServerReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=pods/exec,verbs=create
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=udproutes,verbs=get;list;watch;create;update;delete
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;delete
 //nolint:revive // kubebuilder markers require no space after //
 
 // Reconcile implements the reconciliation loop for PaperMCServer resources.
