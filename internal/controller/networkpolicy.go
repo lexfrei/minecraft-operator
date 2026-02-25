@@ -179,29 +179,38 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 	}
 
 	rules := []networkingv1.NetworkPolicyIngressRule{mcRule}
-	rules = append(rules, buildPluginIngressRules(matchedPlugins, tcpProto, nsPeer)...)
+	rules = append(rules, buildPluginIngressRules(matchedPlugins, tcpProto, mcRule.From)...)
 	rules = append(rules, r.buildRCONIngressRule(server, tcpProto)...)
 
 	return rules, nil
 }
 
 // buildPluginIngressRules creates ingress rules for plugins that expose custom ports.
+// Uses the same From peers as the Minecraft port rule (same-namespace + allowFrom).
 func buildPluginIngressRules(
-	plugins []mcv1beta1.Plugin,
+	matchedPlugins []mcv1beta1.Plugin,
 	proto corev1.Protocol,
-	nsPeer networkingv1.NetworkPolicyPeer,
+	fromPeers []networkingv1.NetworkPolicyPeer,
 ) []networkingv1.NetworkPolicyIngressRule {
-	rules := make([]networkingv1.NetworkPolicyIngressRule, 0, len(plugins))
+	seen := make(map[int32]bool)
+	rules := make([]networkingv1.NetworkPolicyIngressRule, 0, len(matchedPlugins))
 
-	for _, plugin := range plugins {
+	for _, plugin := range matchedPlugins {
 		if plugin.Spec.Port == nil {
 			continue
 		}
 
-		port := intstr.FromInt32(*plugin.Spec.Port)
+		portNum := *plugin.Spec.Port
+		if seen[portNum] {
+			continue
+		}
+
+		seen[portNum] = true
+
+		port := intstr.FromInt32(portNum)
 		rules = append(rules, networkingv1.NetworkPolicyIngressRule{
 			Ports: []networkingv1.NetworkPolicyPort{{Protocol: &proto, Port: &port}},
-			From:  []networkingv1.NetworkPolicyPeer{nsPeer},
+			From:  fromPeers,
 		})
 	}
 

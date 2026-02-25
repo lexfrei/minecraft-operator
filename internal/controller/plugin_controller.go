@@ -484,6 +484,10 @@ func (r *PluginReconciler) setFallbackVersionCondition(plugin *mcv1beta1.Plugin,
 		r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionFalse,
 			reasonFallbackVersion,
 			"Version could not be extracted from JAR or spec; using 0.0.0 placeholder")
+	} else {
+		r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,
+			reasonResolved,
+			"Version resolved from JAR metadata or spec")
 	}
 }
 

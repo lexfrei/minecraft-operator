@@ -1483,6 +1483,36 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(cond.Message).To(ContainSubstring("0.0.0"))
 		})
 
+		It("should clear FallbackVersion condition when version is later resolved", func() {
+			jarNoVersion := testutil.BuildTestJAR("README.txt", "not a plugin")
+			hashNoVersion := fmt.Sprintf("%x", sha256.Sum256(jarNoVersion))
+
+			plugin := &mck8slexlav1beta1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-fallback-clear", Namespace: namespace},
+				Spec: mck8slexlav1beta1.PluginSpec{
+					Source: mck8slexlav1beta1.PluginSource{Type: "url", URL: "https://example.com/plugin.jar"},
+				},
+			}
+
+			// First: 0.0.0 fallback sets ConditionFalse
+			_ = reconciler.resolveURLVersion(ctx, plugin, jarNoVersion, hashNoVersion)
+			cond := meta.FindStatusCondition(plugin.Status.Conditions, "VersionResolved")
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+
+			// Second: real version clears fallback
+			jarWithVersion := testutil.BuildTestJAR("plugin.yml",
+				"name: TestPlugin\nversion: \"1.2.3\"\n")
+			hashWithVersion := fmt.Sprintf("%x", sha256.Sum256(jarWithVersion))
+			_ = reconciler.resolveURLVersion(ctx, plugin, jarWithVersion, hashWithVersion)
+
+			cond = meta.FindStatusCondition(plugin.Status.Conditions, "VersionResolved")
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue),
+				"VersionResolved should be True after successful version resolution")
+			Expect(cond.Reason).To(Equal("Resolved"))
+		})
+
 		It("should keep URL cache valid when checksum is removed from spec", func() {
 			// Document: removing spec.checksum does NOT invalidate cache.
 			// Cache remains valid until TTL expires.

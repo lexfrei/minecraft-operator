@@ -505,7 +505,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				Name: server.Name + "-minecraft", Namespace: ns,
 			}, &np)).To(Succeed())
 
-			// Count rules with port 8123
+			// Count rules with port 8123 — should be deduplicated to 1
 			pluginPort := intstr.FromInt32(8123)
 			count := 0
 			for _, rule := range np.Spec.Ingress {
@@ -515,8 +515,8 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 					}
 				}
 			}
-			Expect(count).To(Equal(2),
-				"Duplicate plugin ports should create separate ingress rules (Kubernetes allows duplicates)")
+			Expect(count).To(Equal(1),
+				"Duplicate plugin ports should be deduplicated to a single ingress rule")
 		})
 	})
 
