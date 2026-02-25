@@ -1242,6 +1242,21 @@ decisions:
       controller: "internal/controller/networkpolicy.go - ensureNetworkPolicy, buildNetworkPolicy, buildNetworkPolicyIngress, buildNetworkPolicyEgress, convertToPeer"
       helm_template: "charts/minecraft-operator/templates/networkpolicy.yaml - operator pod NetworkPolicy"
 
+  - id: ADR-034
+    date: 2026-02-26
+    status: accepted
+    decision: "Gateway API TCPRoute/UDPRoute for game traffic routing via the PaperMCServer controller"
+    reasoning: "Minecraft needs L4 routing (TCP game protocol + UDP query). Gateway API experimental channel provides TCPRoute and UDPRoute, which are the correct abstraction for L4. The controller creates routes per server pointing to the Service on port 25565. CRDs may not be installed, so the controller gracefully skips route management when CRDs are absent (meta.IsNoMatchError). At startup, SetupWithManager conditionally registers Owns() watches only when Gateway API CRDs are available. RCON port is excluded from routes for security (admin interface should not be publicly routed)."
+    alternatives:
+      - "Kubernetes Ingress: L7 only, cannot route raw TCP/UDP game traffic"
+      - "Manual TCPRoute/UDPRoute creation: Error-prone, drift from server config"
+      - "No routing support: Users must create routes manually for every server"
+    impact: "New GatewayConfig/GatewayParentRef/RouteConfig types in API, gateway_routes.go controller, RBAC for gateway.networking.k8s.io TCPRoutes/UDPRoutes, conditional Owns() in SetupWithManager"
+    components:
+      api_types: "api/v1beta1/papermcserver_types.go - GatewayConfig, GatewayParentRef, RouteConfig"
+      controller: "internal/controller/gateway_routes.go - ensureGatewayRoutes, reconcileTCPRoute, reconcileUDPRoute, buildBackendRef, buildParentRefs"
+      setup: "internal/controller/papermcserver_controller.go - gatewayAPIsAvailable, conditional Owns()"
+
 phases:
   phase_1_mvp:
     description: "Minimum viable product"
