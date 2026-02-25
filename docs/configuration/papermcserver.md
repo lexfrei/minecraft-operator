@@ -218,7 +218,9 @@ spec:
 
 The operator creates TCPRoute and/or UDPRoute resources that route the Minecraft game
 port (25565) through the specified Gateway. If the Gateway API CRDs are not installed in
-the cluster, the operator logs a debug message and skips route management gracefully.
+the cluster, the operator gracefully skips route management (logs a debug message, no
+error). When Gateway API CRDs are installed, external modifications to the routes are
+automatically detected and corrected via owner-reference watches.
 
 ### backup
 
