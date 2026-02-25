@@ -7,16 +7,19 @@ Expand the name of the chart.
 
 {{/*
 Create a default fully qualified app name.
+We truncate at 39 characters (not 63) because the longest resource
+suffix is "-leader-election-binding" (24 chars), and Kubernetes names
+must not exceed 63 characters total: 39 + 24 = 63.
 */}}
 {{- define "minecraft-operator.fullname" -}}
 {{- if .Values.fullnameOverride }}
-{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- .Values.fullnameOverride | trunc 39 | trimSuffix "-" }}
 {{- else }}
 {{- $name := default .Chart.Name .Values.nameOverride }}
 {{- if contains $name .Release.Name }}
-{{- .Release.Name | trunc 63 | trimSuffix "-" }}
+{{- .Release.Name | trunc 39 | trimSuffix "-" }}
 {{- else }}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
+{{- printf "%s-%s" .Release.Name $name | trunc 39 | trimSuffix "-" }}
 {{- end }}
 {{- end }}
 {{- end }}
