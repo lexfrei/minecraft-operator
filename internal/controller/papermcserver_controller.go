@@ -602,26 +602,31 @@ func (r *PaperMCServerReconciler) ensureService(
 		return nil
 	}
 
-	// Set owner reference for comparison
-	if err := controllerutil.SetControllerReference(server, desiredService, r.Scheme); err != nil {
+	// Set owner references for comparison and retroactive addition.
+	if err := controllerutil.SetControllerReference(server, &existingService, r.Scheme); err != nil {
 		return errors.Wrap(err, "failed to set owner reference")
 	}
-
-	// Skip update if nothing changed
+	if err := controllerutil.SetControllerReference(server, desiredService, r.Scheme); err != nil {
+		return errors.Wrap(err, "failed to set owner reference on desired")
+	}
+	// Skip update if nothing changed (spec, labels, and owner references).
 	if reflect.DeepEqual(existingService.Spec.Ports, desiredService.Spec.Ports) &&
 		maps.Equal(existingService.Labels, desiredService.Labels) &&
-		reflect.DeepEqual(existingService.Spec.Selector, desiredService.Spec.Selector) {
+		reflect.DeepEqual(existingService.Spec.Selector, desiredService.Spec.Selector) &&
+		reflect.DeepEqual(existingService.OwnerReferences, desiredService.OwnerReferences) {
 		return nil
 	}
 
 	slog.InfoContext(ctx, "Updating existing Service", "name", serviceName)
 
-	// Preserve immutable fields
-	desiredService.ResourceVersion = existingService.ResourceVersion
-	desiredService.Spec.ClusterIP = existingService.Spec.ClusterIP
-	desiredService.Spec.ClusterIPs = existingService.Spec.ClusterIPs
+	// Preserve immutable fields before overwriting Spec.
+	clusterIP, clusterIPs := existingService.Spec.ClusterIP, existingService.Spec.ClusterIPs
+	existingService.Spec = desiredService.Spec
+	existingService.Spec.ClusterIP = clusterIP
+	existingService.Spec.ClusterIPs = clusterIPs
+	existingService.Labels = desiredService.Labels
 
-	if err := r.Update(ctx, desiredService); err != nil {
+	if err := r.Update(ctx, &existingService); err != nil {
 		return errors.Wrap(err, "failed to update service")
 	}
 

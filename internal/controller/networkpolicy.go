@@ -103,7 +103,7 @@ func (r *PaperMCServerReconciler) buildNetworkPolicy(
 	policyTypes := []networkingv1.PolicyType{networkingv1.PolicyTypeIngress}
 
 	// Build ingress rules
-	ingress, err := r.buildNetworkPolicyIngress(server, npSpec, matchedPlugins)
+	ingress, err := r.buildNetworkPolicyIngress(ctx, server, npSpec, matchedPlugins)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build ingress rules")
 	}
@@ -156,6 +156,7 @@ func sameNamespacePeer(namespace string) networkingv1.NetworkPolicyPeer {
 
 // buildNetworkPolicyIngress constructs ingress rules for the NetworkPolicy.
 func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
+	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
 	npSpec *mcv1beta1.ServerNetworkPolicy,
 	matchedPlugins []mcv1beta1.Plugin,
@@ -181,7 +182,7 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 
 	rules := []networkingv1.NetworkPolicyIngressRule{mcRule}
 	rules = append(rules, buildPluginIngressRules(matchedPlugins, tcpProto, mcRule.From)...)
-	rules = append(rules, r.buildRCONIngressRule(server, tcpProto)...)
+	rules = append(rules, r.buildRCONIngressRule(ctx, server, tcpProto)...)
 
 	return rules, nil
 }
@@ -220,6 +221,7 @@ func buildPluginIngressRules(
 
 // buildRCONIngressRule creates an RCON ingress rule restricted to the operator namespace.
 func (r *PaperMCServerReconciler) buildRCONIngressRule(
+	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
 	proto corev1.Protocol,
 ) []networkingv1.NetworkPolicyIngressRule {
@@ -229,6 +231,12 @@ func (r *PaperMCServerReconciler) buildRCONIngressRule(
 
 	rconNS := r.OperatorNamespace
 	if rconNS == "" {
+		slog.WarnContext(ctx,
+			"OperatorNamespace not set, RCON ingress rule falls back to server namespace; "+
+				"set POD_NAMESPACE to ensure correct NetworkPolicy",
+			"server", server.Name,
+		)
+
 		rconNS = server.Namespace
 	}
 
