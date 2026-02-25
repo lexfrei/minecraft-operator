@@ -157,6 +157,69 @@ spec:
     loadBalancerIP: "192.168.1.100"
 ```
 
+### network
+
+**Optional** — Configures a Kubernetes NetworkPolicy for the server.
+
+| Field | Description | Default |
+| --- | --- | --- |
+| `networkPolicy.enabled` | Create a NetworkPolicy for this server | — |
+| `networkPolicy.allowFrom` | Additional ingress sources for the Minecraft port | — |
+| `networkPolicy.restrictEgress` | Restrict outbound traffic to DNS and HTTPS only | `true` |
+| `networkPolicy.allowEgressTo` | Additional egress destinations when `restrictEgress` is true | — |
+
+```yaml
+spec:
+  network:
+    networkPolicy:
+      enabled: true
+      allowFrom:
+        - cidr: "10.0.0.0/8"
+        - podSelector:
+            matchLabels:
+              role: proxy
+      restrictEgress: true
+      allowEgressTo:
+        - cidr: "203.0.113.0/24"
+          port: 8080
+          protocol: TCP
+```
+
+When enabled, the NetworkPolicy allows ingress on the Minecraft game port (25565) and
+RCON port (if configured), plus any sources listed in `allowFrom`. Egress is restricted
+to DNS (port 53) and HTTPS (port 443) by default; use `allowEgressTo` for additional
+destinations. Matched Plugin ports are automatically added as ingress rules.
+
+### gateway
+
+**Optional** — Configures Gateway API TCPRoute/UDPRoute for game traffic routing.
+Requires Gateway API CRDs (experimental channel) installed in the cluster.
+
+| Field | Description | Default |
+| --- | --- | --- |
+| `enabled` | Create Gateway API routes for this server | — |
+| `parentRefs` | Gateway(s) that routes should attach to | — |
+| `tcpRoute.enabled` | Create a TCPRoute for game traffic | — |
+| `udpRoute.enabled` | Create a UDPRoute for game traffic | — |
+
+```yaml
+spec:
+  gateway:
+    enabled: true
+    parentRefs:
+      - name: minecraft-gateway
+        namespace: gateway-system
+        sectionName: minecraft-tcp
+    tcpRoute:
+      enabled: true
+    udpRoute:
+      enabled: true
+```
+
+The operator creates TCPRoute and/or UDPRoute resources that route the Minecraft game
+port (25565) through the specified Gateway. If the Gateway API CRDs are not installed in
+the cluster, the operator logs a debug message and skips route management gracefully.
+
 ### backup
 
 **Optional** — Configures VolumeSnapshot-based backups with RCON consistency hooks.
@@ -389,6 +452,19 @@ spec:
     passwordSecret:
       name: survival-rcon
       key: password
+
+  network:
+    networkPolicy:
+      enabled: true
+      restrictEgress: true
+
+  gateway:
+    enabled: true
+    parentRefs:
+      - name: minecraft-gateway
+        namespace: gateway-system
+    tcpRoute:
+      enabled: true
 
   service:
     type: LoadBalancer
