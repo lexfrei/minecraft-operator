@@ -138,7 +138,7 @@ tests:
                 port: 6443
           any: true
 
-  - it: should allow RCON egress only to papermc pods on port 25575
+  - it: should allow RCON egress only to papermc pods on port 25575 across namespaces
     set:
       networkPolicy.enabled: true
     asserts:
@@ -149,6 +149,7 @@ tests:
               - podSelector:
                   matchLabels:
                     app: papermc
+                namespaceSelector: {}
             ports:
               - protocol: TCP
                 port: 25575

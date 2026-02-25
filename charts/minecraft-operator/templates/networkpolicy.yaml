@@ -44,11 +44,12 @@ spec:
     - ports:
         - protocol: TCP
           port: 6443
-    # RCON connections to managed Minecraft server pods
+    # RCON connections to managed Minecraft server pods (any namespace)
     - to:
         - podSelector:
             matchLabels:
               app: papermc
+          namespaceSelector: {}
       ports:
         - protocol: TCP
           port: 25575
