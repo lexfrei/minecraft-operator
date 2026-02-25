@@ -158,6 +158,7 @@ spec:
                           properties:
                             cidr:
                               description: CIDR is an IP block in CIDR notation.
+                              pattern: ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$
                               type: string
                             port:
                               description: Port is the destination port number.
@@ -183,6 +184,7 @@ spec:
                             cidr:
                               description: CIDR is an IP block in CIDR notation (e.g.,
                                 "10.0.0.0/8").
+                              pattern: ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$
                               type: string
                             namespaceSelector:
                               description: NamespaceSelector matches pods in selected

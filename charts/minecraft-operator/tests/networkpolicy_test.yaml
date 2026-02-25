@@ -126,6 +126,30 @@ tests:
           path: spec.policyTypes
           content: Egress
 
+  - it: should allow egress to Kubernetes API on port 6443
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - protocol: TCP
+                port: 6443
+          any: true
+
+  - it: should allow egress to managed server pods for RCON
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - protocol: TCP
+                port: 25575
+          any: true
+
   - it: should have standard labels
     set:
       networkPolicy.enabled: true

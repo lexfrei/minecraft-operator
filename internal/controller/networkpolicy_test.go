@@ -103,6 +103,51 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 		return &created
 	}
 
+	createServerWithRCON := func(name string, network *mck8slexlav1beta1.NetworkConfig) *mck8slexlav1beta1.PaperMCServer {
+		server := &mck8slexlav1beta1.PaperMCServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: ns,
+			},
+			Spec: mck8slexlav1beta1.PaperMCServerSpec{
+				UpdateStrategy: "pin",
+				Version:        "1.21.1",
+				UpdateSchedule: mck8slexlav1beta1.UpdateSchedule{
+					CheckCron: "0 3 * * *",
+					MaintenanceWindow: mck8slexlav1beta1.MaintenanceWindow{
+						Cron:    "0 4 * * 0",
+						Enabled: true,
+					},
+				},
+				GracefulShutdown: mck8slexlav1beta1.GracefulShutdown{
+					Timeout: metav1.Duration{Duration: 5 * time.Minute},
+				},
+				RCON: mck8slexlav1beta1.RCONConfig{
+					Enabled:        true,
+					PasswordSecret: mck8slexlav1beta1.SecretKeyRef{Name: "rcon-secret", Key: "password"},
+					Port:           25575,
+				},
+				Service: mck8slexlav1beta1.ServiceConfig{
+					Type: corev1.ServiceTypeClusterIP,
+				},
+				Network: network,
+				PodTemplate: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: "papermc", Image: "docker.io/lexfrei/papermc:1.21.1-91"},
+						},
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, server)).To(Succeed())
+
+		var created mck8slexlav1beta1.PaperMCServer
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, &created)).To(Succeed())
+
+		return &created
+	}
+
 	Context("when network policy is enabled", func() {
 		It("should create a NetworkPolicy for the server", func() {
 			server := createServer("np-basic", &mck8slexlav1beta1.NetworkConfig{
@@ -151,17 +196,12 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 			))
 		})
 
-		It("should restrict RCON port to operator namespace when RCON enabled", func() {
-			server := createServer("np-rcon", &mck8slexlav1beta1.NetworkConfig{
+		It("should restrict RCON port to server namespace when RCON enabled", func() {
+			server := createServerWithRCON("np-rcon", &mck8slexlav1beta1.NetworkConfig{
 				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
 					Enabled: true,
 				},
 			})
-			server.Spec.RCON = mck8slexlav1beta1.RCONConfig{
-				Enabled:        true,
-				PasswordSecret: mck8slexlav1beta1.SecretKeyRef{Name: "s", Key: "k"},
-				Port:           25575,
-			}
 
 			err := reconciler.ensureNetworkPolicy(ctx, server)
 			Expect(err).NotTo(HaveOccurred())
@@ -171,7 +211,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				Name: server.Name + "-minecraft", Namespace: ns,
 			}, &np)).To(Succeed())
 
-			// RCON rule should have namespace selector restricting to operator namespace
+			// RCON rule should have namespace selector restricting to server namespace
 			rconPort := intstr.FromInt32(25575)
 			tcpProto := corev1.ProtocolTCP
 			found := false
@@ -179,9 +219,8 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				for _, port := range rule.Ports {
 					if port.Port != nil && port.Port.IntVal == rconPort.IntVal && *port.Protocol == tcpProto {
 						found = true
-						// Should have a from restriction (namespace selector)
 						Expect(rule.From).NotTo(BeEmpty(),
-							"RCON ingress must restrict source to operator namespace")
+							"RCON ingress must restrict source to server namespace")
 					}
 				}
 			}
@@ -356,6 +395,186 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				}
 			}
 			Expect(found).To(BeTrue(), "Should have Minecraft port rule with custom allowFrom")
+		})
+	})
+
+	// Issue #2: convertToPeer must reject CIDR + selector combination
+	Context("when allowFrom has both CIDR and podSelector", func() {
+		It("should return error for invalid peer with CIDR and selector", func() {
+			_, err := convertToPeer(mck8slexlav1beta1.NetworkPolicySource{
+				CIDR:        "10.0.0.0/8",
+				PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "proxy"}},
+			})
+			Expect(err).To(HaveOccurred(), "convertToPeer must reject CIDR combined with PodSelector")
+		})
+
+		It("should return error for CIDR and namespaceSelector", func() {
+			_, err := convertToPeer(mck8slexlav1beta1.NetworkPolicySource{
+				CIDR:              "10.0.0.0/8",
+				NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"env": "prod"}},
+			})
+			Expect(err).To(HaveOccurred(), "convertToPeer must reject CIDR combined with NamespaceSelector")
+		})
+	})
+
+	// Issue #5: Default egress must include HTTPS for Mojang auth
+	Context("when restrictEgress is true (default)", func() {
+		It("should allow HTTPS egress for Mojang authentication", func() {
+			restrictEgress := true
+			server := createServer("np-mojang", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled:        true,
+					RestrictEgress: &restrictEgress,
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			httpsPort := intstr.FromInt32(443)
+			tcpProto := corev1.ProtocolTCP
+			Expect(np.Spec.Egress).To(ContainElement(
+				networkingv1.NetworkPolicyEgressRule{
+					Ports: []networkingv1.NetworkPolicyPort{
+						{Protocol: &tcpProto, Port: &httpsPort},
+					},
+				},
+			))
+		})
+	})
+
+	// Issue #8: RCON test must create server with RCON enabled from the start
+	Context("when RCON is enabled at creation time", func() {
+		It("should restrict RCON port to server namespace", func() {
+			server := createServerWithRCON("np-rcon-fix", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled: true,
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			rconPort := intstr.FromInt32(25575)
+			tcpProto := corev1.ProtocolTCP
+			found := false
+			for _, rule := range np.Spec.Ingress {
+				for _, port := range rule.Ports {
+					if port.Port != nil && port.Port.IntVal == rconPort.IntVal && *port.Protocol == tcpProto {
+						found = true
+						Expect(rule.From).NotTo(BeEmpty(),
+							"RCON ingress must restrict source to operator namespace")
+					}
+				}
+			}
+			Expect(found).To(BeTrue(), "Should have RCON port rule")
+		})
+	})
+
+	// Issue #9: restrictEgress: false must produce Ingress-only policy
+	Context("when restrictEgress is false", func() {
+		It("should only have Ingress policy type and no egress rules", func() {
+			restrictEgress := false
+			server := createServer("np-no-egress", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled:        true,
+					RestrictEgress: &restrictEgress,
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			Expect(np.Spec.PolicyTypes).To(ConsistOf(networkingv1.PolicyTypeIngress))
+			Expect(np.Spec.Egress).To(BeEmpty())
+		})
+	})
+
+	// Issue #10: allowEgressTo custom destinations
+	Context("when allowEgressTo has custom destinations", func() {
+		It("should include CIDR-based egress rule", func() {
+			restrictEgress := true
+			port443 := int32(443)
+			tcpProto := corev1.ProtocolTCP
+			server := createServer("np-egress-cidr", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled:        true,
+					RestrictEgress: &restrictEgress,
+					AllowEgressTo: []mck8slexlav1beta1.NetworkPolicyDestination{
+						{CIDR: "203.0.113.0/24", Port: &port443, Protocol: &tcpProto},
+					},
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			egressPort := intstr.FromInt32(443)
+			Expect(np.Spec.Egress).To(ContainElement(
+				networkingv1.NetworkPolicyEgressRule{
+					To: []networkingv1.NetworkPolicyPeer{
+						{IPBlock: &networkingv1.IPBlock{CIDR: "203.0.113.0/24"}},
+					},
+					Ports: []networkingv1.NetworkPolicyPort{
+						{Protocol: &tcpProto, Port: &egressPort},
+					},
+				},
+			))
+		})
+
+		It("should handle port-only egress (no CIDR)", func() {
+			restrictEgress := true
+			port8080 := int32(8080)
+			server := createServer("np-egress-port", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled:        true,
+					RestrictEgress: &restrictEgress,
+					AllowEgressTo: []mck8slexlav1beta1.NetworkPolicyDestination{
+						{Port: &port8080},
+					},
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			egressPort := intstr.FromInt32(8080)
+			tcpDefault := corev1.ProtocolTCP
+			// Should have DNS + custom port rules
+			Expect(len(np.Spec.Egress)).To(BeNumerically(">=", 3),
+				"Should have DNS + HTTPS + custom port egress rules")
+			Expect(np.Spec.Egress).To(ContainElement(
+				networkingv1.NetworkPolicyEgressRule{
+					Ports: []networkingv1.NetworkPolicyPort{
+						{Protocol: &tcpDefault, Port: &egressPort},
+					},
+				},
+			))
 		})
 	})
 
