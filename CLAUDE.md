@@ -82,10 +82,10 @@ Four main controllers work together:
 
 **Status:**
 
-- `currentPaperVersion`: Observed running version
-- `currentPaperBuild`: Observed running build number
-- `desiredPaperVersion`: Target version (resolved from updateStrategy)
-- `desiredPaperBuild`: Target build (resolved from updateStrategy)
+- `currentVersion`: Observed running version
+- `currentBuild`: Observed running build number
+- `desiredVersion`: Target version (resolved from updateStrategy)
+- `desiredBuild`: Target build (resolved from updateStrategy)
 - `plugins`: List of matched Plugins with current/desired versions
 - `availableUpdate`: Solver result for next possible update
 - `lastUpdate`: History of previous update attempt
@@ -108,7 +108,7 @@ Four main controllers work together:
 1. Collect all matched Plugin resources
 2. Filter Paper versions by `updateDelay`
 3. Find MAX Paper version where: `∀ plugin ∈ plugins: ∃ plugin_version compatible with paper_version`
-4. Store result in `status.desiredPaperVersion` and `status.desiredPaperBuild`
+4. Store result in `status.desiredVersion` and `status.desiredBuild`
 5. Compare with current version to determine if update is available
 
 **Update Strategy Behaviors:**
@@ -133,10 +133,10 @@ Four main controllers work together:
      - `auto`: Run constraint solver for plugin compatibility
      - `pin`: Find latest build for pinned version
      - `build-pin`: Validate specified version-build exists
-   - Update `status.desiredPaperVersion` and `status.desiredPaperBuild`
+   - Update `status.desiredVersion` and `status.desiredBuild`
 
 2. **Maintenance Window** (via `maintenanceWindow.cron`):
-   - Check if `desiredPaperVersion` differs from `currentPaperVersion` and `updateDelay` satisfied
+   - Check if `desiredVersion` differs from `currentVersion` and `updateDelay` satisfied
    - Download Paper JAR (if changed) and plugin JARs to PVC
    - Copy plugins to `/data/plugins/update/` (Paper hot-swap mechanism)
    - Update StatefulSet image to `docker.io/lexfrei/papermc:{version}-{build}` (never uses `:latest` tag)
