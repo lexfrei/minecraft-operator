@@ -125,7 +125,9 @@ type ServerNetworkPolicy struct {
 
 // NetworkPolicySource defines an ingress source (CIDR or pod/namespace selector).
 type NetworkPolicySource struct {
-	// CIDR is an IP block in CIDR notation (e.g., "10.0.0.0/8").
+	// CIDR is an IPv4 block in CIDR notation (e.g., "10.0.0.0/8").
+	// IPv6 CIDRs are not supported. Semantic validation (valid octets, prefix length)
+	// is performed by the Kubernetes NetworkPolicy API at apply time.
 	// +optional
 	// +kubebuilder:validation:Pattern=`^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$`
 	CIDR string `json:"cidr,omitempty"`
@@ -141,7 +143,9 @@ type NetworkPolicySource struct {
 
 // NetworkPolicyDestination defines an egress destination (CIDR or port).
 type NetworkPolicyDestination struct {
-	// CIDR is an IP block in CIDR notation.
+	// CIDR is an IPv4 block in CIDR notation (e.g., "203.0.113.0/24").
+	// IPv6 CIDRs are not supported. Semantic validation (valid octets, prefix length)
+	// is performed by the Kubernetes NetworkPolicy API at apply time.
 	// +optional
 	// +kubebuilder:validation:Pattern=`^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$`
 	CIDR string `json:"cidr,omitempty"`
