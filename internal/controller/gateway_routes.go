@@ -76,10 +76,9 @@ func (r *PaperMCServerReconciler) reconcileTCPRoute(
 		if exists {
 			slog.InfoContext(ctx, "Deleting TCPRoute", "name", routeName)
 
-			return errors.Wrap(
-				r.Delete(ctx, &existing),
-				"failed to delete TCPRoute",
-			)
+			if deleteErr := r.Delete(ctx, &existing); deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
+				return errors.Wrap(deleteErr, "failed to delete TCPRoute")
+			}
 		}
 
 		return nil
@@ -139,10 +138,9 @@ func (r *PaperMCServerReconciler) reconcileUDPRoute(
 		if exists {
 			slog.InfoContext(ctx, "Deleting UDPRoute", "name", routeName)
 
-			return errors.Wrap(
-				r.Delete(ctx, &existing),
-				"failed to delete UDPRoute",
-			)
+			if deleteErr := r.Delete(ctx, &existing); deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
+				return errors.Wrap(deleteErr, "failed to delete UDPRoute")
+			}
 		}
 
 		return nil

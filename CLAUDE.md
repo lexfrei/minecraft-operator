@@ -52,6 +52,7 @@ Four main controllers work together:
 - `updateStrategy`: `latest`, `auto`, `pin`, or `build-pin` (defines version management behavior). For URL-source plugins, all strategies behave similarly since only one version exists (the JAR at the URL)
 - `version`: Specific version when using `pin` or `build-pin` strategy (also used as fallback version for URL-source plugins when JAR has no plugin.yml version)
 - `updateDelay`: Grace period before auto-applying new releases (e.g., `168h` for 7 days)
+- `port`: Optional TCP port exposed by the plugin (e.g., 8123 for Dynmap); used for Service ports and NetworkPolicy ingress rules
 - `instanceSelector`: Label selector to match PaperMCServer instances
 - `compatibilityOverride`: Manual compatibility specification for edge cases
 
@@ -76,6 +77,7 @@ Four main controllers work together:
 - `rcon`: RCON configuration for graceful shutdown
 - `backup`: VolumeSnapshot backup configuration (schedule, retention, beforeUpdate)
 - `network`: Network policy configuration (per-server NetworkPolicy with ingress/egress rules)
+- `gateway`: Gateway API configuration (TCPRoute/UDPRoute for game traffic via Gateway API)
 - `podTemplate`: StatefulSet pod spec
 
 **Status:**
