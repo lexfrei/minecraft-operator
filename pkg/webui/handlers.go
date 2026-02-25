@@ -385,6 +385,8 @@ func (s *Server) parsePluginFormToData(r *http.Request) (service.PluginCreateDat
 		if err := plugins.ValidateDownloadURL(pluginURL); err != nil {
 			return service.PluginCreateData{}, errors.Wrap(err, "invalid plugin URL")
 		}
+	default:
+		return service.PluginCreateData{}, errors.Newf("unsupported source type: %s", sourceType)
 	}
 
 	if !isValidKubernetesName(name) {
