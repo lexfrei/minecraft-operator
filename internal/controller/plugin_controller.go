@@ -51,6 +51,7 @@ const (
 	urlCacheTTL = 1 * time.Hour
 
 	reasonChecksumMismatch = "ChecksumMismatch"
+	reasonFallbackVersion  = "FallbackVersion"
 )
 
 // errChecksumMismatch is a sentinel error for checksum verification failures.
@@ -430,6 +431,7 @@ func (r *PluginReconciler) resolveURLVersion(
 			"plugin", plugin.Name, "error", parseErr)
 
 		version := r.resolveVersionWithFallback(ctx, plugin, "")
+		r.setFallbackVersionCondition(plugin, version)
 
 		return []plugins.PluginVersion{{
 			Version:     version,
@@ -439,6 +441,7 @@ func (r *PluginReconciler) resolveURLVersion(
 	}
 
 	version := r.resolveVersionWithFallback(ctx, plugin, jarMeta.Version)
+	r.setFallbackVersionCondition(plugin, version)
 
 	var mcVersions []string
 	if jarMeta.APIVersion != "" {
@@ -472,6 +475,16 @@ func (r *PluginReconciler) resolveVersionWithFallback(
 		"plugin", plugin.Name, "version", "0.0.0")
 
 	return "0.0.0"
+}
+
+// setFallbackVersionCondition sets a condition when the "0.0.0" placeholder version is used,
+// so users can see in status why no real version was resolved.
+func (r *PluginReconciler) setFallbackVersionCondition(plugin *mcv1beta1.Plugin, version string) {
+	if version == "0.0.0" {
+		r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,
+			reasonFallbackVersion,
+			"Version could not be extracted from JAR or spec; using 0.0.0 placeholder")
+	}
 }
 
 // urlCacheValid checks whether cached URL metadata is still valid.

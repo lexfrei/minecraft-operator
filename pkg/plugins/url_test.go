@@ -74,6 +74,11 @@ func TestValidateDownloadURL_BlockedHosts(t *testing.T) {
 		{"loopback IP with port", "https://127.0.0.1:8080/plugin.jar"},
 		{"mDNS .local domain", "https://myhost.local/plugin.jar"},
 		{"arbitrary .internal domain", "https://evil.internal/plugin.jar"},
+		{"pod cluster-local DNS", "https://10-0-0-1.default.pod.cluster.local/plugin.jar"},
+		{"arbitrary cluster-local DNS", "https://foo.cluster.local/plugin.jar"},
+		{"hex-encoded single-value loopback", "https://0x7f000001/plugin.jar"},
+		{"hex-encoded single-value private 10.x", "https://0x0a000001/plugin.jar"},
+		{"hex-encoded uppercase single-value", "https://0X7F000001/plugin.jar"},
 	}
 	for _, tc := range blocked {
 		t.Run("blocks "+tc.name, func(t *testing.T) {
@@ -96,6 +101,21 @@ func TestValidateDownloadURL_BlockedHosts(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+// TestValidateDownloadURL_DNSRebindingLimitation documents the known limitation that
+// hostname-based validation cannot prevent DNS rebinding attacks. A malicious hostname
+// (e.g., "evil.com") passes validation because isBlockedHost only checks the hostname
+// string, not the resolved IP address. This is mitigated by Kubernetes RBAC (only
+// authorized users can create Plugin CRDs) and NetworkPolicy on the operator pod.
+func TestValidateDownloadURL_DNSRebindingLimitation(t *testing.T) {
+	// A hostname that COULD resolve to 127.0.0.1 via DNS rebinding passes validation
+	// because we only check the hostname string, not the resolved IP.
+	err := plugins.ValidateDownloadURL("https://evil.example.com/plugin.jar")
+	require.NoError(t, err,
+		"Known limitation: hostname-based validation cannot detect DNS rebinding. "+
+			"Mitigation: RBAC restricts who can create Plugin CRDs, "+
+			"NetworkPolicy restricts operator egress")
 }
 
 func TestSafeHTTPClient(t *testing.T) {

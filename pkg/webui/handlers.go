@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
+	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/templates"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -267,9 +268,9 @@ func (s *Server) fetchPluginListData(ctx context.Context, filterNamespace string
 	}
 
 	// Convert to template items
-	plugins := make([]templates.PluginListItem, 0, len(pluginsData))
+	pluginItems := make([]templates.PluginListItem, 0, len(pluginsData))
 	for _, data := range pluginsData {
-		plugins = append(plugins, pluginDataToListItem(data))
+		pluginItems = append(pluginItems, pluginDataToListItem(data))
 	}
 
 	// Convert namespaceSet to slice
@@ -279,7 +280,7 @@ func (s *Server) fetchPluginListData(ctx context.Context, filterNamespace string
 	}
 
 	return templates.PluginListData{
-		Plugins:           plugins,
+		Plugins:           pluginItems,
 		Namespaces:        namespaces,
 		SelectedNamespace: filterNamespace,
 	}, nil
@@ -379,6 +380,10 @@ func (s *Server) parsePluginFormToData(r *http.Request) (service.PluginCreateDat
 	case "url":
 		if pluginURL == "" {
 			return service.PluginCreateData{}, errors.New("URL is required for url source type")
+		}
+
+		if err := plugins.ValidateDownloadURL(pluginURL); err != nil {
+			return service.PluginCreateData{}, errors.Wrap(err, "invalid plugin URL")
 		}
 	}
 
