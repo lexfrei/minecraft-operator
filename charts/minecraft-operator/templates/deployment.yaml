@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "minecraft-operator.fullname" . }}-controller-manager
+  name: {{ include "minecraft-operator.fullname" . }}
   labels:
     control-plane: controller-manager
     {{- include "minecraft-operator.labels" . | nindent 4 }}
@@ -26,7 +26,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "minecraft-operator.fullname" . }}-controller-manager
+      serviceAccountName: {{ include "minecraft-operator.fullname" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:

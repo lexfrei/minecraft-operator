@@ -197,4 +197,4 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.serviceAccountName
-          pattern: ".*-controller-manager$"
+          pattern: ".*-minecraft-operator$"
