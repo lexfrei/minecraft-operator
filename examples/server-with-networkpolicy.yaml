@@ -1,0 +1,56 @@
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: PaperMCServer
+metadata:
+  name: secure-server
+  labels:
+    server: "secure-server"
+    type: survival
+spec:
+  updateStrategy: pin
+  version: "1.21.1"
+
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      cron: "0 4 * * 0"
+      enabled: true
+
+  gracefulShutdown:
+    timeout: 300s
+
+  rcon:
+    enabled: true
+    passwordSecret:
+      name: rcon-password
+      key: password
+    port: 25575
+
+  service:
+    type: ClusterIP
+
+  # Network policy restricts traffic to/from the server pod
+  network:
+    networkPolicy:
+      enabled: true
+      # Allow Minecraft port (25565) ingress from specific CIDR
+      allowFrom:
+        - cidr: "10.0.0.0/8"
+      # Restrict egress to DNS + HTTPS only (blocks arbitrary outbound)
+      restrictEgress: true
+      # Allow additional egress destinations
+      allowEgressTo:
+        - cidr: "203.0.113.0/24"
+          port: 8080
+          protocol: TCP
+
+  podTemplate:
+    spec:
+      containers:
+        - name: papermc
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"

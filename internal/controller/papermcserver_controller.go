@@ -78,12 +78,13 @@ type RegistryAPI interface {
 // PaperMCServerReconciler reconciles a PaperMCServer object.
 type PaperMCServerReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Config         *rest.Config
-	PaperClient    PaperAPI
-	Solver         solver.Solver
-	RegistryClient RegistryAPI
-	Metrics        metrics.Recorder
+	Scheme            *runtime.Scheme
+	Config            *rest.Config
+	PaperClient       PaperAPI
+	Solver            solver.Solver
+	RegistryClient    RegistryAPI
+	Metrics           metrics.Recorder
+	OperatorNamespace string
 }
 
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers,verbs=get;list;watch;create;update;patch;delete

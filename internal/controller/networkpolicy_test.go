@@ -26,11 +26,6 @@ import (
 )
 
 var _ = Describe("NetworkPolicy for PaperMCServer", func() {
-	const (
-		timeout  = 10 * time.Second
-		interval = 250 * time.Millisecond
-	)
-
 	var (
 		ns         string
 		reconciler *PaperMCServerReconciler
@@ -194,37 +189,6 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 					},
 				},
 			))
-		})
-
-		It("should restrict RCON port to server namespace when RCON enabled", func() {
-			server := createServerWithRCON("np-rcon", &mck8slexlav1beta1.NetworkConfig{
-				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
-					Enabled: true,
-				},
-			})
-
-			err := reconciler.ensureNetworkPolicy(ctx, server)
-			Expect(err).NotTo(HaveOccurred())
-
-			var np networkingv1.NetworkPolicy
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: server.Name + "-minecraft", Namespace: ns,
-			}, &np)).To(Succeed())
-
-			// RCON rule should have namespace selector restricting to server namespace
-			rconPort := intstr.FromInt32(25575)
-			tcpProto := corev1.ProtocolTCP
-			found := false
-			for _, rule := range np.Spec.Ingress {
-				for _, port := range rule.Ports {
-					if port.Port != nil && port.Port.IntVal == rconPort.IntVal && *port.Protocol == tcpProto {
-						found = true
-						Expect(rule.From).NotTo(BeEmpty(),
-							"RCON ingress must restrict source to server namespace")
-					}
-				}
-			}
-			Expect(found).To(BeTrue(), "Should have RCON port rule")
 		})
 
 		It("should allow DNS egress when restrictEgress is true", func() {
@@ -448,10 +412,13 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 		})
 	})
 
-	// Issue #8: RCON test must create server with RCON enabled from the start
-	Context("when RCON is enabled at creation time", func() {
-		It("should restrict RCON port to server namespace", func() {
-			server := createServerWithRCON("np-rcon-fix", &mck8slexlav1beta1.NetworkConfig{
+	// RCON namespace restriction must use operator namespace, not server namespace
+	Context("when RCON is enabled and operator runs in a different namespace", func() {
+		It("should restrict RCON port to operator namespace, not server namespace", func() {
+			operatorNS := "minecraft-operator-system"
+			reconciler.OperatorNamespace = operatorNS
+
+			server := createServerWithRCON("np-rcon-opns", &mck8slexlav1beta1.NetworkConfig{
 				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
 					Enabled: true,
 				},
@@ -472,8 +439,54 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				for _, port := range rule.Ports {
 					if port.Port != nil && port.Port.IntVal == rconPort.IntVal && *port.Protocol == tcpProto {
 						found = true
-						Expect(rule.From).NotTo(BeEmpty(),
-							"RCON ingress must restrict source to operator namespace")
+						Expect(rule.From).To(ContainElement(
+							networkingv1.NetworkPolicyPeer{
+								NamespaceSelector: &metav1.LabelSelector{
+									MatchLabels: map[string]string{
+										"kubernetes.io/metadata.name": operatorNS,
+									},
+								},
+							},
+						), "RCON should be restricted to operator namespace, not server namespace")
+					}
+				}
+			}
+			Expect(found).To(BeTrue(), "Should have RCON port rule")
+		})
+
+		It("should fall back to server namespace when OperatorNamespace is empty", func() {
+			reconciler.OperatorNamespace = ""
+
+			server := createServerWithRCON("np-rcon-fallback", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled: true,
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			rconPort := intstr.FromInt32(25575)
+			tcpProto := corev1.ProtocolTCP
+			found := false
+			for _, rule := range np.Spec.Ingress {
+				for _, port := range rule.Ports {
+					if port.Port != nil && port.Port.IntVal == rconPort.IntVal && *port.Protocol == tcpProto {
+						found = true
+						Expect(rule.From).To(ContainElement(
+							networkingv1.NetworkPolicyPeer{
+								NamespaceSelector: &metav1.LabelSelector{
+									MatchLabels: map[string]string{
+										"kubernetes.io/metadata.name": ns,
+									},
+								},
+							},
+						), "Should fall back to server namespace when OperatorNamespace is empty")
 					}
 				}
 			}
@@ -505,7 +518,119 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 		})
 	})
 
-	// Issue #10: allowEgressTo custom destinations
+	// Empty allowEgressTo entry must be rejected (opens all egress)
+	Context("when allowEgressTo has an empty entry", func() {
+		It("should return error for empty NetworkPolicyDestination", func() {
+			restrictEgress := true
+			server := createServer("np-egress-empty", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled:        true,
+					RestrictEgress: &restrictEgress,
+					AllowEgressTo: []mck8slexlav1beta1.NetworkPolicyDestination{
+						{}, // empty entry — would open all egress
+					},
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).To(HaveOccurred(), "Empty allowEgressTo entry must be rejected")
+		})
+	})
+
+	// Empty NetworkPolicySource must be rejected (opens all ingress)
+	Context("when allowFrom has an empty entry", func() {
+		It("should return error for empty NetworkPolicySource", func() {
+			_, err := convertToPeer(mck8slexlav1beta1.NetworkPolicySource{})
+			Expect(err).To(HaveOccurred(), "Empty NetworkPolicySource must be rejected")
+		})
+	})
+
+	// Update path must skip API call when nothing changed
+	Context("when ensureNetworkPolicy is called twice with same config", func() {
+		It("should not issue unnecessary update", func() {
+			server := createServer("np-noop-update", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled: true,
+				},
+			})
+
+			// First call — create
+			err := reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np1 networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np1)).To(Succeed())
+			rv1 := np1.ResourceVersion
+
+			// Second call — should not update (same config)
+			err = reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np2 networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np2)).To(Succeed())
+
+			Expect(np2.ResourceVersion).To(Equal(rv1),
+				"ResourceVersion must not change when config is unchanged")
+		})
+	})
+
+	// Update path must actually update when config changes
+	Context("when NetworkPolicy config changes", func() {
+		It("should update existing NetworkPolicy spec", func() {
+			server := createServer("np-update", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled: true,
+					AllowFrom: []mck8slexlav1beta1.NetworkPolicySource{
+						{CIDR: "10.0.0.0/8"},
+					},
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Modify config
+			server.Spec.Network.NetworkPolicy.AllowFrom = []mck8slexlav1beta1.NetworkPolicySource{
+				{CIDR: "192.168.0.0/16"},
+			}
+
+			err = reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			// Verify the Minecraft port rule has updated allowFrom
+			mcPort := intstr.FromInt32(25565)
+			found := false
+			for _, rule := range np.Spec.Ingress {
+				for _, port := range rule.Ports {
+					if port.Port != nil && port.Port.IntVal == mcPort.IntVal {
+						found = true
+						Expect(rule.From).To(ContainElement(
+							networkingv1.NetworkPolicyPeer{
+								IPBlock: &networkingv1.IPBlock{CIDR: "192.168.0.0/16"},
+							},
+						))
+						Expect(rule.From).NotTo(ContainElement(
+							networkingv1.NetworkPolicyPeer{
+								IPBlock: &networkingv1.IPBlock{CIDR: "10.0.0.0/8"},
+							},
+						), "Old CIDR should be replaced")
+					}
+				}
+			}
+			Expect(found).To(BeTrue())
+		})
+	})
+
+	// allowEgressTo custom destinations
 	Context("when allowEgressTo has custom destinations", func() {
 		It("should include CIDR-based egress rule", func() {
 			restrictEgress := true
@@ -578,6 +703,4 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 		})
 	})
 
-	_ = timeout
-	_ = interval
 })

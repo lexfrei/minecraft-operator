@@ -275,6 +275,21 @@ spec:
     #   metallb.universe.tf/loadBalancerIPs: "192.168.1.100"
     # loadBalancerIP: "192.168.1.100"
 
+  # Network policy configuration (optional)
+  network:
+    networkPolicy:
+      enabled: true
+      # Additional ingress sources for the Minecraft port
+      allowFrom:
+        - cidr: "10.0.0.0/8"
+      # Restrict egress to DNS + HTTPS only (default: true)
+      restrictEgress: true
+      # Additional egress destinations when restrictEgress is true
+      allowEgressTo:
+        - cidr: "203.0.113.0/24"
+          port: 8080
+          protocol: TCP
+
   # Pod settings (simplified, can be extended)
   podTemplate:
     spec:

@@ -9,6 +9,8 @@ package controller
 import (
 	"context"
 	"log/slog"
+	"maps"
+	"reflect"
 
 	"github.com/cockroachdb/errors"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -76,7 +78,11 @@ func (r *PaperMCServerReconciler) ensureNetworkPolicy(
 		return errors.Wrap(r.Create(ctx, desired), "failed to create NetworkPolicy")
 	}
 
-	// Update existing
+	// Skip update if nothing changed
+	if reflect.DeepEqual(existing.Spec, desired.Spec) && maps.Equal(existing.Labels, desired.Labels) {
+		return nil
+	}
+
 	slog.InfoContext(ctx, "Updating NetworkPolicy", "name", npName)
 
 	existing.Spec = desired.Spec
@@ -105,7 +111,13 @@ func (r *PaperMCServerReconciler) buildNetworkPolicy(
 	restrictEgress := npSpec.RestrictEgress == nil || *npSpec.RestrictEgress
 	if restrictEgress {
 		policyTypes = append(policyTypes, networkingv1.PolicyTypeEgress)
-		egress = r.buildNetworkPolicyEgress(npSpec)
+
+		var egressErr error
+
+		egress, egressErr = r.buildNetworkPolicyEgress(npSpec)
+		if egressErr != nil {
+			return nil, errors.Wrap(egressErr, "failed to build egress rules")
+		}
 	}
 
 	return &networkingv1.NetworkPolicy{
@@ -157,6 +169,11 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 
 	// RCON port rule — restricted to operator namespace
 	if server.Spec.RCON.Enabled && server.Spec.RCON.Port > 0 {
+		rconNS := r.OperatorNamespace
+		if rconNS == "" {
+			rconNS = server.Namespace
+		}
+
 		rconPort := intstr.FromInt32(server.Spec.RCON.Port)
 		rconRule := networkingv1.NetworkPolicyIngressRule{
 			Ports: []networkingv1.NetworkPolicyPort{
@@ -164,11 +181,9 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 			},
 			From: []networkingv1.NetworkPolicyPeer{
 				{
-					// Restrict RCON to pods in the same namespace as the server
-					// (where the operator runs or has access)
 					NamespaceSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"kubernetes.io/metadata.name": server.Namespace,
+							"kubernetes.io/metadata.name": rconNS,
 						},
 					},
 				},
@@ -183,7 +198,7 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 // buildNetworkPolicyEgress constructs egress rules for the NetworkPolicy.
 func (r *PaperMCServerReconciler) buildNetworkPolicyEgress(
 	npSpec *mcv1beta1.ServerNetworkPolicy,
-) []networkingv1.NetworkPolicyEgressRule {
+) ([]networkingv1.NetworkPolicyEgressRule, error) {
 	udpProto := corev1.ProtocolUDP
 	tcpProto := corev1.ProtocolTCP
 	dnsPortVal := intstr.FromInt32(dnsPort)
@@ -208,6 +223,12 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyEgress(
 
 	// Additional egress destinations
 	for _, dest := range npSpec.AllowEgressTo {
+		if dest.CIDR == "" && dest.Port == nil {
+			return nil, errors.New(
+				"NetworkPolicyDestination must specify at least CIDR or Port",
+			)
+		}
+
 		rule := networkingv1.NetworkPolicyEgressRule{}
 
 		if dest.CIDR != "" {
@@ -231,13 +252,19 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyEgress(
 		rules = append(rules, rule)
 	}
 
-	return rules
+	return rules, nil
 }
 
 // convertToPeer converts a NetworkPolicySource to a Kubernetes NetworkPolicyPeer.
 // Returns an error if CIDR is combined with PodSelector or NamespaceSelector,
 // as the Kubernetes API does not allow IPBlock with other peer fields.
 func convertToPeer(source mcv1beta1.NetworkPolicySource) (networkingv1.NetworkPolicyPeer, error) {
+	if source.CIDR == "" && source.PodSelector == nil && source.NamespaceSelector == nil {
+		return networkingv1.NetworkPolicyPeer{}, errors.New(
+			"NetworkPolicySource must specify at least one of CIDR, PodSelector, or NamespaceSelector",
+		)
+	}
+
 	if source.CIDR != "" && (source.PodSelector != nil || source.NamespaceSelector != nil) {
 		return networkingv1.NetworkPolicyPeer{}, errors.New(
 			"NetworkPolicySource cannot combine CIDR with PodSelector or NamespaceSelector",

@@ -75,6 +75,7 @@ Four main controllers work together:
 - `gracefulShutdown.timeout`: Must match StatefulSet `terminationGracePeriodSeconds`
 - `rcon`: RCON configuration for graceful shutdown
 - `backup`: VolumeSnapshot backup configuration (schedule, retention, beforeUpdate)
+- `network`: Network policy configuration (per-server NetworkPolicy with ingress/egress rules)
 - `podTemplate`: StatefulSet pod spec
 
 **Status:**
