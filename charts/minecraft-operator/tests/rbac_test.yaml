@@ -157,6 +157,25 @@ tests:
               - update
               - watch
 
+  # ClusterRole: NetworkPolicy permissions
+  - it: should grant NetworkPolicy management permissions
+    template: templates/rbac/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - networking.k8s.io
+            resources:
+              - networkpolicies
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - update
+              - watch
+
   # ClusterRoleBinding: references correct SA
   - it: should bind ClusterRole to controller ServiceAccount
     template: templates/manager-rolebinding.yaml
