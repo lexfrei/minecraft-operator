@@ -94,6 +94,8 @@ type PaperMCServerReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=pods/exec,verbs=create
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;delete
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=udproutes,verbs=get;list;watch;create;update;delete
 //nolint:revive // kubebuilder markers require no space after //
 
 // Reconcile implements the reconciliation loop for PaperMCServer resources.
@@ -232,6 +234,10 @@ func (r *PaperMCServerReconciler) ensureInfrastructure(
 
 	if err := r.ensureService(ctx, server, matchedPlugins); err != nil {
 		return nil, errors.Wrap(err, "failed to ensure service")
+	}
+
+	if err := r.ensureGatewayRoutes(ctx, server, matchedPlugins); err != nil {
+		return nil, errors.Wrap(err, "failed to ensure gateway routes")
 	}
 
 	return statefulSet, nil

@@ -58,6 +58,44 @@ type RCONConfig struct {
 	Port int32 `json:"port,omitempty"`
 }
 
+// GatewayConfig defines optional Gateway API TCPRoute/UDPRoute for game traffic.
+type GatewayConfig struct {
+	// Enabled determines if Gateway API routes are created for this server.
+	Enabled bool `json:"enabled"`
+
+	// ParentRefs are references to the Gateway(s) that routes should attach to.
+	// +optional
+	ParentRefs []GatewayParentRef `json:"parentRefs,omitempty"`
+
+	// TCPRoute configures the TCPRoute resource for game traffic.
+	// +optional
+	TCPRoute *RouteConfig `json:"tcpRoute,omitempty"`
+
+	// UDPRoute configures the UDPRoute resource for game traffic.
+	// +optional
+	UDPRoute *RouteConfig `json:"udpRoute,omitempty"`
+}
+
+// GatewayParentRef references a Gateway that routes should attach to.
+type GatewayParentRef struct {
+	// Name is the name of the Gateway.
+	Name string `json:"name"`
+
+	// Namespace is the namespace of the Gateway.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// SectionName is the name of a specific listener on the Gateway to attach to.
+	// +optional
+	SectionName string `json:"sectionName,omitempty"`
+}
+
+// RouteConfig configures an individual Gateway API route.
+type RouteConfig struct {
+	// Enabled determines if this route type is created.
+	Enabled bool `json:"enabled"`
+}
+
 // ServiceConfig defines configuration for the Kubernetes Service.
 type ServiceConfig struct {
 	// Type is the Service type (LoadBalancer, NodePort, or ClusterIP).
@@ -179,6 +217,11 @@ type PaperMCServerSpec struct {
 	// Service configures the Kubernetes Service for this server.
 	// +optional
 	Service ServiceConfig `json:"service,omitempty"`
+
+	// Gateway configures optional Gateway API TCPRoute/UDPRoute for game traffic.
+	// Requires Gateway API CRDs (experimental channel) installed in the cluster.
+	// +optional
+	Gateway *GatewayConfig `json:"gateway,omitempty"`
 
 	// Backup configures VolumeSnapshot-based backups.
 	// +optional
