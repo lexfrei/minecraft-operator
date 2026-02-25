@@ -150,8 +150,9 @@ func isBlockedHost(host string) bool {
 		return true
 	}
 
-	// Kubernetes internal DNS suffixes.
-	if strings.HasSuffix(lower, ".svc") || strings.HasSuffix(lower, ".svc.cluster.local") {
+	// Kubernetes internal DNS suffixes: services (.svc), pods (.pod.cluster.local),
+	// and all cluster-local names (.cluster.local).
+	if strings.HasSuffix(lower, ".svc") || strings.HasSuffix(lower, ".cluster.local") {
 		return true
 	}
 
@@ -213,24 +214,37 @@ func looksLikeNonStandardIP(hostname string) bool {
 	return false
 }
 
-// parseDecimalIP checks if a hostname is a decimal-encoded IPv4 address
-// (e.g., "2130706433" for 127.0.0.1). Returns the parsed IP or nil.
+// parseIntegerIP checks if a hostname is a single-value integer-encoded IPv4 address.
+// Supports decimal (e.g., "2130706433" for 127.0.0.1) and hexadecimal with "0x"/"0X"
+// prefix (e.g., "0x7f000001" for 127.0.0.1). Returns the parsed IP or nil.
 func parseDecimalIP(hostname string) net.IP {
-	// Must be all ASCII digits and not empty.
 	if hostname == "" {
 		return nil
 	}
 
-	for _, c := range hostname {
-		if c < '0' || c > '9' {
+	n := new(big.Int)
+
+	// Detect hex prefix (0x/0X).
+	if strings.HasPrefix(hostname, "0x") || strings.HasPrefix(hostname, "0X") {
+		hexPart := hostname[2:]
+		if hexPart == "" {
 			return nil
 		}
-	}
 
-	// Parse as a big integer to avoid overflow on 32-bit-exceeding values.
-	n := new(big.Int)
-	if _, ok := n.SetString(hostname, 10); !ok {
-		return nil
+		if _, ok := n.SetString(hexPart, 16); !ok {
+			return nil
+		}
+	} else {
+		// Must be all ASCII digits for decimal encoding.
+		for _, c := range hostname {
+			if c < '0' || c > '9' {
+				return nil
+			}
+		}
+
+		if _, ok := n.SetString(hostname, 10); !ok {
+			return nil
+		}
 	}
 
 	// Valid IPv4 fits in 32 bits (0 to 4294967295).

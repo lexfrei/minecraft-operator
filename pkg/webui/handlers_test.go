@@ -533,6 +533,50 @@ func TestParsePluginFormRejectsInvalidNamespace(t *testing.T) {
 	}
 }
 
+func TestParsePluginFormRejectsHTTPURL(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	form := url.Values{
+		"name":           {"my-plugin"},
+		"namespace":      {"default"},
+		"sourceType":     {"url"},
+		"url":            {"http://evil.com/plugin.jar"},
+		"updateStrategy": {"latest"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	_, err := srv.parsePluginFormToData(req)
+	if err == nil {
+		t.Error("parsePluginFormToData should reject HTTP URL (only HTTPS allowed)")
+	}
+}
+
+func TestParsePluginFormRejectsSSRFURL(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	form := url.Values{
+		"name":           {"my-plugin"},
+		"namespace":      {"default"},
+		"sourceType":     {"url"},
+		"url":            {"https://127.0.0.1/plugin.jar"},
+		"updateStrategy": {"latest"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	_, err := srv.parsePluginFormToData(req)
+	if err == nil {
+		t.Error("parsePluginFormToData should reject SSRF-blocked URL")
+	}
+}
+
 func TestHandleServerStatus_NegativeAttempt_ShouldClampOrReject(t *testing.T) {
 	// BUG: handleServerStatus parses attempt parameter with fmt.Sscanf
 	// without bounds checking. A negative value (e.g., -999) bypasses
