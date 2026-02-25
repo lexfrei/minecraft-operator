@@ -1,0 +1,350 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "crds": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "manage": {
+          "type": "boolean",
+          "description": "Operator manages CRDs at startup via server-side apply."
+        }
+      }
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of operator replicas."
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Container image repository."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "Never", "IfNotPresent"],
+          "description": "Image pull policy."
+        },
+        "tag": {
+          "type": "string",
+          "description": "Overrides the image tag whose default is the chart appVersion."
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["name"]
+      },
+      "description": "Image pull secrets for private registries."
+    },
+    "nameOverride": {
+      "type": "string",
+      "description": "Override chart name."
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "description": "Override fully qualified app name."
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "description": "Specifies whether a service account should be created."
+        },
+        "automountServiceAccountToken": {
+          "type": "boolean",
+          "description": "Automatically mount a ServiceAccount's API credentials."
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Annotations to add to the service account."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the service account to use."
+        }
+      }
+    },
+    "podAnnotations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Annotations to add to the operator pod."
+    },
+    "podLabels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Labels to add to the operator pod."
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "description": "Pod-level security context."
+    },
+    "securityContext": {
+      "type": "object",
+      "description": "Container-level security context."
+    },
+    "resources": {
+      "type": "object",
+      "description": "CPU/memory resource requests and limits.",
+      "properties": {
+        "limits": {
+          "type": "object"
+        },
+        "requests": {
+          "type": "object"
+        }
+      }
+    },
+    "leaderElection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable leader election for controller manager."
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable metrics endpoint."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Metrics endpoint port."
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable ServiceMonitor for Prometheus Operator auto-discovery."
+            },
+            "interval": {
+              "type": "string",
+              "description": "Scrape interval (e.g., 30s)."
+            },
+            "scrapeTimeout": {
+              "type": "string",
+              "description": "Scrape timeout (e.g., 10s)."
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Additional labels for ServiceMonitor."
+            },
+            "endpointAuth": {
+              "type": "object",
+              "description": "Endpoint authentication configuration."
+            }
+          }
+        }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Health probe port."
+        }
+      }
+    },
+    "webui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable Web UI."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Web UI container port."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Namespace for Web UI resources. If empty, uses the operator's namespace."
+        },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"],
+              "description": "Kubernetes Service type."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "description": "Service port."
+            }
+          }
+        },
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable Ingress resource."
+            },
+            "className": {
+              "type": "string",
+              "description": "Ingress class name."
+            },
+            "annotations": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Ingress annotations."
+            },
+            "hosts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "host": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "pathType": {
+                          "type": "string",
+                          "enum": ["Exact", "Prefix", "ImplementationSpecific"]
+                        }
+                      },
+                      "required": ["path", "pathType"]
+                    }
+                  }
+                },
+                "required": ["host", "paths"]
+              },
+              "description": "Ingress hosts configuration."
+            },
+            "tls": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "secretName": {
+                    "type": "string"
+                  },
+                  "hosts": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["secretName"]
+              },
+              "description": "Ingress TLS configuration."
+            }
+          }
+        },
+        "httproute": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable Gateway API HTTPRoute."
+            },
+            "annotations": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "HTTPRoute annotations."
+            },
+            "parentRefs": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Gateway references for this HTTPRoute."
+            },
+            "hostnames": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Hostnames to match for routing."
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Custom HTTPRoute rules."
+            }
+          }
+        }
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Node labels for pod assignment."
+    },
+    "tolerations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Tolerations for pod assignment."
+    },
+    "affinity": {
+      "type": "object",
+      "description": "Affinity rules for pod assignment."
+    }
+  }
+}
