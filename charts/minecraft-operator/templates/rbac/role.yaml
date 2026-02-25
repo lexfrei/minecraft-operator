@@ -116,6 +116,17 @@ rules:
   - patch
   - update
 - apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - snapshot.storage.k8s.io
   resources:
   - volumesnapshotclasses
