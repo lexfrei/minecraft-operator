@@ -113,7 +113,7 @@ type ServerNetworkPolicy struct {
 	// +optional
 	AllowFrom []NetworkPolicySource `json:"allowFrom,omitempty"`
 
-	// RestrictEgress restricts outbound traffic to DNS only.
+	// RestrictEgress restricts outbound traffic to DNS and HTTPS only.
 	// +optional
 	// +kubebuilder:default=true
 	RestrictEgress *bool `json:"restrictEgress,omitempty"`

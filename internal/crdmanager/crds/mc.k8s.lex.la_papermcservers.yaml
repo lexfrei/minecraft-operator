@@ -293,7 +293,7 @@ spec:
                       restrictEgress:
                         default: true
                         description: RestrictEgress restricts outbound traffic to
-                          DNS only.
+                          DNS and HTTPS only.
                         type: boolean
                     required:
                     - enabled

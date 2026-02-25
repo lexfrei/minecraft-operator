@@ -155,6 +155,19 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 		},
 	}
 
+	if len(npSpec.AllowFrom) == 0 {
+		// Default: restrict to same namespace when no explicit sources specified
+		mcRule.From = []networkingv1.NetworkPolicyPeer{
+			{
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"kubernetes.io/metadata.name": server.Namespace,
+					},
+				},
+			},
+		}
+	}
+
 	// Add custom allowFrom sources
 	for _, source := range npSpec.AllowFrom {
 		peer, err := convertToPeer(source)

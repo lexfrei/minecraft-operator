@@ -22,7 +22,7 @@ spec:
     # Health probe port
     - ports:
         - protocol: TCP
-          port: 8081
+          port: {{ .Values.health.port }}
     {{- if .Values.webui.enabled }}
     # WebUI port
     - ports:
@@ -40,12 +40,11 @@ spec:
     - ports:
         - protocol: TCP
           port: 443
-    # Kubernetes API server
+    # Kubernetes API server (self-managed clusters; managed K8s typically uses 443 above)
     - ports:
         - protocol: TCP
           port: 6443
-    # RCON to managed server pods (default RCON port)
+    # RCON to managed server pods (port is configurable per-server, so allow all TCP)
     - ports:
         - protocol: TCP
-          port: 25575
 {{- end }}

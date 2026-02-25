@@ -173,6 +173,7 @@ tests:
               - delete
               - get
               - list
+              - patch
               - update
               - watch
 
