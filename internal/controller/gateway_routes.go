@@ -176,15 +176,11 @@ func (r *PaperMCServerReconciler) buildTCPRoute(
 ) *gatewayv1alpha2.TCPRoute {
 	parentRefs := convertParentRefs(server.Spec.Gateway.ParentRefs)
 
+	// Only expose the Minecraft game port via Gateway.
+	// RCON is an admin interface and should not be exposed through public Gateways;
+	// use NetworkPolicy + port-forward or internal Service for RCON access.
 	rules := []gatewayv1alpha2.TCPRouteRule{
 		{BackendRefs: []gatewayv1alpha2.BackendRef{buildBackendRef(server.Name, minecraftPort)}},
-	}
-
-	// Add RCON rule if enabled
-	if server.Spec.RCON.Enabled && server.Spec.RCON.Port > 0 {
-		rules = append(rules, gatewayv1alpha2.TCPRouteRule{
-			BackendRefs: []gatewayv1alpha2.BackendRef{buildBackendRef(server.Name, int(server.Spec.RCON.Port))},
-		})
 	}
 
 	return &gatewayv1alpha2.TCPRoute{

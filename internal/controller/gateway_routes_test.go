@@ -137,7 +137,7 @@ var _ = Describe("Gateway API Routes", func() {
 			Expect(tcpRoute.Spec.Rules[0].BackendRefs[0].Port).To(Equal(&port))
 		})
 
-		It("should include RCON port when RCON is enabled", func() {
+		It("should NOT include RCON port in TCPRoute even when RCON is enabled", func() {
 			server := createServer("gw-tcp-rcon", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
@@ -159,13 +159,12 @@ var _ = Describe("Gateway API Routes", func() {
 				Name: server.Name + "-tcp", Namespace: ns,
 			}, &tcpRoute)).To(Succeed())
 
-			// Should have 2 rules: minecraft + RCON
-			Expect(tcpRoute.Spec.Rules).To(HaveLen(2))
+			// RCON is an admin interface and must NOT be exposed via public Gateway.
+			// Only the game port should be routed.
+			Expect(tcpRoute.Spec.Rules).To(HaveLen(1))
 
 			mcPort := gatewayv1alpha2.PortNumber(25565)
-			rconPort := gatewayv1alpha2.PortNumber(25575)
 			Expect(tcpRoute.Spec.Rules[0].BackendRefs[0].Port).To(Equal(&mcPort))
-			Expect(tcpRoute.Spec.Rules[1].BackendRefs[0].Port).To(Equal(&rconPort))
 		})
 	})
 
