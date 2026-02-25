@@ -244,7 +244,7 @@ func (r *PaperMCServerReconciler) ensureInfrastructure(
 		return nil, errors.Wrap(err, "failed to ensure gateway routes")
 	}
 
-	if err := r.ensureNetworkPolicy(ctx, server); err != nil {
+	if err := r.ensureNetworkPolicy(ctx, server, matchedPlugins); err != nil {
 		return nil, errors.Wrap(err, "failed to ensure network policy")
 	}
 

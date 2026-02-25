@@ -138,11 +138,19 @@ tests:
                 port: 6443
           any: true
 
-  - it: should allow RCON egress to any TCP port on game pods
+  - it: should allow RCON egress only to papermc pods (not all TCP)
     set:
       networkPolicy.enabled: true
     asserts:
       - contains:
+          path: spec.egress
+          content:
+            to:
+              - podSelector:
+                  matchLabels:
+                    app: papermc
+          any: true
+      - notContains:
           path: spec.egress
           content:
             ports:

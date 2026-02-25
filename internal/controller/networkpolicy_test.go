@@ -151,7 +151,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -171,7 +171,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -202,7 +202,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -236,7 +236,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -255,7 +255,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -276,7 +276,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -305,7 +305,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify it exists
@@ -316,7 +316,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 
 			// Disable network policy
 			server.Spec.Network = nil
-			err = reconciler.ensureNetworkPolicy(ctx, server)
+			err = reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should be deleted
@@ -337,7 +337,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -373,7 +373,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -387,6 +387,92 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 					if port.Port != nil && port.Port.IntVal == mcPort.IntVal {
 						Expect(rule.From).NotTo(BeEmpty(),
 							"Default allowFrom must not be empty (would allow all ingress)")
+					}
+				}
+			}
+		})
+	})
+
+	// Plugin ports must be included in ingress rules
+	Context("when matched plugins have custom ports", func() {
+		It("should include plugin port in ingress rules", func() {
+			server := createServer("np-plugin-port", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled: true,
+				},
+			})
+
+			port8123 := int32(8123)
+			plugins := []mck8slexlav1beta1.Plugin{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "dynmap", Namespace: ns},
+					Spec: mck8slexlav1beta1.PluginSpec{
+						Port: &port8123,
+						Source: mck8slexlav1beta1.PluginSource{
+							Type:    "hangar",
+							Project: "Dynmap",
+						},
+						UpdateStrategy:   "latest",
+						InstanceSelector: metav1.LabelSelector{},
+					},
+				},
+			}
+
+			err := reconciler.ensureNetworkPolicy(ctx, server, plugins)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			pluginPort := intstr.FromInt32(8123)
+			tcpProto := corev1.ProtocolTCP
+			found := false
+			for _, rule := range np.Spec.Ingress {
+				for _, port := range rule.Ports {
+					if port.Port != nil && port.Port.IntVal == pluginPort.IntVal && *port.Protocol == tcpProto {
+						found = true
+					}
+				}
+			}
+			Expect(found).To(BeTrue(), "Should have plugin port 8123 in ingress rules")
+		})
+	})
+
+	// When allowFrom is specified, same-namespace must still be included
+	Context("when allowFrom is explicitly specified", func() {
+		It("should still include same-namespace as baseline peer", func() {
+			server := createServer("np-from-baseline", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled: true,
+					AllowFrom: []mck8slexlav1beta1.NetworkPolicySource{
+						{CIDR: "10.0.0.0/8"},
+					},
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			mcPort := intstr.FromInt32(25565)
+			for _, rule := range np.Spec.Ingress {
+				for _, port := range rule.Ports {
+					if port.Port != nil && port.Port.IntVal == mcPort.IntVal {
+						Expect(rule.From).To(ContainElement(
+							networkingv1.NetworkPolicyPeer{
+								NamespaceSelector: &metav1.LabelSelector{
+									MatchLabels: map[string]string{
+										"kubernetes.io/metadata.name": ns,
+									},
+								},
+							},
+						), "Same-namespace peer must always be present as baseline")
 					}
 				}
 			}
@@ -423,7 +509,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -455,7 +541,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -494,7 +580,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -536,7 +622,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -563,7 +649,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).To(HaveOccurred(), "Empty allowEgressTo entry must be rejected")
 		})
 	})
@@ -586,7 +672,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 			})
 
 			// First call — create
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np1 networkingv1.NetworkPolicy
@@ -596,7 +682,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 			rv1 := np1.ResourceVersion
 
 			// Second call — should not update (same config)
-			err = reconciler.ensureNetworkPolicy(ctx, server)
+			err = reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np2 networkingv1.NetworkPolicy
@@ -621,7 +707,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Modify config
@@ -629,7 +715,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				{CIDR: "192.168.0.0/16"},
 			}
 
-			err = reconciler.ensureNetworkPolicy(ctx, server)
+			err = reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -677,7 +763,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy
@@ -711,7 +797,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			err := reconciler.ensureNetworkPolicy(ctx, server)
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			var np networkingv1.NetworkPolicy

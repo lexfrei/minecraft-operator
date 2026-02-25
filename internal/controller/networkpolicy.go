@@ -31,10 +31,12 @@ const (
 )
 
 // ensureNetworkPolicy creates, updates, or deletes a NetworkPolicy for a PaperMCServer
-// based on its network configuration.
+// based on its network configuration. matchedPlugins is used to open ingress ports for
+// plugins that expose custom ports (e.g., Dynmap on 8123).
 func (r *PaperMCServerReconciler) ensureNetworkPolicy(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) error {
 	npName := server.Name + "-minecraft"
 	shouldExist := server.Spec.Network != nil &&
@@ -63,7 +65,7 @@ func (r *PaperMCServerReconciler) ensureNetworkPolicy(
 		return nil
 	}
 
-	desired, err := r.buildNetworkPolicy(server)
+	desired, err := r.buildNetworkPolicy(server, matchedPlugins)
 	if err != nil {
 		return errors.Wrap(err, "failed to build NetworkPolicy")
 	}
@@ -94,13 +96,14 @@ func (r *PaperMCServerReconciler) ensureNetworkPolicy(
 // buildNetworkPolicy constructs the desired NetworkPolicy for a PaperMCServer.
 func (r *PaperMCServerReconciler) buildNetworkPolicy(
 	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) (*networkingv1.NetworkPolicy, error) {
 	npSpec := server.Spec.Network.NetworkPolicy
 
 	policyTypes := []networkingv1.PolicyType{networkingv1.PolicyTypeIngress}
 
 	// Build ingress rules
-	ingress, err := r.buildNetworkPolicyIngress(server, npSpec)
+	ingress, err := r.buildNetworkPolicyIngress(server, npSpec, matchedPlugins)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build ingress rules")
 	}
@@ -140,35 +143,33 @@ func (r *PaperMCServerReconciler) buildNetworkPolicy(
 	}, nil
 }
 
+// sameNamespacePeer returns a NetworkPolicyPeer that matches the given namespace.
+func sameNamespacePeer(namespace string) networkingv1.NetworkPolicyPeer {
+	return networkingv1.NetworkPolicyPeer{
+		NamespaceSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"kubernetes.io/metadata.name": namespace,
+			},
+		},
+	}
+}
+
 // buildNetworkPolicyIngress constructs ingress rules for the NetworkPolicy.
 func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 	server *mcv1beta1.PaperMCServer,
 	npSpec *mcv1beta1.ServerNetworkPolicy,
+	matchedPlugins []mcv1beta1.Plugin,
 ) ([]networkingv1.NetworkPolicyIngressRule, error) {
 	tcpProto := corev1.ProtocolTCP
+	nsPeer := sameNamespacePeer(server.Namespace)
+
+	// Minecraft port rule with same-namespace baseline + custom allowFrom
 	mcPort := intstr.FromInt32(minecraftGamePort)
-
-	// Minecraft port rule
 	mcRule := networkingv1.NetworkPolicyIngressRule{
-		Ports: []networkingv1.NetworkPolicyPort{
-			{Protocol: &tcpProto, Port: &mcPort},
-		},
+		Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcpProto, Port: &mcPort}},
+		From:  []networkingv1.NetworkPolicyPeer{nsPeer},
 	}
 
-	if len(npSpec.AllowFrom) == 0 {
-		// Default: restrict to same namespace when no explicit sources specified
-		mcRule.From = []networkingv1.NetworkPolicyPeer{
-			{
-				NamespaceSelector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						"kubernetes.io/metadata.name": server.Namespace,
-					},
-				},
-			},
-		}
-	}
-
-	// Add custom allowFrom sources
 	for _, source := range npSpec.AllowFrom {
 		peer, err := convertToPeer(source)
 		if err != nil {
@@ -179,33 +180,57 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 	}
 
 	rules := []networkingv1.NetworkPolicyIngressRule{mcRule}
-
-	// RCON port rule — restricted to operator namespace
-	if server.Spec.RCON.Enabled && server.Spec.RCON.Port > 0 {
-		rconNS := r.OperatorNamespace
-		if rconNS == "" {
-			rconNS = server.Namespace
-		}
-
-		rconPort := intstr.FromInt32(server.Spec.RCON.Port)
-		rconRule := networkingv1.NetworkPolicyIngressRule{
-			Ports: []networkingv1.NetworkPolicyPort{
-				{Protocol: &tcpProto, Port: &rconPort},
-			},
-			From: []networkingv1.NetworkPolicyPeer{
-				{
-					NamespaceSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"kubernetes.io/metadata.name": rconNS,
-						},
-					},
-				},
-			},
-		}
-		rules = append(rules, rconRule)
-	}
+	rules = append(rules, buildPluginIngressRules(matchedPlugins, tcpProto, nsPeer)...)
+	rules = append(rules, r.buildRCONIngressRule(server, tcpProto)...)
 
 	return rules, nil
+}
+
+// buildPluginIngressRules creates ingress rules for plugins that expose custom ports.
+func buildPluginIngressRules(
+	plugins []mcv1beta1.Plugin,
+	proto corev1.Protocol,
+	nsPeer networkingv1.NetworkPolicyPeer,
+) []networkingv1.NetworkPolicyIngressRule {
+	rules := make([]networkingv1.NetworkPolicyIngressRule, 0, len(plugins))
+
+	for _, plugin := range plugins {
+		if plugin.Spec.Port == nil {
+			continue
+		}
+
+		port := intstr.FromInt32(*plugin.Spec.Port)
+		rules = append(rules, networkingv1.NetworkPolicyIngressRule{
+			Ports: []networkingv1.NetworkPolicyPort{{Protocol: &proto, Port: &port}},
+			From:  []networkingv1.NetworkPolicyPeer{nsPeer},
+		})
+	}
+
+	return rules
+}
+
+// buildRCONIngressRule creates an RCON ingress rule restricted to the operator namespace.
+func (r *PaperMCServerReconciler) buildRCONIngressRule(
+	server *mcv1beta1.PaperMCServer,
+	proto corev1.Protocol,
+) []networkingv1.NetworkPolicyIngressRule {
+	if !server.Spec.RCON.Enabled || server.Spec.RCON.Port <= 0 {
+		return nil
+	}
+
+	rconNS := r.OperatorNamespace
+	if rconNS == "" {
+		rconNS = server.Namespace
+	}
+
+	rconPort := intstr.FromInt32(server.Spec.RCON.Port)
+
+	return []networkingv1.NetworkPolicyIngressRule{
+		{
+			Ports: []networkingv1.NetworkPolicyPort{{Protocol: &proto, Port: &rconPort}},
+			From:  []networkingv1.NetworkPolicyPeer{sameNamespacePeer(rconNS)},
+		},
+	}
 }
 
 // buildNetworkPolicyEgress constructs egress rules for the NetworkPolicy.
