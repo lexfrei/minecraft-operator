@@ -181,11 +181,13 @@ func (r *PaperMCServerReconciler) doReconcile(ctx context.Context, server *mcv1b
 		return ctrl.Result{}, errors.New("desired version not resolved - cannot create infrastructure")
 	}
 
-	// Step 4: Check if updates are blocked
+	// Step 4: Log if updates are blocked.
+	// Infrastructure (StatefulSet, Service, NetworkPolicy, Gateway routes) is still
+	// reconciled to keep resources in sync. The actual version update is gated by
+	// the UpdateReconciler during the maintenance window.
 	if server.Status.UpdateBlocked != nil && server.Status.UpdateBlocked.Blocked {
-		slog.InfoContext(ctx, "Update blocked, skipping infrastructure update",
+		slog.InfoContext(ctx, "Update blocked by plugin incompatibility",
 			"reason", server.Status.UpdateBlocked.Reason)
-		// Don't proceed with StatefulSet update, but continue to update status
 	}
 
 	// Step 5: Ensure infrastructure (StatefulSet and Service)
@@ -465,14 +467,25 @@ func (r *PaperMCServerReconciler) buildPodTemplate(
 	server *mcv1beta1.PaperMCServer,
 	podSpec *corev1.PodSpec,
 ) corev1.PodTemplateSpec {
-	podLabels := standardLabels(server.Name, "server")
+	// User labels first; standard labels have priority and cannot be overridden.
+	podLabels := make(map[string]string, len(server.Spec.PodTemplate.Labels)+7)
+	maps.Copy(podLabels, server.Spec.PodTemplate.Labels)
+	maps.Copy(podLabels, standardLabels(server.Name, "server"))
 	// Retain legacy selector labels for backward compatibility
 	podLabels["app"] = "papermc"
 	podLabels["mc.k8s.lex.la/server-name"] = server.Name
 
+	// Preserve user-supplied annotations.
+	var podAnnotations map[string]string
+	if len(server.Spec.PodTemplate.Annotations) > 0 {
+		podAnnotations = make(map[string]string, len(server.Spec.PodTemplate.Annotations))
+		maps.Copy(podAnnotations, server.Spec.PodTemplate.Annotations)
+	}
+
 	return corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: podLabels,
+			Labels:      podLabels,
+			Annotations: podAnnotations,
 		},
 		Spec: *podSpec,
 	}

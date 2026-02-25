@@ -248,8 +248,8 @@ custom_resources:
     key_fields:
       - "source.type - hangar/url (modrinth/spigot planned)"
       - "source.project - Plugin project identifier"
-      - "updateStrategy - latest or pinned (ADR-029: renamed from versionPolicy)"
-      - "version - Specific version if pinned (ADR-029: renamed from pinnedVersion)"
+      - "updateStrategy - latest, auto, pin, or build-pin (ADR-029: renamed from versionPolicy)"
+      - "version - Specific version for pin/build-pin (ADR-029: renamed from pinnedVersion)"
       - "updateDelay - Grace period before auto-apply (e.g., 168h)"
       - "instanceSelector - Label selector for PaperMCServer matching"
       - "compatibilityOverride - Manual compatibility specification"
