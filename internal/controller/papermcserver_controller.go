@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"reflect"
 	"regexp"
 	"strconv"
 	"time"
@@ -38,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 const (
@@ -587,18 +589,24 @@ func (r *PaperMCServerReconciler) ensureService(
 		return nil
 	}
 
-	// Service exists, update it
+	// Set owner reference for comparison
+	if err := controllerutil.SetControllerReference(server, desiredService, r.Scheme); err != nil {
+		return errors.Wrap(err, "failed to set owner reference")
+	}
+
+	// Skip update if nothing changed
+	if reflect.DeepEqual(existingService.Spec.Ports, desiredService.Spec.Ports) &&
+		maps.Equal(existingService.Labels, desiredService.Labels) &&
+		reflect.DeepEqual(existingService.Spec.Selector, desiredService.Spec.Selector) {
+		return nil
+	}
+
 	slog.InfoContext(ctx, "Updating existing Service", "name", serviceName)
 
 	// Preserve immutable fields
 	desiredService.ResourceVersion = existingService.ResourceVersion
 	desiredService.Spec.ClusterIP = existingService.Spec.ClusterIP
 	desiredService.Spec.ClusterIPs = existingService.Spec.ClusterIPs
-
-	// Set owner reference if not already set
-	if err := controllerutil.SetControllerReference(server, desiredService, r.Scheme); err != nil {
-		return errors.Wrap(err, "failed to set owner reference")
-	}
 
 	if err := r.Update(ctx, desiredService); err != nil {
 		return errors.Wrap(err, "failed to update service")
@@ -1809,12 +1817,8 @@ func updateHistoryEqual(a, b *mcv1beta1.UpdateHistory) bool {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-//
-// Note: Gateway API resources (TCPRoute/UDPRoute) are NOT registered via Owns()
-// because the CRDs may not be installed. If routes are externally deleted, they
-// will be recreated on the next server reconciliation cycle (not immediately).
 func (r *PaperMCServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&mcv1beta1.PaperMCServer{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
@@ -1822,9 +1826,24 @@ func (r *PaperMCServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&mcv1beta1.Plugin{},
 			handler.EnqueueRequestsFromMapFunc(r.findServersForPlugin),
-		).
-		Named("papermcserver").
-		Complete(r)
+		)
+
+	// Conditionally watch Gateway API resources if CRDs are installed.
+	if gatewayAPIsAvailable(mgr) {
+		builder = builder.
+			Owns(&gatewayv1alpha2.TCPRoute{}).
+			Owns(&gatewayv1alpha2.UDPRoute{})
+	}
+
+	return builder.Named("papermcserver").Complete(r)
+}
+
+// gatewayAPIsAvailable checks if Gateway API TCPRoute CRD is installed.
+func gatewayAPIsAvailable(mgr ctrl.Manager) bool {
+	gvk := gatewayv1alpha2.SchemeGroupVersion.WithKind("TCPRoute")
+	_, err := mgr.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
+
+	return err == nil
 }
 
 // findServersForPlugin maps Plugin changes to PaperMCServer reconciliation requests.
