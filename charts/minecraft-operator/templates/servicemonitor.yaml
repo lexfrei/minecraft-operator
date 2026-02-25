@@ -2,7 +2,7 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "minecraft-operator.fullname" . }}-controller-manager
+  name: {{ include "minecraft-operator.fullname" . }}
   labels:
     control-plane: controller-manager
     {{- include "minecraft-operator.labels" . | nindent 4 }}

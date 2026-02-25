@@ -1,0 +1,87 @@
+# Contract: "values.schema.json rejects invalid values"
+# These tests verify that the JSON schema catches misconfigurations
+# before deployment. Each test passes invalid values and expects
+# template rendering to fail with schema validation.
+suite: values schema validation
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should accept default values
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should reject non-integer replicaCount
+    set:
+      replicaCount: "not-a-number"
+    asserts:
+      - failedTemplate: {}
+
+  - it: should reject negative replicaCount
+    set:
+      replicaCount: -1
+    asserts:
+      - failedTemplate: {}
+
+  - it: should reject invalid image pullPolicy
+    set:
+      image.pullPolicy: "InvalidPolicy"
+    asserts:
+      - failedTemplate: {}
+
+  - it: should reject non-boolean crds.manage
+    set:
+      crds.manage: "yes"
+    asserts:
+      - failedTemplate: {}
+
+  - it: should reject non-boolean leaderElection.enabled
+    set:
+      leaderElection.enabled: "yes"
+    asserts:
+      - failedTemplate: {}
+
+  - it: should reject non-boolean metrics.enabled
+    set:
+      metrics.enabled: "yes"
+    asserts:
+      - failedTemplate: {}
+
+  - it: should reject metrics port out of range
+    set:
+      metrics.port: 70000
+    asserts:
+      - failedTemplate: {}
+
+  - it: should reject non-boolean webui.enabled
+    set:
+      webui.enabled: "yes"
+    asserts:
+      - failedTemplate: {}
+
+  - it: should reject invalid webui service type
+    set:
+      webui.service.type: "InvalidType"
+    asserts:
+      - failedTemplate: {}
+
+  - it: should reject non-boolean serviceAccount.create
+    set:
+      serviceAccount.create: "yes"
+    asserts:
+      - failedTemplate: {}
+
+  - it: should accept valid custom configuration
+    set:
+      replicaCount: 2
+      image.repository: "custom.registry.io/operator"
+      image.tag: "v1.0.0"
+      image.pullPolicy: "Always"
+      metrics.port: 9090
+      webui.enabled: true
+      webui.port: 3000
+      webui.service.type: "NodePort"
+      webui.service.port: 3000
+    asserts:
+      - isKind:
+          of: Deployment

@@ -151,7 +151,7 @@ tests:
           value: manager-role
       - matchRegex:
           path: subjects[0].name
-          pattern: ".*-controller-manager$"
+          pattern: ".*-minecraft-operator$"
       - equal:
           path: subjects[0].kind
           value: ServiceAccount
@@ -189,7 +189,7 @@ tests:
           value: Role
       - matchRegex:
           path: roleRef.name
-          pattern: ".*-leader-election-role$"
+          pattern: ".*-leader-election$"
       - matchRegex:
           path: subjects[0].name
-          pattern: ".*-controller-manager$"
+          pattern: ".*-minecraft-operator$"

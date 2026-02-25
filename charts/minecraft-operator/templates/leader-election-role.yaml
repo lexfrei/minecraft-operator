@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "minecraft-operator.fullname" . }}-leader-election-role
+  name: {{ include "minecraft-operator.fullname" . }}-leader-election
   labels:
     {{- include "minecraft-operator.labels" . | nindent 4 }}
 rules:
