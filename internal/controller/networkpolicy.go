@@ -79,13 +79,18 @@ func (r *PaperMCServerReconciler) ensureNetworkPolicy(
 		return errors.Wrap(r.Create(ctx, desired), "failed to create NetworkPolicy")
 	}
 
-	// Skip update if nothing changed
-	if reflect.DeepEqual(existing.Spec, desired.Spec) && maps.Equal(existing.Labels, desired.Labels) {
+	// Ensure owner reference for retroactive adoption.
+	ownerRefsBefore := len(existing.OwnerReferences)
+	if err := controllerutil.SetControllerReference(server, &existing, r.Scheme); err != nil {
+		return errors.Wrap(err, "failed to set owner reference on NetworkPolicy")
+	}
+	ownerRefsChanged := len(existing.OwnerReferences) != ownerRefsBefore
+	// Skip update if nothing changed.
+	if !ownerRefsChanged &&
+		reflect.DeepEqual(existing.Spec, desired.Spec) && maps.Equal(existing.Labels, desired.Labels) {
 		return nil
 	}
-
 	slog.InfoContext(ctx, "Updating NetworkPolicy", "name", npName)
-
 	existing.Spec = desired.Spec
 	existing.Labels = desired.Labels
 

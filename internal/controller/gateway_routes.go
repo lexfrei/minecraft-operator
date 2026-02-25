@@ -63,45 +63,39 @@ func (r *PaperMCServerReconciler) reconcileTCPRoute(
 	if err != nil && !apierrors.IsNotFound(err) {
 		if meta.IsNoMatchError(err) {
 			slog.DebugContext(ctx, "Gateway API TCPRoute CRD not installed, skipping")
-
 			return nil
 		}
-
 		return errors.Wrap(err, "failed to get TCPRoute")
 	}
-
 	exists := err == nil
-
 	if !shouldExist {
 		if exists {
 			slog.InfoContext(ctx, "Deleting TCPRoute", "name", routeName)
-
 			if deleteErr := r.Delete(ctx, &existing); deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
 				return errors.Wrap(deleteErr, "failed to delete TCPRoute")
 			}
 		}
-
 		return nil
 	}
-
 	desired := r.buildTCPRoute(server)
-
 	if !exists {
 		slog.InfoContext(ctx, "Creating TCPRoute", "name", routeName)
-
 		if err := controllerutil.SetControllerReference(server, desired, r.Scheme); err != nil {
 			return errors.Wrap(err, "failed to set owner reference on TCPRoute")
 		}
-
 		return errors.Wrap(r.Create(ctx, desired), "failed to create TCPRoute")
 	}
-
-	if reflect.DeepEqual(existing.Spec, desired.Spec) && maps.Equal(existing.Labels, desired.Labels) {
+	// Ensure owner reference for retroactive adoption.
+	ownerRefsBefore := len(existing.OwnerReferences)
+	if err := controllerutil.SetControllerReference(server, &existing, r.Scheme); err != nil {
+		return errors.Wrap(err, "failed to set owner reference on TCPRoute")
+	}
+	ownerRefsChanged := len(existing.OwnerReferences) != ownerRefsBefore
+	if !ownerRefsChanged &&
+		reflect.DeepEqual(existing.Spec, desired.Spec) && maps.Equal(existing.Labels, desired.Labels) {
 		return nil
 	}
-
 	slog.InfoContext(ctx, "Updating TCPRoute", "name", routeName)
-
 	existing.Spec = desired.Spec
 	existing.Labels = desired.Labels
 
@@ -125,45 +119,39 @@ func (r *PaperMCServerReconciler) reconcileUDPRoute(
 	if err != nil && !apierrors.IsNotFound(err) {
 		if meta.IsNoMatchError(err) {
 			slog.DebugContext(ctx, "Gateway API UDPRoute CRD not installed, skipping")
-
 			return nil
 		}
-
 		return errors.Wrap(err, "failed to get UDPRoute")
 	}
-
 	exists := err == nil
-
 	if !shouldExist {
 		if exists {
 			slog.InfoContext(ctx, "Deleting UDPRoute", "name", routeName)
-
 			if deleteErr := r.Delete(ctx, &existing); deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
 				return errors.Wrap(deleteErr, "failed to delete UDPRoute")
 			}
 		}
-
 		return nil
 	}
-
 	desired := r.buildUDPRoute(server)
-
 	if !exists {
 		slog.InfoContext(ctx, "Creating UDPRoute", "name", routeName)
-
 		if err := controllerutil.SetControllerReference(server, desired, r.Scheme); err != nil {
 			return errors.Wrap(err, "failed to set owner reference on UDPRoute")
 		}
-
 		return errors.Wrap(r.Create(ctx, desired), "failed to create UDPRoute")
 	}
-
-	if reflect.DeepEqual(existing.Spec, desired.Spec) && maps.Equal(existing.Labels, desired.Labels) {
+	// Ensure owner reference for retroactive adoption.
+	ownerRefsBefore := len(existing.OwnerReferences)
+	if err := controllerutil.SetControllerReference(server, &existing, r.Scheme); err != nil {
+		return errors.Wrap(err, "failed to set owner reference on UDPRoute")
+	}
+	ownerRefsChanged := len(existing.OwnerReferences) != ownerRefsBefore
+	if !ownerRefsChanged &&
+		reflect.DeepEqual(existing.Spec, desired.Spec) && maps.Equal(existing.Labels, desired.Labels) {
 		return nil
 	}
-
 	slog.InfoContext(ctx, "Updating UDPRoute", "name", routeName)
-
 	existing.Spec = desired.Spec
 	existing.Labels = desired.Labels
 
