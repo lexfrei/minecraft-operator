@@ -9,8 +9,12 @@ package controller
 import (
 	"context"
 	"log/slog"
+	"maps"
+	"reflect"
 
 	"github.com/cockroachdb/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -55,6 +59,17 @@ func (r *PaperMCServerReconciler) reconcileTCPRoute(
 
 	var existing gatewayv1alpha2.TCPRoute
 	err := r.Get(ctx, client.ObjectKey{Name: routeName, Namespace: server.Namespace}, &existing)
+
+	if err != nil && !apierrors.IsNotFound(err) {
+		if meta.IsNoMatchError(err) {
+			slog.DebugContext(ctx, "Gateway API TCPRoute CRD not installed, skipping")
+
+			return nil
+		}
+
+		return errors.Wrap(err, "failed to get TCPRoute")
+	}
+
 	exists := err == nil
 
 	if !shouldExist {
@@ -82,7 +97,10 @@ func (r *PaperMCServerReconciler) reconcileTCPRoute(
 		return errors.Wrap(r.Create(ctx, desired), "failed to create TCPRoute")
 	}
 
-	// Update existing
+	if reflect.DeepEqual(existing.Spec, desired.Spec) && maps.Equal(existing.Labels, desired.Labels) {
+		return nil
+	}
+
 	slog.InfoContext(ctx, "Updating TCPRoute", "name", routeName)
 
 	existing.Spec = desired.Spec
@@ -104,6 +122,17 @@ func (r *PaperMCServerReconciler) reconcileUDPRoute(
 
 	var existing gatewayv1alpha2.UDPRoute
 	err := r.Get(ctx, client.ObjectKey{Name: routeName, Namespace: server.Namespace}, &existing)
+
+	if err != nil && !apierrors.IsNotFound(err) {
+		if meta.IsNoMatchError(err) {
+			slog.DebugContext(ctx, "Gateway API UDPRoute CRD not installed, skipping")
+
+			return nil
+		}
+
+		return errors.Wrap(err, "failed to get UDPRoute")
+	}
+
 	exists := err == nil
 
 	if !shouldExist {
@@ -131,7 +160,10 @@ func (r *PaperMCServerReconciler) reconcileUDPRoute(
 		return errors.Wrap(r.Create(ctx, desired), "failed to create UDPRoute")
 	}
 
-	// Update existing
+	if reflect.DeepEqual(existing.Spec, desired.Spec) && maps.Equal(existing.Labels, desired.Labels) {
+		return nil
+	}
+
 	slog.InfoContext(ctx, "Updating UDPRoute", "name", routeName)
 
 	existing.Spec = desired.Spec
