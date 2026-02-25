@@ -127,6 +127,7 @@ type ServerNetworkPolicy struct {
 type NetworkPolicySource struct {
 	// CIDR is an IP block in CIDR notation (e.g., "10.0.0.0/8").
 	// +optional
+	// +kubebuilder:validation:Pattern=`^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$`
 	CIDR string `json:"cidr,omitempty"`
 
 	// PodSelector matches pods in the same namespace.
@@ -142,6 +143,7 @@ type NetworkPolicySource struct {
 type NetworkPolicyDestination struct {
 	// CIDR is an IP block in CIDR notation.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$`
 	CIDR string `json:"cidr,omitempty"`
 
 	// Port is the destination port number.

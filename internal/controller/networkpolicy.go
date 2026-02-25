@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	networkingv1 "k8s.io/api/networking/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,6 +41,11 @@ func (r *PaperMCServerReconciler) ensureNetworkPolicy(
 
 	var existing networkingv1.NetworkPolicy
 	err := r.Get(ctx, client.ObjectKey{Name: npName, Namespace: server.Namespace}, &existing)
+
+	if err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to get NetworkPolicy")
+	}
+
 	exists := err == nil
 
 	if !shouldExist {
@@ -55,7 +61,10 @@ func (r *PaperMCServerReconciler) ensureNetworkPolicy(
 		return nil
 	}
 
-	desired := r.buildNetworkPolicy(server)
+	desired, err := r.buildNetworkPolicy(server)
+	if err != nil {
+		return errors.Wrap(err, "failed to build NetworkPolicy")
+	}
 
 	if !exists {
 		slog.InfoContext(ctx, "Creating NetworkPolicy", "name", npName)
@@ -79,13 +88,16 @@ func (r *PaperMCServerReconciler) ensureNetworkPolicy(
 // buildNetworkPolicy constructs the desired NetworkPolicy for a PaperMCServer.
 func (r *PaperMCServerReconciler) buildNetworkPolicy(
 	server *mcv1beta1.PaperMCServer,
-) *networkingv1.NetworkPolicy {
+) (*networkingv1.NetworkPolicy, error) {
 	npSpec := server.Spec.Network.NetworkPolicy
 
 	policyTypes := []networkingv1.PolicyType{networkingv1.PolicyTypeIngress}
 
 	// Build ingress rules
-	ingress := r.buildNetworkPolicyIngress(server, npSpec)
+	ingress, err := r.buildNetworkPolicyIngress(server, npSpec)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to build ingress rules")
+	}
 
 	// Build egress rules
 	var egress []networkingv1.NetworkPolicyEgressRule
@@ -113,14 +125,14 @@ func (r *PaperMCServerReconciler) buildNetworkPolicy(
 			Ingress:     ingress,
 			Egress:      egress,
 		},
-	}
+	}, nil
 }
 
 // buildNetworkPolicyIngress constructs ingress rules for the NetworkPolicy.
 func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 	server *mcv1beta1.PaperMCServer,
 	npSpec *mcv1beta1.ServerNetworkPolicy,
-) []networkingv1.NetworkPolicyIngressRule {
+) ([]networkingv1.NetworkPolicyIngressRule, error) {
 	tcpProto := corev1.ProtocolTCP
 	mcPort := intstr.FromInt32(minecraftGamePort)
 
@@ -132,11 +144,13 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 	}
 
 	// Add custom allowFrom sources
-	if len(npSpec.AllowFrom) > 0 {
-		for _, source := range npSpec.AllowFrom {
-			peer := convertToPeer(source)
-			mcRule.From = append(mcRule.From, peer)
+	for _, source := range npSpec.AllowFrom {
+		peer, err := convertToPeer(source)
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid allowFrom source")
 		}
+
+		mcRule.From = append(mcRule.From, peer)
 	}
 
 	rules := []networkingv1.NetworkPolicyIngressRule{mcRule}
@@ -163,7 +177,7 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 		rules = append(rules, rconRule)
 	}
 
-	return rules
+	return rules, nil
 }
 
 // buildNetworkPolicyEgress constructs egress rules for the NetworkPolicy.
@@ -174,12 +188,20 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyEgress(
 	tcpProto := corev1.ProtocolTCP
 	dnsPortVal := intstr.FromInt32(dnsPort)
 
+	httpsPortVal := intstr.FromInt32(443)
+
 	rules := []networkingv1.NetworkPolicyEgressRule{
 		// DNS resolution
 		{
 			Ports: []networkingv1.NetworkPolicyPort{
 				{Protocol: &udpProto, Port: &dnsPortVal},
 				{Protocol: &tcpProto, Port: &dnsPortVal},
+			},
+		},
+		// HTTPS (Mojang authentication, plugin downloads)
+		{
+			Ports: []networkingv1.NetworkPolicyPort{
+				{Protocol: &tcpProto, Port: &httpsPortVal},
 			},
 		},
 	}
@@ -213,7 +235,15 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyEgress(
 }
 
 // convertToPeer converts a NetworkPolicySource to a Kubernetes NetworkPolicyPeer.
-func convertToPeer(source mcv1beta1.NetworkPolicySource) networkingv1.NetworkPolicyPeer {
+// Returns an error if CIDR is combined with PodSelector or NamespaceSelector,
+// as the Kubernetes API does not allow IPBlock with other peer fields.
+func convertToPeer(source mcv1beta1.NetworkPolicySource) (networkingv1.NetworkPolicyPeer, error) {
+	if source.CIDR != "" && (source.PodSelector != nil || source.NamespaceSelector != nil) {
+		return networkingv1.NetworkPolicyPeer{}, errors.New(
+			"NetworkPolicySource cannot combine CIDR with PodSelector or NamespaceSelector",
+		)
+	}
+
 	peer := networkingv1.NetworkPolicyPeer{}
 
 	if source.CIDR != "" {
@@ -228,5 +258,5 @@ func convertToPeer(source mcv1beta1.NetworkPolicySource) networkingv1.NetworkPol
 		peer.NamespaceSelector = source.NamespaceSelector
 	}
 
-	return peer
+	return peer, nil
 }

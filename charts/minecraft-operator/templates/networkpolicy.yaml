@@ -36,8 +36,16 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Kubernetes API server and external HTTPS (registries, Docker Hub)
+    # External HTTPS (registries, Docker Hub, Mojang auth)
     - ports:
         - protocol: TCP
           port: 443
+    # Kubernetes API server
+    - ports:
+        - protocol: TCP
+          port: 6443
+    # RCON to managed server pods (default RCON port)
+    - ports:
+        - protocol: TCP
+          port: 25575
 {{- end }}
