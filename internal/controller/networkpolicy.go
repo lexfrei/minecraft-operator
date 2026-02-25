@@ -223,7 +223,7 @@ func (r *PaperMCServerReconciler) buildRCONIngressRule(
 	server *mcv1beta1.PaperMCServer,
 	proto corev1.Protocol,
 ) []networkingv1.NetworkPolicyIngressRule {
-	if !server.Spec.RCON.Enabled || server.Spec.RCON.Port <= 0 {
+	if !server.Spec.RCON.Enabled {
 		return nil
 	}
 
@@ -232,7 +232,12 @@ func (r *PaperMCServerReconciler) buildRCONIngressRule(
 		rconNS = server.Namespace
 	}
 
-	rconPort := intstr.FromInt32(server.Spec.RCON.Port)
+	port := server.Spec.RCON.Port
+	if port <= 0 {
+		port = 25575 // default RCON port
+	}
+
+	rconPort := intstr.FromInt32(port)
 
 	return []networkingv1.NetworkPolicyIngressRule{
 		{

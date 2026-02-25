@@ -1236,6 +1236,8 @@ rules:
 - ✅ Cron-based updates
 - ✅ Persistent cache in status
 - ✅ URL-based plugin source with JAR metadata extraction and SSRF protection
+- ✅ Per-server NetworkPolicy with configurable ingress/egress rules
+- ✅ Gateway API TCPRoute/UDPRoute for game traffic routing
 
 ### Phase 2
 
