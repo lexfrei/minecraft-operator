@@ -9,7 +9,9 @@ package controller
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -21,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	// +kubebuilder:scaffold:imports
@@ -52,11 +55,24 @@ var _ = BeforeSuite(func() {
 	err = mck8slexlav1beta1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = gatewayv1alpha2.Install(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	// +kubebuilder:scaffold:scheme
 
 	By("bootstrapping test environment")
+
+	// Resolve Gateway API experimental CRD path from go module cache.
+	gatewayAPICRDPath := filepath.Join(
+		resolveModulePath("sigs.k8s.io/gateway-api"),
+		"config", "crd", "experimental",
+	)
+
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "internal", "crdmanager", "crds")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "internal", "crdmanager", "crds"),
+			gatewayAPICRDPath,
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -81,6 +97,32 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
+
+// resolveModulePath returns the local filesystem path for a Go module.
+// It uses "go mod download -json" to find the cached module directory.
+func resolveModulePath(module string) string {
+	cmd := exec.Command("go", "mod", "download", "-json", module)
+	out, err := cmd.Output()
+	if err != nil {
+		logf.Log.Error(err, "Failed to resolve module path", "module", module)
+		return ""
+	}
+
+	// Parse Dir field from JSON output
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, `"Dir"`) {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				dir := strings.TrimSpace(parts[1])
+				dir = strings.Trim(dir, `",`)
+				return dir
+			}
+		}
+	}
+
+	return ""
+}
 
 // getFirstFoundEnvTestBinaryDir locates the first binary in the specified path.
 // ENVTEST-based tests depend on specific binaries, usually located in paths set by

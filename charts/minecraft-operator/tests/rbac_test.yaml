@@ -137,6 +137,26 @@ tests:
               - list
               - watch
 
+  # ClusterRole: Gateway API route permissions
+  - it: should grant TCPRoute and UDPRoute management permissions
+    template: templates/rbac/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - gateway.networking.k8s.io
+            resources:
+              - tcproutes
+              - udproutes
+            verbs:
+              - create
+              - delete
+              - get
+              - list
+              - update
+              - watch
+
   # ClusterRoleBinding: references correct SA
   - it: should bind ClusterRole to controller ServiceAccount
     template: templates/manager-rolebinding.yaml

@@ -75,6 +75,18 @@ rules:
   verbs:
   - create
 - apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - tcproutes
+  - udproutes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - mc.k8s.lex.la
   resources:
   - papermcservers
