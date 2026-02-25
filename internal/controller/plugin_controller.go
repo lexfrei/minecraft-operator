@@ -181,9 +181,13 @@ func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1beta1.Pl
 		return result, nil
 	}
 
-	// Update condition - metadata fetched successfully
-	r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,
-		reasonResolved, "Metadata fetched and servers matched")
+	// Update condition — only if not already set by URL fallback logic.
+	// setFallbackVersionCondition may have set VersionResolved=False with
+	// reason FallbackVersion; do not overwrite that signal.
+	if !hasCondition(plugin, conditionTypeVersionResolved, reasonFallbackVersion) {
+		r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,
+			reasonResolved, "Metadata fetched and servers matched")
+	}
 
 	// Step 4: Trigger reconciliation for matched PaperMCServer instances
 	// They will resolve plugin versions individually
@@ -631,6 +635,17 @@ func (r *PluginReconciler) setCondition(
 	}
 
 	meta.SetStatusCondition(&plugin.Status.Conditions, condition)
+}
+
+// hasCondition checks if the plugin has a condition with given type and reason.
+func hasCondition(plugin *mcv1beta1.Plugin, conditionType, reason string) bool {
+	for _, c := range plugin.Status.Conditions {
+		if c.Type == conditionType && c.Reason == reason {
+			return true
+		}
+	}
+
+	return false
 }
 
 // statusEqual compares two Plugin statuses for equality.

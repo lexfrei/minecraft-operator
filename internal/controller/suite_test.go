@@ -108,17 +108,10 @@ type modDownloadResult struct {
 func resolveModulePath(module string) string {
 	cmd := exec.Command("go", "mod", "download", "-json", module)
 	out, err := cmd.Output()
-	if err != nil {
-		logf.Log.Error(err, "Failed to resolve module path", "module", module)
-		return ""
-	}
+	Expect(err).NotTo(HaveOccurred(), "go mod download -json %s failed", module)
 
 	var result modDownloadResult
-	if err := json.Unmarshal(out, &result); err != nil {
-		logf.Log.Error(err, "Failed to parse module download JSON", "module", module)
-		return ""
-	}
-
+	Expect(json.Unmarshal(out, &result)).To(Succeed(), "failed to parse JSON for module %s", module)
 	Expect(result.Dir).NotTo(BeEmpty(), "module %s resolved to empty Dir", module)
 
 	return result.Dir
