@@ -254,7 +254,7 @@ func TestHandlePluginListShowsAllPlugins(t *testing.T) {
 				Type:    "hangar",
 				Project: "BlueMap",
 			},
-			UpdateStrategy: "pinned",
+			UpdateStrategy: "pin",
 			Version:        "5.4",
 		},
 	}

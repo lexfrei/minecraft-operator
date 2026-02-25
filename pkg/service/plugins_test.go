@@ -168,7 +168,7 @@ func TestPluginService_GetPlugin_PinnedStrategy(t *testing.T) {
 	t.Parallel()
 
 	plugin := makeTestPlugin("test-plugin", "default")
-	plugin.Spec.UpdateStrategy = "pinned"
+	plugin.Spec.UpdateStrategy = "pin"
 	plugin.Spec.Version = "1.5.0"
 
 	fakeClient := fake.NewClientBuilder().
@@ -310,7 +310,7 @@ func TestPluginService_UpdatePlugin_Success(t *testing.T) {
 
 	svc := NewPluginService(fakeClient)
 
-	newStrategy := "pinned"
+	newStrategy := "pin"
 	newVersion := "2.0.0"
 	newBuild := 10
 	data := PluginUpdateData{
@@ -328,7 +328,7 @@ func TestPluginService_UpdatePlugin_Success(t *testing.T) {
 	var updated mck8slexlav1beta1.Plugin
 	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "test-plugin"}, &updated)
 	require.NoError(t, err)
-	assert.Equal(t, "pinned", updated.Spec.UpdateStrategy)
+	assert.Equal(t, "pin", updated.Spec.UpdateStrategy)
 	assert.Equal(t, "2.0.0", updated.Spec.Version)
 	assert.NotNil(t, updated.Spec.Build)
 	assert.Equal(t, 10, *updated.Spec.Build)
