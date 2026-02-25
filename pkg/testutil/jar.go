@@ -9,6 +9,8 @@ package testutil
 import (
 	"archive/zip"
 	"bytes"
+	"maps"
+	"slices"
 )
 
 // BuildTestJAR creates an in-memory JAR (ZIP) file with a single entry.
@@ -23,7 +25,8 @@ func BuildTestJARMulti(files map[string]string) []byte {
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
-	for name, content := range files {
+	for _, name := range slices.Sorted(maps.Keys(files)) {
+		content := files[name]
 		f, err := w.Create(name)
 		if err != nil {
 			panic("BuildTestJARMulti: " + err.Error())
