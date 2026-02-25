@@ -1,0 +1,43 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "minecraft-operator.fullname" . }}
+  labels:
+    app.kubernetes.io/component: manager
+    {{- include "minecraft-operator.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      control-plane: controller-manager
+      {{- include "minecraft-operator.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Metrics port
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.metrics.port }}
+    # Health probe port
+    - ports:
+        - protocol: TCP
+          port: 8081
+    {{- if .Values.webui.enabled }}
+    # WebUI port
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.webui.port }}
+    {{- end }}
+  egress:
+    # DNS resolution
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Kubernetes API server and external HTTPS (registries, Docker Hub)
+    - ports:
+        - protocol: TCP
+          port: 443
+{{- end }}

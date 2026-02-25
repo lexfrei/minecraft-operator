@@ -328,6 +328,16 @@
         }
       }
     },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable NetworkPolicy for the operator pod."
+        }
+      }
+    },
     "nodeSelector": {
       "type": "object",
       "additionalProperties": {
