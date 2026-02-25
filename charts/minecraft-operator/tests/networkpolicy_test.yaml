@@ -138,7 +138,7 @@ tests:
                 port: 6443
           any: true
 
-  - it: should allow egress to managed server pods for RCON
+  - it: should allow RCON egress to any TCP port on game pods
     set:
       networkPolicy.enabled: true
     asserts:
@@ -147,7 +147,26 @@ tests:
           content:
             ports:
               - protocol: TCP
-                port: 25575
+          any: true
+
+  - it: should use custom health port in ingress rule
+    set:
+      networkPolicy.enabled: true
+      health.port: 9091
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 9091
+          any: true
+      - notContains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 8081
           any: true
 
   - it: should have standard labels

@@ -179,16 +179,18 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				Name: server.Name + "-minecraft", Namespace: ns,
 			}, &np)).To(Succeed())
 
-			// Should have ingress rule for port 25565
+			// Should have ingress rule for port 25565 with same-namespace default
 			mcPort := intstr.FromInt32(25565)
 			tcpProto := corev1.ProtocolTCP
-			Expect(np.Spec.Ingress).To(ContainElement(
-				networkingv1.NetworkPolicyIngressRule{
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Protocol: &tcpProto, Port: &mcPort},
-					},
-				},
-			))
+			found := false
+			for _, rule := range np.Spec.Ingress {
+				for _, port := range rule.Ports {
+					if port.Port != nil && port.Port.IntVal == mcPort.IntVal && *port.Protocol == tcpProto {
+						found = true
+					}
+				}
+			}
+			Expect(found).To(BeTrue(), "Should have Minecraft port 25565 ingress rule")
 		})
 
 		It("should allow DNS egress when restrictEgress is true", func() {
@@ -359,6 +361,35 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				}
 			}
 			Expect(found).To(BeTrue(), "Should have Minecraft port rule with custom allowFrom")
+		})
+	})
+
+	// Default allowFrom (empty) must restrict to same namespace, not allow-all
+	Context("when allowFrom is empty (default)", func() {
+		It("should default to same-namespace ingress on Minecraft port", func() {
+			server := createServer("np-default-from", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled: true,
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			mcPort := intstr.FromInt32(25565)
+			for _, rule := range np.Spec.Ingress {
+				for _, port := range rule.Ports {
+					if port.Port != nil && port.Port.IntVal == mcPort.IntVal {
+						Expect(rule.From).NotTo(BeEmpty(),
+							"Default allowFrom must not be empty (would allow all ingress)")
+					}
+				}
+			}
 		})
 	})
 
