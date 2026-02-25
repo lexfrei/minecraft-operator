@@ -351,6 +351,34 @@ var _ = Describe("Gateway API Routes", func() {
 		})
 	})
 
+	Context("delete race condition", func() {
+		It("should not error when TCPRoute is already deleted", func() {
+			server := createServer("gw-race-tcp", &mck8slexlav1beta1.GatewayConfig{
+				Enabled: true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
+					{Name: "gw", Namespace: "gw-ns"},
+				},
+				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
+			})
+
+			// Create the route
+			err := reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Manually delete the route (simulates GC race)
+			var route gatewayv1alpha2.TCPRoute
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-tcp", Namespace: ns,
+			}, &route)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &route)).To(Succeed())
+
+			// Now disable gateway — should not error on NotFound
+			server.Spec.Gateway = nil
+			err = reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
 	Context("no-op update optimization", func() {
 		It("should not update TCPRoute when nothing changed", func() {
 			server := createServer("gw-noop-tcp", &mck8slexlav1beta1.GatewayConfig{

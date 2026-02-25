@@ -394,6 +394,7 @@ security:
       - "Secrets (read only for RCON passwords)"
       - "Events (create for status reporting)"
       - "NetworkPolicies (full access for per-server traffic restriction)"
+      - "Gateway API TCPRoutes/UDPRoutes (full access for game traffic routing)"
 
   network:
     operator_egress:
