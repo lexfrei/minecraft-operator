@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"regexp"
 	"strconv"
 	"time"
@@ -375,11 +376,14 @@ func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1beta1.PaperMCServ
 		return nil, errors.Wrap(err, "failed to build pod spec")
 	}
 
+	stsLabels := standardLabels(server.Name, "server")
+	maps.Copy(stsLabels, server.Labels)
+
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      server.Name,
 			Namespace: server.Namespace,
-			Labels:    server.Labels,
+			Labels:    stsLabels,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:             &replicas,
@@ -450,12 +454,14 @@ func (r *PaperMCServerReconciler) buildPodTemplate(
 	server *mcv1beta1.PaperMCServer,
 	podSpec *corev1.PodSpec,
 ) corev1.PodTemplateSpec {
+	podLabels := standardLabels(server.Name, "server")
+	// Retain legacy selector labels for backward compatibility
+	podLabels["app"] = "papermc"
+	podLabels["mc.k8s.lex.la/server-name"] = server.Name
+
 	return corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				"app":                       "papermc",
-				"mc.k8s.lex.la/server-name": server.Name,
-			},
+			Labels: podLabels,
 		},
 		Spec: *podSpec,
 	}
@@ -675,13 +681,9 @@ func (r *PaperMCServerReconciler) buildService(
 
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      server.Name,
-			Namespace: server.Namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":       "papermc",
-				"app.kubernetes.io/instance":   server.Name,
-				"app.kubernetes.io/managed-by": "minecraft-operator",
-			},
+			Name:        server.Name,
+			Namespace:   server.Namespace,
+			Labels:      standardLabels(server.Name, "service"),
 			Annotations: server.Spec.Service.Annotations,
 		},
 		Spec: serviceSpec,

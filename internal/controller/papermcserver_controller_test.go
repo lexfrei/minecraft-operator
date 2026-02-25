@@ -2050,6 +2050,140 @@ var _ = Describe("PaperMCServerController helpers", func() {
 				"updateHistoryEqual must detect different AppliedAt as not equal")
 		})
 	})
+
+	Context("Standard Kubernetes labels on controller-created resources", func() {
+		var (
+			reconciler *PaperMCServerReconciler
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			namespace = testNamespace
+			reconciler = &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				PaperClient: &testutil.MockPaperAPI{
+					Versions:     []string{"1.21.1"},
+					BuildInfo:    &paper.BuildInfo{Version: "1.21.1", Build: 91, DownloadURL: "https://example.com/paper.jar"},
+					BuildNumbers: []int{91},
+				},
+				RegistryClient: &testutil.MockRegistryAPI{
+					Tags:       []string{"1.21.1-91"},
+					ImageExist: true,
+				},
+				Solver: solver.NewSimpleSolver(),
+			}
+		})
+
+		It("should set standard labels on StatefulSet metadata", func() {
+			serverName := "test-sts-labels"
+			server := &mck8slexlav1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+				Spec: mck8slexlav1beta1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "papermc"}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, server) }()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var sts appsv1.StatefulSet
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &sts)).To(Succeed())
+
+			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "papermc"))
+			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", serverName))
+			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "server"))
+			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+		})
+
+		It("should set standard labels on StatefulSet pod template", func() {
+			serverName := "test-pod-labels"
+			server := &mck8slexlav1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+				Spec: mck8slexlav1beta1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "papermc"}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, server) }()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var sts appsv1.StatefulSet
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &sts)).To(Succeed())
+
+			podLabels := sts.Spec.Template.Labels
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/name", "papermc"))
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/instance", serverName))
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/component", "server"))
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+			// Must also retain legacy selector labels
+			Expect(podLabels).To(HaveKeyWithValue("app", "papermc"))
+			Expect(podLabels).To(HaveKey("mc.k8s.lex.la/server-name"))
+		})
+
+		It("should set standard labels on Service", func() {
+			serverName := "test-svc-labels"
+			server := &mck8slexlav1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+				},
+				Spec: mck8slexlav1beta1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "papermc"}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, server) }()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var svc corev1.Service
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &svc)).To(Succeed())
+
+			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "papermc"))
+			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", serverName))
+			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "service"))
+			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+		})
+	})
 })
 
 // findCondition returns the condition with the given type from the slice, or nil if not found.

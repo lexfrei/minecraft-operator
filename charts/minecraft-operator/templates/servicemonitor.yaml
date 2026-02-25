@@ -5,6 +5,7 @@ metadata:
   name: {{ include "minecraft-operator.fullname" . }}
   labels:
     control-plane: controller-manager
+    app.kubernetes.io/component: monitoring
     {{- include "minecraft-operator.labels" . | nindent 4 }}
     {{- with .Values.metrics.serviceMonitor.labels }}
     {{- toYaml . | nindent 4 }}
