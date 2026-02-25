@@ -326,6 +326,32 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 		})
 	})
 
+	Context("when NetworkPolicy is already deleted (race condition)", func() {
+		It("should not error when deleting an already-deleted NetworkPolicy", func() {
+			server := createServer("np-race-delete", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled: true,
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Manually delete the NP (simulating GC race)
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &np)).To(Succeed())
+
+			// Disable NP — ensureNetworkPolicy will try to delete already-deleted NP
+			server.Spec.Network = nil
+			err = reconciler.ensureNetworkPolicy(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred(),
+				"Should not error when deleting already-deleted NetworkPolicy (GC race)")
+		})
+	})
+
 	Context("when network policy has custom allowFrom", func() {
 		It("should include additional ingress sources for Minecraft port", func() {
 			server := createServer("np-allowfrom", &mck8slexlav1beta1.NetworkConfig{
@@ -440,6 +466,60 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 		})
 	})
 
+	// Duplicate plugin ports should create duplicate rules (Kubernetes allows this)
+	Context("when multiple plugins expose the same port", func() {
+		It("should create separate ingress rules per plugin (duplicates allowed)", func() {
+			server := createServer("np-dup-ports", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled: true,
+				},
+			})
+
+			port8123 := int32(8123)
+			dupPlugins := []mck8slexlav1beta1.Plugin{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "dynmap", Namespace: ns},
+					Spec: mck8slexlav1beta1.PluginSpec{
+						Port:             &port8123,
+						Source:           mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "Dynmap"},
+						UpdateStrategy:   "latest",
+						InstanceSelector: metav1.LabelSelector{},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "bluemap", Namespace: ns},
+					Spec: mck8slexlav1beta1.PluginSpec{
+						Port:             &port8123,
+						Source:           mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "BlueMap"},
+						UpdateStrategy:   "latest",
+						InstanceSelector: metav1.LabelSelector{},
+					},
+				},
+			}
+
+			err := reconciler.ensureNetworkPolicy(ctx, server, dupPlugins)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			// Count rules with port 8123
+			pluginPort := intstr.FromInt32(8123)
+			count := 0
+			for _, rule := range np.Spec.Ingress {
+				for _, port := range rule.Ports {
+					if port.Port != nil && port.Port.IntVal == pluginPort.IntVal {
+						count++
+					}
+				}
+			}
+			Expect(count).To(Equal(2),
+				"Duplicate plugin ports should create separate ingress rules (Kubernetes allows duplicates)")
+		})
+	})
+
 	// When allowFrom is specified, same-namespace must still be included
 	Context("when allowFrom is explicitly specified", func() {
 		It("should still include same-namespace as baseline peer", func() {
@@ -474,6 +554,33 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 							},
 						), "Same-namespace peer must always be present as baseline")
 					}
+				}
+			}
+		})
+	})
+
+	// RCON disabled must not open RCON port
+	Context("when RCON is disabled", func() {
+		It("should not include RCON port 25575 in ingress rules", func() {
+			server := createServer("np-no-rcon", &mck8slexlav1beta1.NetworkConfig{
+				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
+					Enabled: true,
+				},
+			})
+
+			err := reconciler.ensureNetworkPolicy(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			var np networkingv1.NetworkPolicy
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-minecraft", Namespace: ns,
+			}, &np)).To(Succeed())
+
+			rconPort := intstr.FromInt32(25575)
+			for _, rule := range np.Spec.Ingress {
+				for _, port := range rule.Ports {
+					Expect(port.Port.IntVal).NotTo(Equal(rconPort.IntVal),
+						"RCON port 25575 must not be open when RCON is disabled")
 				}
 			}
 		})

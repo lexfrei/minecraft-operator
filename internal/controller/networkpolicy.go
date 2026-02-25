@@ -56,10 +56,9 @@ func (r *PaperMCServerReconciler) ensureNetworkPolicy(
 		if exists {
 			slog.InfoContext(ctx, "Deleting NetworkPolicy", "name", npName)
 
-			return errors.Wrap(
-				r.Delete(ctx, &existing),
-				"failed to delete NetworkPolicy",
-			)
+			if deleteErr := r.Delete(ctx, &existing); deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
+				return errors.Wrap(deleteErr, "failed to delete NetworkPolicy")
+			}
 		}
 
 		return nil

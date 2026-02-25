@@ -138,7 +138,7 @@ tests:
                 port: 6443
           any: true
 
-  - it: should allow RCON egress only to papermc pods (not all TCP)
+  - it: should allow RCON egress only to papermc pods on port 25575
     set:
       networkPolicy.enabled: true
     asserts:
@@ -149,12 +149,9 @@ tests:
               - podSelector:
                   matchLabels:
                     app: papermc
-          any: true
-      - notContains:
-          path: spec.egress
-          content:
             ports:
               - protocol: TCP
+                port: 25575
           any: true
 
   - it: should use custom health port in ingress rule

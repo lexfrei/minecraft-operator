@@ -166,6 +166,8 @@ spec:
                             port:
                               description: Port is the destination port number.
                               format: int32
+                              maximum: 65535
+                              minimum: 1
                               type: integer
                             protocol:
                               description: Protocol is the protocol (TCP or UDP).

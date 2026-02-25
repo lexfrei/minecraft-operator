@@ -481,7 +481,7 @@ func (r *PluginReconciler) resolveVersionWithFallback(
 // so users can see in status why no real version was resolved.
 func (r *PluginReconciler) setFallbackVersionCondition(plugin *mcv1beta1.Plugin, version string) {
 	if version == "0.0.0" {
-		r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,
+		r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionFalse,
 			reasonFallbackVersion,
 			"Version could not be extracted from JAR or spec; using 0.0.0 placeholder")
 	}
