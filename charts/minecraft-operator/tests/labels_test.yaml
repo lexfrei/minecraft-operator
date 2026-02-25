@@ -1,0 +1,177 @@
+# Contract: "All resources use Kubernetes recommended labels consistently"
+# Verifies app.kubernetes.io/part-of and app.kubernetes.io/component labels
+# are present on all resources per the Kubernetes recommended labels spec.
+suite: standard labels
+templates:
+  - templates/deployment.yaml
+  - templates/serviceaccount.yaml
+  - templates/metrics-service.yaml
+  - templates/servicemonitor.yaml
+  - templates/leader-election-role.yaml
+  - templates/leader-election-rolebinding.yaml
+  - templates/manager-rolebinding.yaml
+  # Note: templates/rbac/role.yaml is excluded because it is auto-generated
+  # by controller-gen and cannot contain Helm-templated labels.
+  - templates/metrics-reader-clusterrole.yaml
+  - templates/webui-service.yaml
+  - templates/webui-ingress.yaml
+  - templates/webui-httproute.yaml
+tests:
+  # part-of label on all resources
+  - it: should have part-of label on Deployment
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: minecraft-operator
+
+  - it: should have part-of label on ServiceAccount
+    template: templates/serviceaccount.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: minecraft-operator
+
+  - it: should have part-of label on metrics Service
+    template: templates/metrics-service.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: minecraft-operator
+
+  - it: should have part-of label on ServiceMonitor
+    template: templates/servicemonitor.yaml
+    set:
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: minecraft-operator
+
+  - it: should have part-of label on leader election Role
+    template: templates/leader-election-role.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: minecraft-operator
+
+  - it: should have part-of label on leader election RoleBinding
+    template: templates/leader-election-rolebinding.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: minecraft-operator
+
+  - it: should have part-of label on manager ClusterRoleBinding
+    template: templates/manager-rolebinding.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: minecraft-operator
+
+  - it: should have part-of label on metrics reader ClusterRole
+    template: templates/metrics-reader-clusterrole.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: minecraft-operator
+
+  # component labels per resource type
+  - it: should have component=manager on Deployment metadata
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: manager
+
+  - it: should have component=manager on Deployment pod template
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: manager
+
+  - it: should have component=metrics on metrics Service
+    template: templates/metrics-service.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: metrics
+
+  - it: should have component=monitoring on ServiceMonitor
+    template: templates/servicemonitor.yaml
+    set:
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: monitoring
+
+  - it: should have component=webui on WebUI Service
+    template: templates/webui-service.yaml
+    set:
+      webui.enabled: true
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: webui
+
+  - it: should have component=webui on WebUI Ingress
+    template: templates/webui-ingress.yaml
+    set:
+      webui.enabled: true
+      webui.ingress.enabled: true
+      webui.ingress.hosts:
+        - host: mc.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: webui
+
+  - it: should have component=webui on WebUI HTTPRoute
+    template: templates/webui-httproute.yaml
+    set:
+      webui.enabled: true
+      webui.httproute.enabled: true
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: webui
+
+  # part-of label on WebUI resources
+  - it: should have part-of label on WebUI Service
+    template: templates/webui-service.yaml
+    set:
+      webui.enabled: true
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: minecraft-operator
+
+  - it: should have part-of label on WebUI Ingress
+    template: templates/webui-ingress.yaml
+    set:
+      webui.enabled: true
+      webui.ingress.enabled: true
+      webui.ingress.hosts:
+        - host: mc.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: minecraft-operator
+
+  - it: should have part-of label on WebUI HTTPRoute
+    template: templates/webui-httproute.yaml
+    set:
+      webui.enabled: true
+      webui.httproute.enabled: true
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: minecraft-operator

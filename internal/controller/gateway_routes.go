@@ -161,7 +161,7 @@ func (r *PaperMCServerReconciler) buildTCPRoute(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      server.Name + "-tcp",
 			Namespace: server.Namespace,
-			Labels:    routeLabels(server.Name),
+			Labels:    standardLabels(server.Name, "networking"),
 		},
 		Spec: gatewayv1alpha2.TCPRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
@@ -182,7 +182,7 @@ func (r *PaperMCServerReconciler) buildUDPRoute(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      server.Name + "-udp",
 			Namespace: server.Namespace,
-			Labels:    routeLabels(server.Name),
+			Labels:    standardLabels(server.Name, "networking"),
 		},
 		Spec: gatewayv1alpha2.UDPRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
@@ -229,14 +229,5 @@ func buildBackendRef(serviceName string, port int) gatewayv1alpha2.BackendRef {
 			Name: gatewayv1.ObjectName(serviceName),
 			Port: &p,
 		},
-	}
-}
-
-// routeLabels returns standard labels for Gateway API routes.
-func routeLabels(serverName string) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       "papermc",
-		"app.kubernetes.io/instance":   serverName,
-		"app.kubernetes.io/managed-by": "minecraft-operator",
 	}
 }

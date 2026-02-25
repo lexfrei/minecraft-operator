@@ -301,6 +301,56 @@ var _ = Describe("Gateway API Routes", func() {
 		})
 	})
 
+	Context("standard Kubernetes labels on routes", func() {
+		It("should set component and part-of labels on TCPRoute", func() {
+			server := createServer("gw-labels-tcp", &mck8slexlav1beta1.GatewayConfig{
+				Enabled: true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
+					{Name: "gw", Namespace: "gw-ns"},
+				},
+				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
+			})
+
+			err := reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			var tcpRoute gatewayv1alpha2.TCPRoute
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-tcp", Namespace: ns,
+			}, &tcpRoute)).To(Succeed())
+
+			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "papermc"))
+			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", server.Name))
+			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "networking"))
+			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+		})
+
+		It("should set component and part-of labels on UDPRoute", func() {
+			server := createServer("gw-labels-udp", &mck8slexlav1beta1.GatewayConfig{
+				Enabled: true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
+					{Name: "gw", Namespace: "gw-ns"},
+				},
+				UDPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
+			})
+
+			err := reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			var udpRoute gatewayv1alpha2.UDPRoute
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-udp", Namespace: ns,
+			}, &udpRoute)).To(Succeed())
+
+			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "papermc"))
+			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", server.Name))
+			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "networking"))
+			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+		})
+	})
+
 	Context("with owner references", func() {
 		It("should set owner reference on created routes", func() {
 			server := createServer("gw-owner", &mck8slexlav1beta1.GatewayConfig{

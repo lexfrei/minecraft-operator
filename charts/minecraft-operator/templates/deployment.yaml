@@ -4,6 +4,7 @@ metadata:
   name: {{ include "minecraft-operator.fullname" . }}
   labels:
     control-plane: controller-manager
+    app.kubernetes.io/component: manager
     {{- include "minecraft-operator.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
@@ -20,6 +21,7 @@ spec:
         {{- end }}
       labels:
         control-plane: controller-manager
+        app.kubernetes.io/component: manager
         {{- include "minecraft-operator.labels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}

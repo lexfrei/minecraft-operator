@@ -5,6 +5,7 @@ metadata:
   name: {{ include "minecraft-operator.fullname" . }}-metrics
   labels:
     control-plane: controller-manager
+    app.kubernetes.io/component: metrics
     {{- include "minecraft-operator.labels" . | nindent 4 }}
 spec:
   ports:
