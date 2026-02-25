@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -432,15 +433,14 @@ var _ = Describe("Network failure handling", func() {
 
 		It("should recover when URL becomes available after failure", func() {
 			pluginName := "net-url-recover"
-			requestCount := 0
+			var requestCount atomic.Int32
 
 			jarData := testutil.BuildTestJAR("plugin.yml",
 				"name: RecoverPlugin\nversion: \"1.0.0\"\napi-version: \"1.21\"\n")
 			jarHash := fmt.Sprintf("%x", sha256.Sum256(jarData))
 
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				requestCount++
-				if requestCount <= 1 {
+				if requestCount.Add(1) <= 1 {
 					// First request fails
 					http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
 					return
