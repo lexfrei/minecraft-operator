@@ -64,7 +64,7 @@ func (r *PaperMCServerReconciler) ensureNetworkPolicy(
 		return nil
 	}
 
-	desired, err := r.buildNetworkPolicy(server, matchedPlugins)
+	desired, err := r.buildNetworkPolicy(ctx, server, matchedPlugins)
 	if err != nil {
 		return errors.Wrap(err, "failed to build NetworkPolicy")
 	}
@@ -94,6 +94,7 @@ func (r *PaperMCServerReconciler) ensureNetworkPolicy(
 
 // buildNetworkPolicy constructs the desired NetworkPolicy for a PaperMCServer.
 func (r *PaperMCServerReconciler) buildNetworkPolicy(
+	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
 	matchedPlugins []mcv1beta1.Plugin,
 ) (*networkingv1.NetworkPolicy, error) {
@@ -116,7 +117,7 @@ func (r *PaperMCServerReconciler) buildNetworkPolicy(
 
 		var egressErr error
 
-		egress, egressErr = r.buildNetworkPolicyEgress(npSpec)
+		egress, egressErr = r.buildNetworkPolicyEgress(ctx, npSpec)
 		if egressErr != nil {
 			return nil, errors.Wrap(egressErr, "failed to build egress rules")
 		}
@@ -243,12 +244,12 @@ func (r *PaperMCServerReconciler) buildRCONIngressRule(
 
 // buildNetworkPolicyEgress constructs egress rules for the NetworkPolicy.
 func (r *PaperMCServerReconciler) buildNetworkPolicyEgress(
+	ctx context.Context,
 	npSpec *mcv1beta1.ServerNetworkPolicy,
 ) ([]networkingv1.NetworkPolicyEgressRule, error) {
 	udpProto := corev1.ProtocolUDP
 	tcpProto := corev1.ProtocolTCP
 	dnsPortVal := intstr.FromInt32(dnsPort)
-
 	httpsPortVal := intstr.FromInt32(443)
 
 	rules := []networkingv1.NetworkPolicyEgressRule{
@@ -280,6 +281,13 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyEgress(
 		if dest.CIDR != "" {
 			rule.To = []networkingv1.NetworkPolicyPeer{
 				{IPBlock: &networkingv1.IPBlock{CIDR: dest.CIDR}},
+			}
+
+			if dest.Port == nil {
+				slog.WarnContext(ctx,
+					"Egress rule has CIDR without port restriction, all ports are allowed to this CIDR",
+					"cidr", dest.CIDR,
+				)
 			}
 		}
 

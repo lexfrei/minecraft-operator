@@ -175,6 +175,31 @@ tests:
                 port: 8081
           any: true
 
+  - it: should use custom RCON port in egress rule
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.rconPort: 25576
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - podSelector:
+                  matchLabels:
+                    app: papermc
+                namespaceSelector: {}
+            ports:
+              - protocol: TCP
+                port: 25576
+          any: true
+      - notContains:
+          path: spec.egress
+          content:
+            ports:
+              - protocol: TCP
+                port: 25575
+          any: true
+
   - it: should have standard labels
     set:
       networkPolicy.enabled: true

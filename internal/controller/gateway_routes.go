@@ -24,7 +24,7 @@ import (
 	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 )
 
-const minecraftPort = 25565
+const minecraftPort int32 = 25565
 
 // ensureGatewayRoutes creates, updates, or deletes Gateway API TCPRoute and UDPRoute
 // resources based on the server's gateway configuration.
@@ -247,8 +247,8 @@ func convertParentRefs(refs []mcv1beta1.GatewayParentRef) []gatewayv1.ParentRefe
 }
 
 // buildBackendRef creates a BackendRef pointing to the server's Service on the given port.
-func buildBackendRef(serviceName string, port int) gatewayv1alpha2.BackendRef {
-	p := gatewayv1alpha2.PortNumber(port)
+func buildBackendRef(serviceName string, port int32) gatewayv1alpha2.BackendRef {
+	p := port
 
 	return gatewayv1alpha2.BackendRef{
 		BackendObjectReference: gatewayv1.BackendObjectReference{
