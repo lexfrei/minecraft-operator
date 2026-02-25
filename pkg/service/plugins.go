@@ -11,8 +11,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// updateStrategyPinned is the legacy "pinned" strategy for Plugin resources.
-const updateStrategyPinned = "pinned"
+const (
+	// updateStrategyPin is the current pin strategy for Plugin resources.
+	updateStrategyPin = "pin"
+	// updateStrategyPinLegacy is the legacy "pinned" strategy name.
+	updateStrategyPinLegacy = "pinned"
+)
 
 // PluginService provides operations for Plugin resources.
 type PluginService struct {
@@ -277,8 +281,10 @@ func (s *PluginService) pluginToData(plugin *mck8slexlav1beta1.Plugin) PluginDat
 		data.LastFetched = &t
 	}
 
-	// For pinned strategy, show the pinned version as resolved
-	if plugin.Spec.UpdateStrategy == updateStrategyPinned && plugin.Spec.Version != "" {
+	// For pin/pinned strategy, show the pinned version as resolved
+	isPinned := plugin.Spec.UpdateStrategy == updateStrategyPin ||
+		plugin.Spec.UpdateStrategy == updateStrategyPinLegacy
+	if isPinned && plugin.Spec.Version != "" {
 		data.ResolvedVersion = plugin.Spec.Version
 	}
 

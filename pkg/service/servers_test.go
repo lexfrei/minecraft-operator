@@ -423,7 +423,7 @@ func TestServerService_UpdateServer_Success(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	newStrategy := "pin"
+	newStrategy := updateStrategyPin
 	newVersion := "1.21.2"
 	newBuild := 100
 	data := ServerUpdateData{
@@ -441,7 +441,7 @@ func TestServerService_UpdateServer_Success(t *testing.T) {
 	var updated mck8slexlav1beta1.PaperMCServer
 	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "test-server"}, &updated)
 	require.NoError(t, err)
-	assert.Equal(t, "pin", updated.Spec.UpdateStrategy)
+	assert.Equal(t, updateStrategyPin, updated.Spec.UpdateStrategy)
 	assert.Equal(t, "1.21.2", updated.Spec.Version)
 	assert.NotNil(t, updated.Spec.Build)
 	assert.Equal(t, 100, *updated.Spec.Build)

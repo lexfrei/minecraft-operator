@@ -383,8 +383,10 @@ func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1beta1.PaperMCServ
 		return nil, errors.Wrap(err, "failed to build pod spec")
 	}
 
-	stsLabels := standardLabels(server.Name, "server")
+	// User labels go first; standard labels have priority and cannot be overridden.
+	stsLabels := make(map[string]string, len(server.Labels)+5)
 	maps.Copy(stsLabels, server.Labels)
+	maps.Copy(stsLabels, standardLabels(server.Name, "server"))
 
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
