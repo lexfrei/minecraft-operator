@@ -17,7 +17,7 @@ Minecraft Operator is a Kubernetes operator for managing PaperMC servers with a 
 - Update rollbacks (world format updates are destructive)
 - Performance monitoring (TPS, lag)
 - Horizontal scaling
-- Ingress management (L7 routing; per-server NetworkPolicy is in scope via `network` config)
+- L7 ingress management (Kubernetes Ingress resources); L4 routing is supported via Gateway API TCPRoute/UDPRoute
 - Zero-downtime updates
 - Full backup/restore management (operator creates VolumeSnapshots but does not handle restore)
 

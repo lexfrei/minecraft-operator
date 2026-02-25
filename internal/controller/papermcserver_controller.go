@@ -97,8 +97,8 @@ type PaperMCServerReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=pods/exec,verbs=create
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;delete
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=udproutes,verbs=get;list;watch;create;update;delete
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=udproutes,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 //nolint:revive // kubebuilder markers require no space after //
 
@@ -1807,6 +1807,10 @@ func updateHistoryEqual(a, b *mcv1beta1.UpdateHistory) bool {
 }
 
 // SetupWithManager sets up the controller with the Manager.
+//
+// Note: Gateway API resources (TCPRoute/UDPRoute) are NOT registered via Owns()
+// because the CRDs may not be installed. If routes are externally deleted, they
+// will be recreated on the next server reconciliation cycle (not immediately).
 func (r *PaperMCServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mcv1beta1.PaperMCServer{}).
