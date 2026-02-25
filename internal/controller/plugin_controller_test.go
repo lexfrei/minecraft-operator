@@ -1477,6 +1477,8 @@ var _ = Describe("Plugin Controller", func() {
 
 			cond := meta.FindStatusCondition(plugin.Status.Conditions, "VersionResolved")
 			Expect(cond).NotTo(BeNil(), "VersionResolved condition should be set for 0.0.0 fallback")
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse),
+				"VersionResolved should be False when using 0.0.0 placeholder")
 			Expect(cond.Reason).To(Equal("FallbackVersion"))
 			Expect(cond.Message).To(ContainSubstring("0.0.0"))
 		})

@@ -134,7 +134,7 @@ func isBlockedHost(host string) bool {
 	// Block non-standard IP encodings that bypass net.ParseIP but are resolved
 	// by curl and some HTTP clients: decimal integers (2130706433 = 127.0.0.1),
 	// octal octets (0177.0.0.01 = 127.0.0.1), hex octets (0x7f.0.0.1 = 127.0.0.1).
-	if ip := parseDecimalIP(hostname); ip != nil {
+	if ip := parseIntegerIP(hostname); ip != nil {
 		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
 			ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 	}
@@ -217,7 +217,7 @@ func looksLikeNonStandardIP(hostname string) bool {
 // parseIntegerIP checks if a hostname is a single-value integer-encoded IPv4 address.
 // Supports decimal (e.g., "2130706433" for 127.0.0.1) and hexadecimal with "0x"/"0X"
 // prefix (e.g., "0x7f000001" for 127.0.0.1). Returns the parsed IP or nil.
-func parseDecimalIP(hostname string) net.IP {
+func parseIntegerIP(hostname string) net.IP {
 	if hostname == "" {
 		return nil
 	}
