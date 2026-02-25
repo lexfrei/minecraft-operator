@@ -11,9 +11,9 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -570,12 +570,59 @@ var _ = Describe("Network failure handling", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			p := getPlugin(pluginName, ns)
-			// Truncated body: either download fails (unavailable + requeue 5m)
-			// or "JAR" is received but invalid ZIP → parse fails → fallback version
-			// Both are acceptable graceful handling
-			Expect(p.Status.RepositoryStatus).To(
-				SatisfyAny(Equal("unavailable"), Equal("available")),
-				"Should handle truncated body gracefully (either unavailable or fallback parse)")
+			// Truncated body: Content-Length declares 1000000 bytes but only 12 arrive.
+			// io.ReadAll returns io.ErrUnexpectedEOF → download failure → unavailable.
+			Expect(p.Status.RepositoryStatus).To(Equal("unavailable"),
+				"Truncated body should result in download failure and unavailable status")
+		})
+
+		It("should handle DNS resolution failure gracefully", func() {
+			pluginName := "net-url-dns"
+
+			// Use a hostname that will never resolve (RFC 6761 reserved TLD).
+			// ValidateDownloadURL blocks .invalid TLD, so we simulate DNS failure
+			// via a RoundTripper that returns a net.DNSError.
+			dnsErr := &net.DNSError{
+				Err:        "no such host",
+				Name:       "nonexistent.example.com",
+				IsNotFound: true,
+			}
+			failClient := &http.Client{
+				Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+					return nil, dnsErr
+				}),
+			}
+
+			reconciler := &PluginReconciler{
+				Client:     k8sClient,
+				Scheme:     k8sClient.Scheme(),
+				Solver:     solver.NewSimpleSolver(),
+				HTTPClient: failClient,
+			}
+
+			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
+				Source: mck8slexlav1beta1.PluginSource{
+					Type: "url",
+					URL:  "https://nonexistent.example.com/plugin.jar",
+				},
+				UpdateStrategy: "latest",
+				InstanceSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"net-url-dns": "true"},
+				},
+			})
+			defer deleteTestPlugin(pluginName, ns)
+
+			result, err := reconcilePastFinalizer(reconciler, pluginName, ns)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(5*time.Minute),
+				"Should requeue after 5m on DNS failure")
+
+			p := getPlugin(pluginName, ns)
+			Expect(p.Status.RepositoryStatus).To(Equal("unavailable"))
+
+			cond := findCondition(p.Status.Conditions, conditionTypeRepositoryAvailable)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 		})
 	})
 
@@ -772,9 +819,11 @@ var _ = Describe("Network failure handling", func() {
 	Context("PaperMC API failures", func() {
 		const ns = "default"
 
-		It("should fail when PaperMC API GetPaperVersions returns error (pin strategy)", func() {
+		It("should fail when PaperMC API GetPaperVersions returns error (auto strategy)", func() {
+			// Auto strategy calls resolveAutoVersion → findAvailableUpdate →
+			// findVersionUpdate → PaperClient.GetPaperVersions.
 			mockPaper := &testutil.MockPaperAPI{
-				BuildsErr: fmt.Errorf("paper api unreachable"),
+				VersionsErr: fmt.Errorf("paper version API unreachable"),
 			}
 			mockRegistry := &testutil.MockRegistryAPI{
 				Tags: []string{"1.21.1-91"},
@@ -788,16 +837,15 @@ var _ = Describe("Network failure handling", func() {
 				Solver:         solver.NewSimpleSolver(),
 			}
 
-			serverName := "net-paper-api-down"
+			serverName := "net-paper-versions-err"
 			server := &mck8slexlav1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: ns,
-					Labels:    map[string]string{"net-paper-api": "true"},
+					Labels:    map[string]string{"net-paper-versions": "true"},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "pin",
-					Version:        "1.21.1",
+					UpdateStrategy: "auto",
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -815,7 +863,7 @@ var _ = Describe("Network failure handling", func() {
 			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: ns}}
 			_, err := reconciler.Reconcile(context.Background(), req)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("paper api unreachable"))
+			Expect(err.Error()).To(ContainSubstring("paper version API unreachable"))
 		})
 
 		It("should fail when PaperMC API GetBuilds returns error (pin strategy)", func() {
@@ -861,7 +909,7 @@ var _ = Describe("Network failure handling", func() {
 
 			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: ns}}
 			_, err := reconciler.Reconcile(context.Background(), req)
-			// Pin strategy calls GetBuilds then validates build exists in registry.
+			// Pin strategy calls GetBuilds which fails before reaching registry validation.
 			// The key assertion: error should propagate, not silently succeed.
 			Expect(err).To(HaveOccurred(),
 				"PaperMC API failure should propagate as reconciliation error")
@@ -1180,9 +1228,3 @@ var _ = Describe("Network failure handling", func() {
 		})
 	})
 })
-
-// Ensure imports are used.
-var (
-	_ = errors.Is
-	_ url.URL
-)
