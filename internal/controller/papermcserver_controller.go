@@ -25,6 +25,7 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -240,6 +241,10 @@ func (r *PaperMCServerReconciler) ensureInfrastructure(
 
 	if err := r.ensureGatewayRoutes(ctx, server, matchedPlugins); err != nil {
 		return nil, errors.Wrap(err, "failed to ensure gateway routes")
+	}
+
+	if err := r.ensureNetworkPolicy(ctx, server); err != nil {
+		return nil, errors.Wrap(err, "failed to ensure network policy")
 	}
 
 	return statefulSet, nil
@@ -1806,6 +1811,7 @@ func (r *PaperMCServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&mcv1beta1.PaperMCServer{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
+		Owns(&networkingv1.NetworkPolicy{}).
 		Watches(
 			&mcv1beta1.Plugin{},
 			handler.EnqueueRequestsFromMapFunc(r.findServersForPlugin),
