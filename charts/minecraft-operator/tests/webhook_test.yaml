@@ -150,11 +150,29 @@ tests:
     asserts:
       - equal:
           path: webhooks[0].clientConfig.caBundle
-          value: "LS0tLS1CRUdJTi..."
+          value: LS0tLS1CRUdJTi...
         template: templates/webhook-configuration.yaml
       - equal:
           path: webhooks[1].clientConfig.caBundle
-          value: "LS0tLS1CRUdJTi..."
+          value: LS0tLS1CRUdJTi...
+        template: templates/webhook-configuration.yaml
+
+  - it: should set timeoutSeconds on both webhooks
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        caBundle: "LS0tLS1CRUdJTi..."
+        certManager:
+          enabled: false
+    asserts:
+      - equal:
+          path: webhooks[0].timeoutSeconds
+          value: 10
+        template: templates/webhook-configuration.yaml
+      - equal:
+          path: webhooks[1].timeoutSeconds
+          value: 10
         template: templates/webhook-configuration.yaml
 
   - it: should set webhook service port to 443

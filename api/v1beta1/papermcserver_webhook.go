@@ -56,6 +56,8 @@ func validateServerStrategy(s *PaperMCServer, specPath *field.Path) field.ErrorL
 	var errs field.ErrorList
 
 	switch s.Spec.UpdateStrategy {
+	case "latest", "auto":
+		// No additional fields required.
 	case "pin":
 		if s.Spec.Version == "" {
 			errs = append(errs, field.Required(
@@ -77,6 +79,12 @@ func validateServerStrategy(s *PaperMCServer, specPath *field.Path) field.ErrorL
 				"build is required for 'build-pin' strategy",
 			))
 		}
+	default:
+		errs = append(errs, field.NotSupported(
+			specPath.Child("updateStrategy"),
+			s.Spec.UpdateStrategy,
+			[]string{"latest", "auto", "pin", "build-pin"},
+		))
 	}
 
 	return errs

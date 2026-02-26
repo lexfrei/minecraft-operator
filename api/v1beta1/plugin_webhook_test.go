@@ -17,6 +17,8 @@ import (
 
 const (
 	sourceTypeURL       = "url"
+	strategyLatest      = "latest"
+	strategyAuto        = "auto"
 	strategyPin         = "pin"
 	strategyBuildPin    = "build-pin"
 	testPluginVersion   = "2.5.0"
@@ -216,7 +218,7 @@ func TestPluginValidateCreate_URLWithoutJarExtensionWarns(t *testing.T) {
 func TestPluginValidateCreate_AutoStrategyWithVersion(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
-	p.Spec.UpdateStrategy = "auto"
+	p.Spec.UpdateStrategy = strategyAuto
 	p.Spec.Version = testPluginVersion
 
 	warnings, err := v.ValidateCreate(context.Background(), p)
@@ -228,7 +230,7 @@ func TestPluginValidateCreate_AutoStrategyWithVersion(t *testing.T) {
 func TestPluginValidateCreate_LatestStrategyValid(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
-	p.Spec.UpdateStrategy = "latest"
+	p.Spec.UpdateStrategy = strategyLatest
 
 	warnings, err := v.ValidateCreate(context.Background(), p)
 	require.NoError(t, err)
@@ -255,6 +257,32 @@ func TestPluginValidateCreate_URLValidChecksumFormat(t *testing.T) {
 	p := validPlugin()
 	p.Spec.Source.Type = sourceTypeURL
 	p.Spec.Source.Project = ""
+	p.Spec.Source.URL = testExampleJARURL
+	p.Spec.Source.Checksum = testExampleChecksum
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+// Uppercase checksum should be accepted (normalized to lowercase).
+func TestPluginValidateCreate_URLUppercaseChecksumAccepted(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Type = sourceTypeURL
+	p.Spec.Source.Project = ""
+	p.Spec.Source.URL = testExampleJARURL
+	p.Spec.Source.Checksum = "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+// Hangar source with extra url/checksum fields should still pass (fields are ignored).
+func TestPluginValidateCreate_HangarWithExtraURLFields(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
 	p.Spec.Source.URL = testExampleJARURL
 	p.Spec.Source.Checksum = testExampleChecksum
 

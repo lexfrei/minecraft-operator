@@ -247,7 +247,7 @@ func TestServerValidateCreate_MaintenanceWindowDisabledInvalidCronIgnored(t *tes
 func TestServerValidateCreate_AutoStrategyWithVersion(t *testing.T) {
 	v := &PaperMCServerValidator{}
 	s := validServer()
-	s.Spec.UpdateStrategy = "auto"
+	s.Spec.UpdateStrategy = strategyAuto
 	s.Spec.Version = testServerVersion
 
 	warnings, err := v.ValidateCreate(context.Background(), s)
@@ -259,7 +259,7 @@ func TestServerValidateCreate_AutoStrategyWithVersion(t *testing.T) {
 func TestServerValidateCreate_LatestStrategyValid(t *testing.T) {
 	v := &PaperMCServerValidator{}
 	s := validServer()
-	s.Spec.UpdateStrategy = "latest"
+	s.Spec.UpdateStrategy = strategyLatest
 
 	warnings, err := v.ValidateCreate(context.Background(), s)
 	require.NoError(t, err)

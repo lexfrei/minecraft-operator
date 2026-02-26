@@ -64,9 +64,15 @@ func (v *PluginValidator) validate(p *Plugin) (admission.Warnings, error) {
 			allErrs = append(allErrs, field.Invalid(
 				specPath.Child("source", "checksum"),
 				p.Spec.Source.Checksum,
-				"checksum must be a valid SHA256 hex string (64 lowercase hex characters)",
+				"checksum must be a valid SHA256 hex string (64 hex characters)",
 			))
 		}
+	default:
+		allErrs = append(allErrs, field.NotSupported(
+			specPath.Child("source", "type"),
+			p.Spec.Source.Type,
+			[]string{"hangar", "url"},
+		))
 	}
 
 	// Strategy-specific validation.
@@ -114,6 +120,8 @@ func validatePluginStrategy(p *Plugin, specPath *field.Path) field.ErrorList {
 	var errs field.ErrorList
 
 	switch p.Spec.UpdateStrategy {
+	case "latest", "auto":
+		// No additional fields required.
 	case "pin":
 		if p.Spec.Version == "" {
 			errs = append(errs, field.Required(
@@ -135,6 +143,12 @@ func validatePluginStrategy(p *Plugin, specPath *field.Path) field.ErrorList {
 				"build is required for 'build-pin' strategy",
 			))
 		}
+	default:
+		errs = append(errs, field.NotSupported(
+			specPath.Child("updateStrategy"),
+			p.Spec.UpdateStrategy,
+			[]string{"latest", "auto", "pin", "build-pin"},
+		))
 	}
 
 	return errs

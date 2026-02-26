@@ -19,7 +19,7 @@ webhooks:
       - v1
     clientConfig:
       {{- if not .Values.webhook.certManager.enabled }}
-      caBundle: {{ .Values.webhook.caBundle }}
+      caBundle: {{ .Values.webhook.caBundle | quote }}
       {{- end }}
       service:
         name: {{ include "minecraft-operator.fullname" . }}-webhook
@@ -37,12 +37,13 @@ webhooks:
         resources:
           - plugins
     sideEffects: None
+    timeoutSeconds: 10
   - name: vpapermcserver.mc.k8s.lex.la
     admissionReviewVersions:
       - v1
     clientConfig:
       {{- if not .Values.webhook.certManager.enabled }}
-      caBundle: {{ .Values.webhook.caBundle }}
+      caBundle: {{ .Values.webhook.caBundle | quote }}
       {{- end }}
       service:
         name: {{ include "minecraft-operator.fullname" . }}-webhook
@@ -60,4 +61,5 @@ webhooks:
         resources:
           - papermcservers
     sideEffects: None
+    timeoutSeconds: 10
 {{- end }}
