@@ -139,6 +139,25 @@ webui:
     #       - name: minecraft-operator-webui
     #         port: 8082
 
+# Admission webhook configuration
+webhook:
+  # -- Enable validating admission webhooks for Plugin and PaperMCServer CRDs.
+  # Validates semantic rules (strategy/field consistency, cron syntax, etc.) at admission time.
+  enabled: false
+  # -- Failure policy for webhooks. "Fail" rejects invalid resources, "Ignore" allows them through.
+  # Use "Fail" in production, "Ignore" during initial rollout or debugging.
+  failurePolicy: Fail
+  # -- cert-manager integration for webhook TLS certificates.
+  certManager:
+    # -- Enable cert-manager Certificate resource for webhook TLS.
+    # If false, the operator generates self-signed certificates at startup.
+    enabled: false
+    issuerRef:
+      # -- Issuer kind (Issuer or ClusterIssuer).
+      kind: ClusterIssuer
+      # -- Issuer name.
+      name: selfsigned-issuer
+
 # Network policy configuration
 networkPolicy:
   # -- Enable NetworkPolicy for the operator pod.

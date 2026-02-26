@@ -213,6 +213,12 @@ Open http://localhost:8082/ui
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | The name of the service account to use. If not set and create is true, a name is generated using the fullname template. |
 | tolerations | list | `[]` |  |
+| webhook.certManager | object | `{"enabled":false,"issuerRef":{"kind":"ClusterIssuer","name":"selfsigned-issuer"}}` | cert-manager integration for webhook TLS certificates. |
+| webhook.certManager.enabled | bool | `false` | Enable cert-manager Certificate resource for webhook TLS. If false, the operator generates self-signed certificates at startup. |
+| webhook.certManager.issuerRef.kind | string | `"ClusterIssuer"` | Issuer kind (Issuer or ClusterIssuer). |
+| webhook.certManager.issuerRef.name | string | `"selfsigned-issuer"` | Issuer name. |
+| webhook.enabled | bool | `false` | Enable validating admission webhooks for Plugin and PaperMCServer CRDs. Validates semantic rules (strategy/field consistency, cron syntax, etc.) at admission time. |
+| webhook.failurePolicy | string | `"Fail"` | Failure policy for webhooks. "Fail" rejects invalid resources, "Ignore" allows them through. Use "Fail" in production, "Ignore" during initial rollout or debugging. |
 | webui.enabled | bool | `true` |  |
 | webui.httproute.annotations | object | `{}` |  |
 | webui.httproute.enabled | bool | `false` |  |
