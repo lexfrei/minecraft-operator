@@ -1261,7 +1261,7 @@ decisions:
     date: 2026-02-26
     status: accepted
     decision: "Validating admission webhooks for Plugin and PaperMCServer CRDs using controller-runtime generic Validator interface"
-    reasoning: "Semantic validation rules (source/strategy field consistency, cron syntax, RCON secret requirements, gateway parentRefs) cannot be expressed via kubebuilder markers alone. Admission webhooks catch invalid resources at creation/update time, providing immediate user feedback instead of opaque reconciliation failures. Uses admission.Validator[T] generic interface (controller-runtime v0.23+) for type-safe validation. Returns field.ErrorList for structured Kubernetes-native error messages with field paths. Helm chart supports optional cert-manager integration for webhook TLS, falling back to operator self-signed certificates."
+    reasoning: "Semantic validation rules (source/strategy field consistency, cron syntax, RCON secret requirements, gateway parentRefs, checksum format) cannot be expressed via kubebuilder markers alone. Admission webhooks catch invalid resources at creation/update time, providing immediate user feedback instead of opaque reconciliation failures. Uses admission.Validator[T] generic interface (controller-runtime v0.23+) for type-safe validation. Returns field.ErrorList for structured Kubernetes-native error messages with field paths. Helm chart supports cert-manager for automatic TLS or manual TLS secret with caBundle for webhook certificate verification."
     alternatives:
       - "CEL validation rules in CRD: Limited expressiveness, cannot cross-reference fields or call parsers"
       - "Mutating webhook with defaults: Kubebuilder markers already handle defaults, mutating adds complexity"

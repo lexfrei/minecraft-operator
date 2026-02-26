@@ -345,6 +345,10 @@
           "type": "string",
           "description": "Base64-encoded CA bundle for webhook TLS. Required when certManager is disabled."
         },
+        "certSecretName": {
+          "type": "string",
+          "description": "Name of the TLS secret containing webhook certificates. Defaults to <release>-webhook-cert."
+        },
         "certManager": {
           "type": "object",
           "additionalProperties": false,

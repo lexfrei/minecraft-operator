@@ -10,11 +10,15 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
+
+// sha256Pattern matches exactly 64 lowercase hexadecimal characters.
+var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // PluginValidator validates Plugin resources.
 type PluginValidator struct{}
@@ -51,12 +55,17 @@ func (v *PluginValidator) validate(p *Plugin) (admission.Warnings, error) {
 			))
 		}
 	case "url":
-		var urlWarnings admission.Warnings
 		urlWarnings, urlErrs := validateURLSource(p, specPath)
 		allErrs = append(allErrs, urlErrs...)
 		warnings = append(warnings, urlWarnings...)
 		if p.Spec.Source.Checksum == "" {
 			warnings = append(warnings, "spec.source.checksum is not set; downloads will not be integrity-verified")
+		} else if !sha256Pattern.MatchString(strings.ToLower(p.Spec.Source.Checksum)) {
+			allErrs = append(allErrs, field.Invalid(
+				specPath.Child("source", "checksum"),
+				p.Spec.Source.Checksum,
+				"checksum must be a valid SHA256 hex string (64 lowercase hex characters)",
+			))
 		}
 	}
 

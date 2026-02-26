@@ -235,6 +235,34 @@ func TestPluginValidateCreate_LatestStrategyValid(t *testing.T) {
 	assert.Empty(t, warnings)
 }
 
+// Issue 3 (round 2): invalid checksum format should be rejected.
+func TestPluginValidateCreate_URLInvalidChecksumFormat(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Type = sourceTypeURL
+	p.Spec.Source.Project = ""
+	p.Spec.Source.URL = testExampleJARURL
+	p.Spec.Source.Checksum = "not-a-sha256"
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checksum")
+}
+
+// Valid checksum should pass.
+func TestPluginValidateCreate_URLValidChecksumFormat(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Type = sourceTypeURL
+	p.Spec.Source.Project = ""
+	p.Spec.Source.URL = testExampleJARURL
+	p.Spec.Source.Checksum = testExampleChecksum
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
 func TestPluginValidateDelete_AlwaysAllowed(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()

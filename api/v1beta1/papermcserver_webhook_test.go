@@ -231,6 +231,18 @@ func TestServerValidateCreate_GatewayEnabledWithParentRefs(t *testing.T) {
 	assert.Empty(t, warnings)
 }
 
+// Issue 4 (round 2): disabled maintenance window with invalid cron should be ignored.
+func TestServerValidateCreate_MaintenanceWindowDisabledInvalidCronIgnored(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.UpdateSchedule.MaintenanceWindow.Enabled = false
+	s.Spec.UpdateSchedule.MaintenanceWindow.Cron = "bad cron"
+
+	warnings, err := v.ValidateCreate(context.Background(), s)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
 // Issue 6: auto strategy with version should be valid (no error).
 func TestServerValidateCreate_AutoStrategyWithVersion(t *testing.T) {
 	v := &PaperMCServerValidator{}

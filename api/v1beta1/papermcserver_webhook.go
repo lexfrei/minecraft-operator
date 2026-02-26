@@ -95,12 +95,14 @@ func validateCronExpressions(s *PaperMCServer, specPath *field.Path) field.Error
 		))
 	}
 
-	if _, err := cronParser.Parse(s.Spec.UpdateSchedule.MaintenanceWindow.Cron); err != nil {
-		errs = append(errs, field.Invalid(
-			schedulePath.Child("maintenanceWindow", "cron"),
-			s.Spec.UpdateSchedule.MaintenanceWindow.Cron,
-			fmt.Sprintf("invalid cron expression: %v", err),
-		))
+	if s.Spec.UpdateSchedule.MaintenanceWindow.Enabled {
+		if _, err := cronParser.Parse(s.Spec.UpdateSchedule.MaintenanceWindow.Cron); err != nil {
+			errs = append(errs, field.Invalid(
+				schedulePath.Child("maintenanceWindow", "cron"),
+				s.Spec.UpdateSchedule.MaintenanceWindow.Cron,
+				fmt.Sprintf("invalid cron expression: %v", err),
+			))
+		}
 	}
 
 	return errs

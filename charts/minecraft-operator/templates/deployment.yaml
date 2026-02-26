@@ -52,8 +52,6 @@ spec:
         {{- end }}
         {{- if .Values.webhook.enabled }}
         - --enable-webhooks=true
-        {{- end }}
-        {{- if and .Values.webhook.enabled .Values.webhook.certManager.enabled }}
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         {{- end }}
         env:
@@ -98,18 +96,18 @@ spec:
           {{- toYaml .Values.resources | nindent 10 }}
         securityContext:
           {{- toYaml .Values.securityContext | nindent 10 }}
-        {{- if and .Values.webhook.enabled .Values.webhook.certManager.enabled }}
+        {{- if .Values.webhook.enabled }}
         volumeMounts:
           - name: webhook-cert
             mountPath: /tmp/k8s-webhook-server/serving-certs
             readOnly: true
         {{- end }}
       terminationGracePeriodSeconds: 10
-      {{- if and .Values.webhook.enabled .Values.webhook.certManager.enabled }}
+      {{- if .Values.webhook.enabled }}
       volumes:
         - name: webhook-cert
           secret:
-            secretName: {{ include "minecraft-operator.fullname" . }}-webhook-cert
+            secretName: {{ .Values.webhook.certSecretName | default (printf "%s-webhook-cert" (include "minecraft-operator.fullname" .)) }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
