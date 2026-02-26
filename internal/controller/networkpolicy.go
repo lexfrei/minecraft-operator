@@ -185,9 +185,12 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 		mcRule.From = append(mcRule.From, peer)
 	}
 
-	rules := []networkingv1.NetworkPolicyIngressRule{mcRule}
-	rules = append(rules, buildPluginIngressRules(matchedPlugins, tcpProto, mcRule.From)...)
-	rules = append(rules, r.buildRCONIngressRule(ctx, server, tcpProto)...)
+	pluginRules := buildPluginIngressRules(matchedPlugins, tcpProto, mcRule.From)
+	rconRules := r.buildRCONIngressRule(ctx, server, tcpProto)
+	rules := make([]networkingv1.NetworkPolicyIngressRule, 0, 1+len(pluginRules)+len(rconRules))
+	rules = append(rules, mcRule)
+	rules = append(rules, pluginRules...)
+	rules = append(rules, rconRules...)
 
 	return rules, nil
 }
