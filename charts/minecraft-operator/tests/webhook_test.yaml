@@ -1,0 +1,194 @@
+suite: webhook tests
+templates:
+  - templates/webhook-service.yaml
+  - templates/webhook-configuration.yaml
+  - templates/webhook-certificate.yaml
+tests:
+  - it: should not render when webhook is disabled
+    set:
+      webhook:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/webhook-service.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/webhook-configuration.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/webhook-certificate.yaml
+
+  - it: should render service and webhook config when enabled with caBundle
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        caBundle: "LS0tLS1CRUdJTi..."
+        certManager:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/webhook-service.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/webhook-configuration.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/webhook-certificate.yaml
+
+  - it: should render certificate when cert-manager is enabled
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        certManager:
+          enabled: true
+          issuerRef:
+            kind: ClusterIssuer
+            name: selfsigned-issuer
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/webhook-certificate.yaml
+      - equal:
+          path: kind
+          value: Certificate
+        template: templates/webhook-certificate.yaml
+
+  - it: should set correct failure policy
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Ignore
+        caBundle: "LS0tLS1CRUdJTi..."
+        certManager:
+          enabled: false
+    asserts:
+      - equal:
+          path: webhooks[0].failurePolicy
+          value: Ignore
+        template: templates/webhook-configuration.yaml
+      - equal:
+          path: webhooks[1].failurePolicy
+          value: Ignore
+        template: templates/webhook-configuration.yaml
+
+  - it: should configure two webhooks for plugin and papermcserver
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        caBundle: "LS0tLS1CRUdJTi..."
+        certManager:
+          enabled: false
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 2
+        template: templates/webhook-configuration.yaml
+      - equal:
+          path: webhooks[0].name
+          value: vplugin.mc.k8s.lex.la
+        template: templates/webhook-configuration.yaml
+      - equal:
+          path: webhooks[1].name
+          value: vpapermcserver.mc.k8s.lex.la
+        template: templates/webhook-configuration.yaml
+
+  - it: should add cert-manager annotation when enabled
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        certManager:
+          enabled: true
+          issuerRef:
+            kind: ClusterIssuer
+            name: selfsigned-issuer
+    asserts:
+      - exists:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+        template: templates/webhook-configuration.yaml
+
+  - it: should not render caBundle when cert-manager is enabled
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        certManager:
+          enabled: true
+          issuerRef:
+            kind: ClusterIssuer
+            name: selfsigned-issuer
+    asserts:
+      - notExists:
+          path: webhooks[0].clientConfig.caBundle
+        template: templates/webhook-configuration.yaml
+
+  - it: should fail when webhook enabled without cert-manager and without caBundle
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        certManager:
+          enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "webhook.caBundle is required when webhook is enabled and certManager is disabled. Provide a base64-encoded CA bundle or enable certManager."
+        template: templates/webhook-configuration.yaml
+
+  - it: should render caBundle when provided manually
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        caBundle: "LS0tLS1CRUdJTi..."
+        certManager:
+          enabled: false
+    asserts:
+      - equal:
+          path: webhooks[0].clientConfig.caBundle
+          value: LS0tLS1CRUdJTi...
+        template: templates/webhook-configuration.yaml
+      - equal:
+          path: webhooks[1].clientConfig.caBundle
+          value: LS0tLS1CRUdJTi...
+        template: templates/webhook-configuration.yaml
+
+  - it: should set timeoutSeconds on both webhooks
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        caBundle: "LS0tLS1CRUdJTi..."
+        certManager:
+          enabled: false
+    asserts:
+      - equal:
+          path: webhooks[0].timeoutSeconds
+          value: 10
+        template: templates/webhook-configuration.yaml
+      - equal:
+          path: webhooks[1].timeoutSeconds
+          value: 10
+        template: templates/webhook-configuration.yaml
+
+  - it: should set webhook service port to 443
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        caBundle: "LS0tLS1CRUdJTi..."
+        certManager:
+          enabled: false
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 443
+        template: templates/webhook-service.yaml
+      - equal:
+          path: spec.ports[0].targetPort
+          value: webhook
+        template: templates/webhook-service.yaml

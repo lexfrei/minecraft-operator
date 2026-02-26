@@ -39,6 +39,10 @@ help: ## Display this help.
 
 ##@ Development
 
+.PHONY: setup-hooks
+setup-hooks: ## Configure git to use .githooks/ for pre-push checks
+	git config core.hooksPath .githooks
+
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:dir=internal/crdmanager/crds output:rbac:dir=charts/minecraft-operator/templates/rbac

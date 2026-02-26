@@ -328,6 +328,54 @@
         }
       }
     },
+    "webhook": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable validating admission webhooks."
+        },
+        "failurePolicy": {
+          "type": "string",
+          "enum": ["Fail", "Ignore"],
+          "description": "Webhook failure policy."
+        },
+        "caBundle": {
+          "type": "string",
+          "description": "Base64-encoded CA bundle for webhook TLS. Required when certManager is disabled."
+        },
+        "certSecretName": {
+          "type": "string",
+          "description": "Name of the TLS secret containing webhook certificates. Defaults to <release>-webhook-cert."
+        },
+        "certManager": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable cert-manager Certificate for webhook TLS."
+            },
+            "issuerRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["Issuer", "ClusterIssuer"],
+                  "description": "Issuer kind."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Issuer name."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "networkPolicy": {
       "type": "object",
       "additionalProperties": false,

@@ -213,6 +213,14 @@ Open http://localhost:8082/ui
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | The name of the service account to use. If not set and create is true, a name is generated using the fullname template. |
 | tolerations | list | `[]` |  |
+| webhook.caBundle | string | `""` | Base64-encoded CA bundle for webhook TLS verification. Required when certManager.enabled is false. The API server uses this CA to verify the webhook's TLS certificate. You can generate certs with:   openssl req -x509 -newkey rsa:4096 -keyout tls.key -out tls.crt -days 365 -nodes \     -subj '/CN=<release>-webhook.<namespace>.svc'   kubectl create secret tls <release>-webhook-cert --cert=tls.crt --key=tls.key -n <namespace>   caBundle: $(base64 < tls.crt) |
+| webhook.certManager | object | `{"enabled":false,"issuerRef":{"kind":"ClusterIssuer","name":"selfsigned-issuer"}}` | cert-manager integration for webhook TLS certificates. |
+| webhook.certManager.enabled | bool | `false` | Enable cert-manager Certificate resource for webhook TLS. If false, you must provide a TLS secret manually (see certSecretName and caBundle). |
+| webhook.certManager.issuerRef.kind | string | `"ClusterIssuer"` | Issuer kind (Issuer or ClusterIssuer). |
+| webhook.certManager.issuerRef.name | string | `"selfsigned-issuer"` | Issuer name. |
+| webhook.certSecretName | string | `""` | Name of the TLS secret containing webhook certificates (tls.crt and tls.key). Defaults to "<release>-webhook-cert". When using cert-manager, the Certificate resource creates this secret automatically. |
+| webhook.enabled | bool | `false` | Enable validating admission webhooks for Plugin and PaperMCServer CRDs. Validates semantic rules (strategy/field consistency, cron syntax, etc.) at admission time. |
+| webhook.failurePolicy | string | `"Fail"` | Failure policy for webhooks. "Fail" rejects invalid resources, "Ignore" allows them through. Use "Fail" in production, "Ignore" during initial rollout or debugging. |
 | webui.enabled | bool | `true` |  |
 | webui.httproute.annotations | object | `{}` |  |
 | webui.httproute.enabled | bool | `false` |  |

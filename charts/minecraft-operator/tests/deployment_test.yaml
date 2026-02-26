@@ -198,3 +198,70 @@ tests:
       - matchRegex:
           path: spec.template.spec.serviceAccountName
           pattern: ".*-minecraft-operator$"
+
+  - it: should set enable-webhooks flag when webhooks enabled
+    set:
+      webhook:
+        enabled: true
+        caBundle: "LS0tLS1CRUdJTi..."
+        certManager:
+          enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--enable-webhooks=true"
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 9443
+            name: webhook
+            protocol: TCP
+
+  - it: should mount cert volume and set cert-path when webhooks enabled without cert-manager
+    set:
+      webhook:
+        enabled: true
+        caBundle: "LS0tLS1CRUdJTi..."
+        certManager:
+          enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--webhook-cert-path=/tmp/k8s-webhook-server/serving-certs"
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: webhook-cert
+            mountPath: /tmp/k8s-webhook-server/serving-certs
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: webhook-cert
+            secret:
+              secretName: RELEASE-NAME-minecraft-operator-webhook-cert
+
+  - it: should use custom certSecretName when provided
+    set:
+      webhook:
+        enabled: true
+        caBundle: "LS0tLS1CRUdJTi..."
+        certSecretName: my-custom-cert-secret
+        certManager:
+          enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: webhook-cert
+            secret:
+              secretName: my-custom-cert-secret
+
+  - it: should not set enable-webhooks flag when webhooks disabled
+    set:
+      webhook:
+        enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--enable-webhooks=true"

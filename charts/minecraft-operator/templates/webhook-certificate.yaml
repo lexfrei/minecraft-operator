@@ -1,0 +1,17 @@
+{{- if and .Values.webhook.enabled .Values.webhook.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "minecraft-operator.fullname" . }}-webhook
+  labels:
+    app.kubernetes.io/component: webhook
+    {{- include "minecraft-operator.labels" . | nindent 4 }}
+spec:
+  dnsNames:
+    - {{ include "minecraft-operator.fullname" . }}-webhook.{{ .Release.Namespace }}.svc
+    - {{ include "minecraft-operator.fullname" . }}-webhook.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: {{ .Values.webhook.certManager.issuerRef.kind }}
+    name: {{ .Values.webhook.certManager.issuerRef.name }}
+  secretName: {{ include "minecraft-operator.fullname" . }}-webhook-cert
+{{- end }}

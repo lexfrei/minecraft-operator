@@ -1,0 +1,65 @@
+{{- if .Values.webhook.enabled }}
+{{- if and (not .Values.webhook.certManager.enabled) (not .Values.webhook.caBundle) }}
+{{- fail "webhook.caBundle is required when webhook is enabled and certManager is disabled. Provide a base64-encoded CA bundle or enable certManager." }}
+{{- end }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "minecraft-operator.fullname" . }}
+  labels:
+    app.kubernetes.io/component: webhook
+    {{- include "minecraft-operator.labels" . | nindent 4 }}
+  {{- if .Values.webhook.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "minecraft-operator.fullname" . }}-webhook
+  {{- end }}
+webhooks:
+  - name: vplugin.mc.k8s.lex.la
+    admissionReviewVersions:
+      - v1
+    clientConfig:
+      {{- if not .Values.webhook.certManager.enabled }}
+      caBundle: {{ .Values.webhook.caBundle | quote }}
+      {{- end }}
+      service:
+        name: {{ include "minecraft-operator.fullname" . }}-webhook
+        namespace: {{ .Release.Namespace }}
+        path: /validate-mc-k8s-lex-la-v1beta1-plugin
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    rules:
+      - apiGroups:
+          - mc.k8s.lex.la
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - plugins
+    sideEffects: None
+    timeoutSeconds: 10
+  - name: vpapermcserver.mc.k8s.lex.la
+    admissionReviewVersions:
+      - v1
+    clientConfig:
+      {{- if not .Values.webhook.certManager.enabled }}
+      caBundle: {{ .Values.webhook.caBundle | quote }}
+      {{- end }}
+      service:
+        name: {{ include "minecraft-operator.fullname" . }}-webhook
+        namespace: {{ .Release.Namespace }}
+        path: /validate-mc-k8s-lex-la-v1beta1-papermcserver
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    rules:
+      - apiGroups:
+          - mc.k8s.lex.la
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - papermcservers
+    sideEffects: None
+    timeoutSeconds: 10
+{{- end }}

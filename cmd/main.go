@@ -87,6 +87,7 @@ func main() {
 	var webuiNamespace string
 	var webuiEnabled bool
 	var manageCRDs bool
+	var enableWebhooks bool
 	var logLevel string
 	var logFormat string
 	var tlsOpts []func(*tls.Config)
@@ -113,6 +114,8 @@ func main() {
 	flag.BoolVar(&webuiEnabled, "webui-enabled", true, "Enable the Web UI server.")
 	flag.BoolVar(&manageCRDs, "manage-crds", true,
 		"Apply CRDs at startup using server-side apply. Disable if the operator should not manage CRDs.")
+	flag.BoolVar(&enableWebhooks, "enable-webhooks", false,
+		"Enable admission webhooks. Requires webhook Service and TLS certificates.")
 	flag.StringVar(&logLevel, "log-level", "info",
 		"Log level (debug, info, warn, error). Default: info")
 	flag.StringVar(&logFormat, "log-format", "json",
@@ -370,6 +373,23 @@ func main() {
 	if err := mgr.Add(mccron.NewCronRunnable(cronScheduler)); err != nil {
 		setupLog.Error(err, "unable to register update cron scheduler runnable")
 		os.Exit(1)
+	}
+
+	// Register admission webhooks (only when explicitly enabled via --enable-webhooks flag)
+	if enableWebhooks {
+		if err := ctrl.NewWebhookManagedBy(mgr, &mck8slexlav1beta1.Plugin{}).
+			WithValidator(&mck8slexlav1beta1.PluginValidator{}).
+			Complete(); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Plugin")
+			os.Exit(1)
+		}
+
+		if err := ctrl.NewWebhookManagedBy(mgr, &mck8slexlav1beta1.PaperMCServer{}).
+			WithValidator(&mck8slexlav1beta1.PaperMCServerValidator{}).
+			Complete(); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "PaperMCServer")
+			os.Exit(1)
+		}
 	}
 
 	// +kubebuilder:scaffold:builder

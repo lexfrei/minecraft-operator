@@ -50,6 +50,10 @@ spec:
         - --webui-namespace={{ .Values.webui.namespace }}
         {{- end }}
         {{- end }}
+        {{- if .Values.webhook.enabled }}
+        - --enable-webhooks=true
+        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+        {{- end }}
         env:
         - name: POD_NAMESPACE
           valueFrom:
@@ -71,6 +75,11 @@ spec:
           name: webui
           protocol: TCP
         {{- end }}
+        {{- if .Values.webhook.enabled }}
+        - containerPort: 9443
+          name: webhook
+          protocol: TCP
+        {{- end }}
         livenessProbe:
           httpGet:
             path: /healthz
@@ -87,7 +96,19 @@ spec:
           {{- toYaml .Values.resources | nindent 10 }}
         securityContext:
           {{- toYaml .Values.securityContext | nindent 10 }}
+        {{- if .Values.webhook.enabled }}
+        volumeMounts:
+          - name: webhook-cert
+            mountPath: /tmp/k8s-webhook-server/serving-certs
+            readOnly: true
+        {{- end }}
       terminationGracePeriodSeconds: 10
+      {{- if .Values.webhook.enabled }}
+      volumes:
+        - name: webhook-cert
+          secret:
+            secretName: {{ .Values.webhook.certSecretName | default (printf "%s-webhook-cert" (include "minecraft-operator.fullname" .)) }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

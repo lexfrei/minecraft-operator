@@ -139,6 +139,37 @@ webui:
     #       - name: minecraft-operator-webui
     #         port: 8082
 
+# Admission webhook configuration
+webhook:
+  # -- Enable validating admission webhooks for Plugin and PaperMCServer CRDs.
+  # Validates semantic rules (strategy/field consistency, cron syntax, etc.) at admission time.
+  enabled: false
+  # -- Failure policy for webhooks. "Fail" rejects invalid resources, "Ignore" allows them through.
+  # Use "Fail" in production, "Ignore" during initial rollout or debugging.
+  failurePolicy: Fail
+  # -- Base64-encoded CA bundle for webhook TLS verification.
+  # Required when certManager.enabled is false. The API server uses this CA to verify
+  # the webhook's TLS certificate. You can generate certs with:
+  #   openssl req -x509 -newkey rsa:4096 -keyout tls.key -out tls.crt -days 365 -nodes \
+  #     -subj '/CN=<release>-webhook.<namespace>.svc'
+  #   kubectl create secret tls <release>-webhook-cert --cert=tls.crt --key=tls.key -n <namespace>
+  #   caBundle: $(base64 < tls.crt)
+  caBundle: ""
+  # -- Name of the TLS secret containing webhook certificates (tls.crt and tls.key).
+  # Defaults to "<release>-webhook-cert". When using cert-manager, the Certificate
+  # resource creates this secret automatically.
+  certSecretName: ""
+  # -- cert-manager integration for webhook TLS certificates.
+  certManager:
+    # -- Enable cert-manager Certificate resource for webhook TLS.
+    # If false, you must provide a TLS secret manually (see certSecretName and caBundle).
+    enabled: false
+    issuerRef:
+      # -- Issuer kind (Issuer or ClusterIssuer).
+      kind: ClusterIssuer
+      # -- Issuer name.
+      name: selfsigned-issuer
+
 # Network policy configuration
 networkPolicy:
   # -- Enable NetworkPolicy for the operator pod.
