@@ -372,6 +372,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Register admission webhooks
+	if err := ctrl.NewWebhookManagedBy(mgr, &mck8slexlav1beta1.Plugin{}).
+		WithValidator(&mck8slexlav1beta1.PluginValidator{}).
+		Complete(); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Plugin")
+		os.Exit(1)
+	}
+
+	if err := ctrl.NewWebhookManagedBy(mgr, &mck8slexlav1beta1.PaperMCServer{}).
+		WithValidator(&mck8slexlav1beta1.PaperMCServerValidator{}).
+		Complete(); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "PaperMCServer")
+		os.Exit(1)
+	}
+
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
