@@ -101,7 +101,7 @@ test-integration: ## Run integration tests against Kind cluster mc-test
 	go test -tags=integration ./test/integration/ -v -ginkgo.v -timeout 5m
 
 .PHONY: lint
-lint: golangci-lint helm-lint helm-docs-check ## Run all linters (Go, Helm chart, Helm docs)
+lint: golangci-lint helm-lint helm-schema-check helm-docs-check ## Run all linters
 	$(GOLANGCI_LINT) run
 
 .PHONY: lint-fix
@@ -157,6 +157,12 @@ NAMESPACE ?= minecraft-operator-system
 .PHONY: helm-lint
 helm-lint: ## Lint Helm charts
 	helm lint charts/minecraft-operator
+
+.PHONY: helm-schema-check
+helm-schema-check: ## Validate values.yaml against JSON schema
+	@if [ -f "charts/minecraft-operator/values.schema.json" ]; then \
+		check-jsonschema --schemafile "charts/minecraft-operator/values.schema.json" "charts/minecraft-operator/values.yaml"; \
+	fi
 
 .PHONY: helm-docs-check
 helm-docs-check: ## Verify Helm README is up to date
