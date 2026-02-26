@@ -101,7 +101,7 @@ test-integration: ## Run integration tests against Kind cluster mc-test
 	go test -tags=integration ./test/integration/ -v -ginkgo.v -timeout 5m
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter
+lint: golangci-lint helm-lint helm-docs-check ## Run all linters (Go, Helm chart, Helm docs)
 	$(GOLANGCI_LINT) run
 
 .PHONY: lint-fix
@@ -157,6 +157,16 @@ NAMESPACE ?= minecraft-operator-system
 .PHONY: helm-lint
 helm-lint: ## Lint Helm charts
 	helm lint charts/minecraft-operator
+
+.PHONY: helm-docs-check
+helm-docs-check: ## Verify Helm README is up to date
+	@if [ -f "charts/minecraft-operator/README.md.gotmpl" ]; then \
+		helm-docs --chart-search-root=charts; \
+		if ! git diff --exit-code "charts/minecraft-operator/README.md" > /dev/null 2>&1; then \
+			echo "README.md is out of date. Run 'helm-docs --chart-search-root=charts' and commit."; \
+			exit 1; \
+		fi; \
+	fi
 
 .PHONY: helm-install
 helm-install: manifests ## Install operator via Helm
