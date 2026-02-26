@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Running pre-push checks..."
+
+echo "==> make lint"
+make lint
+
+echo "==> make test"
+make test
+
+echo "All checks passed."
