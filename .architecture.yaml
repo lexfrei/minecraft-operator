@@ -1257,6 +1257,22 @@ decisions:
       controller: "internal/controller/gateway_routes.go - ensureGatewayRoutes, reconcileTCPRoute, reconcileUDPRoute, buildBackendRef, buildParentRefs"
       setup: "internal/controller/papermcserver_controller.go - gatewayAPIsAvailable, conditional Owns()"
 
+  - id: ADR-035
+    date: 2026-02-26
+    status: accepted
+    decision: "Validating admission webhooks for Plugin and PaperMCServer CRDs using controller-runtime generic Validator interface"
+    reasoning: "Semantic validation rules (source/strategy field consistency, cron syntax, RCON secret requirements, gateway parentRefs) cannot be expressed via kubebuilder markers alone. Admission webhooks catch invalid resources at creation/update time, providing immediate user feedback instead of opaque reconciliation failures. Uses admission.Validator[T] generic interface (controller-runtime v0.23+) for type-safe validation. Returns field.ErrorList for structured Kubernetes-native error messages with field paths. Helm chart supports optional cert-manager integration for webhook TLS, falling back to operator self-signed certificates."
+    alternatives:
+      - "CEL validation rules in CRD: Limited expressiveness, cannot cross-reference fields or call parsers"
+      - "Mutating webhook with defaults: Kubebuilder markers already handle defaults, mutating adds complexity"
+      - "Controller-side validation only: Users see errors only after reconciliation delay, poor UX"
+    impact: "New webhook validators in api/v1beta1/, registration in cmd/main.go, Helm templates for Service/ValidatingWebhookConfiguration/Certificate"
+    components:
+      plugin_validator: "api/v1beta1/plugin_webhook.go - PluginValidator with source type/strategy consistency checks"
+      server_validator: "api/v1beta1/papermcserver_webhook.go - PaperMCServerValidator with cron/RCON/backup/gateway validation"
+      registration: "cmd/main.go - ctrl.NewWebhookManagedBy with WithValidator for both CRDs"
+      helm_templates: "charts/minecraft-operator/templates/webhook-*.yaml - Service, ValidatingWebhookConfiguration, Certificate"
+
 phases:
   phase_1_mvp:
     description: "Minimum viable product"
@@ -1279,7 +1295,7 @@ phases:
       - "Modrinth API support"
       - "SpigotMC API support"
       - "SAT solver for complex constraints"
-      - "Admission webhooks for validation"
+      - "Admission webhooks for validation (implemented — ADR-035)"
       - "Web UI namespace selector (multi-namespace view)"
       - "Web UI authentication via K8s RBAC (SubjectAccessReview)"
       - "Web UI filtering and search capabilities"
