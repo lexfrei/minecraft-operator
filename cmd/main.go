@@ -309,13 +309,14 @@ func main() {
 
 	// Setup PaperMCServer controller
 	if err := (&controller.PaperMCServerReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		Config:         mgr.GetConfig(),
-		PaperClient:    paperClient,
-		Solver:         constraintSolver,
-		RegistryClient: registryClient,
-		Metrics:        metricsRecorder,
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		Config:            mgr.GetConfig(),
+		PaperClient:       paperClient,
+		Solver:            constraintSolver,
+		RegistryClient:    registryClient,
+		Metrics:           metricsRecorder,
+		OperatorNamespace: os.Getenv("POD_NAMESPACE"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PaperMCServer")
 		os.Exit(1)
@@ -358,7 +359,6 @@ func main() {
 		PodExecutor:      podExecutor,
 		Metrics:          metricsRecorder,
 		BackupReconciler: backupReconciler,
-		HTTPClient:       plugins.SafeHTTPClient(),
 	}
 	updateReconciler.SetCron(cronScheduler)
 	if err := updateReconciler.SetupWithManager(mgr); err != nil {

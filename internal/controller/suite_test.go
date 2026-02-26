@@ -8,10 +8,10 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -98,30 +98,23 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 })
 
+// modDownloadResult captures the Dir field from "go mod download -json" output.
+type modDownloadResult struct {
+	Dir string `json:"Dir"`
+}
+
 // resolveModulePath returns the local filesystem path for a Go module.
 // It uses "go mod download -json" to find the cached module directory.
 func resolveModulePath(module string) string {
 	cmd := exec.Command("go", "mod", "download", "-json", module)
 	out, err := cmd.Output()
-	if err != nil {
-		logf.Log.Error(err, "Failed to resolve module path", "module", module)
-		return ""
-	}
+	Expect(err).NotTo(HaveOccurred(), "go mod download -json %s failed", module)
 
-	// Parse Dir field from JSON output
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, `"Dir"`) {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				dir := strings.TrimSpace(parts[1])
-				dir = strings.Trim(dir, `",`)
-				return dir
-			}
-		}
-	}
+	var result modDownloadResult
+	Expect(json.Unmarshal(out, &result)).To(Succeed(), "failed to parse JSON for module %s", module)
+	Expect(result.Dir).NotTo(BeEmpty(), "module %s resolved to empty Dir", module)
 
-	return ""
+	return result.Dir
 }
 
 // getFirstFoundEnvTestBinaryDir locates the first binary in the specified path.

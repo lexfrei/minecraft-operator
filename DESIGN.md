@@ -17,7 +17,7 @@ Minecraft Operator is a Kubernetes operator for managing PaperMC servers with a 
 - Update rollbacks (world format updates are destructive)
 - Performance monitoring (TPS, lag)
 - Horizontal scaling
-- Network policies or ingress management
+- L7 ingress management (Kubernetes Ingress resources); L4 routing is supported via Gateway API TCPRoute/UDPRoute
 - Zero-downtime updates
 - Full backup/restore management (operator creates VolumeSnapshots but does not handle restore)
 
@@ -274,6 +274,21 @@ spec:
     # annotations:
     #   metallb.universe.tf/loadBalancerIPs: "192.168.1.100"
     # loadBalancerIP: "192.168.1.100"
+
+  # Network policy configuration (optional)
+  network:
+    networkPolicy:
+      enabled: true
+      # Additional ingress sources for the Minecraft port
+      allowFrom:
+        - cidr: "10.0.0.0/8"
+      # Restrict egress to DNS + HTTPS only (default: true)
+      restrictEgress: true
+      # Additional egress destinations when restrictEgress is true
+      allowEgressTo:
+        - cidr: "203.0.113.0/24"
+          port: 8080
+          protocol: TCP
 
   # Pod settings (simplified, can be extended)
   podTemplate:
@@ -1221,6 +1236,8 @@ rules:
 - ✅ Cron-based updates
 - ✅ Persistent cache in status
 - ✅ URL-based plugin source with JAR metadata extraction and SSRF protection
+- ✅ Per-server NetworkPolicy with configurable ingress/egress rules
+- ✅ Gateway API TCPRoute/UDPRoute for game traffic routing
 
 ### Phase 2
 

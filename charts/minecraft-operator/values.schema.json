@@ -328,6 +328,22 @@
         }
       }
     },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable NetworkPolicy for the operator pod."
+        },
+        "rconPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "RCON port for egress rules to managed Minecraft server pods."
+        }
+      }
+    },
     "nodeSelector": {
       "type": "object",
       "additionalProperties": {

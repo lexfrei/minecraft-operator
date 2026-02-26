@@ -248,8 +248,8 @@ custom_resources:
     key_fields:
       - "source.type - hangar/url (modrinth/spigot planned)"
       - "source.project - Plugin project identifier"
-      - "updateStrategy - latest or pinned (ADR-029: renamed from versionPolicy)"
-      - "version - Specific version if pinned (ADR-029: renamed from pinnedVersion)"
+      - "updateStrategy - latest, auto, pin, or build-pin (ADR-029: renamed from versionPolicy)"
+      - "version - Specific version for pin/build-pin (ADR-029: renamed from pinnedVersion)"
       - "updateDelay - Grace period before auto-apply (e.g., 168h)"
       - "instanceSelector - Label selector for PaperMCServer matching"
       - "compatibilityOverride - Manual compatibility specification"
@@ -393,6 +393,8 @@ security:
       - "PVCs (read, create, update)"
       - "Secrets (read only for RCON passwords)"
       - "Events (create for status reporting)"
+      - "NetworkPolicies (full access for per-server traffic restriction)"
+      - "Gateway API TCPRoutes/UDPRoutes (full access for game traffic routing)"
 
   network:
     operator_egress:
@@ -1224,6 +1226,36 @@ decisions:
       url_helpers: "pkg/plugins/url.go - ValidateDownloadURL, DownloadJAR, ParseJARMetadata, SafeHTTPClient, isBlockedHost (SSRF protection)"
       controller_dispatch: "internal/controller/plugin_controller.go - fetchURLMetadata with caching (urlCacheValid, urlCacheTTL), resolveURLVersion, resolveVersionWithFallback"
       api_field: "api/v1beta1/plugin_types.go - Checksum field with kubebuilder pattern validation"
+
+  - id: ADR-033
+    date: 2026-02-25
+    status: accepted
+    decision: "Per-server NetworkPolicy managed by the PaperMCServer controller"
+    reasoning: "Minecraft servers need network isolation. The controller creates a NetworkPolicy per PaperMCServer that restricts ingress to the game port (25565) and RCON port (operator namespace only), and restricts egress to DNS + HTTPS by default. Empty allowFrom defaults to same-namespace (secure by default). Users can customize via allowFrom, allowEgressTo, and restrictEgress fields. The Helm chart also provides an optional operator-pod NetworkPolicy."
+    alternatives:
+      - "Manual NetworkPolicy creation: Error-prone, not declarative, drift from server config"
+      - "Cluster-wide NetworkPolicy: Too broad, cannot customize per server"
+      - "No NetworkPolicy: Insecure default, contradicts least-privilege"
+    impact: "New NetworkConfig/ServerNetworkPolicy types in API, networkpolicy.go controller, RBAC for networking.k8s.io/networkpolicies, Helm chart template"
+    components:
+      api_types: "api/v1beta1/papermcserver_types.go - NetworkConfig, ServerNetworkPolicy, NetworkPolicySource, NetworkPolicyDestination"
+      controller: "internal/controller/networkpolicy.go - ensureNetworkPolicy, buildNetworkPolicy, buildNetworkPolicyIngress, buildNetworkPolicyEgress, convertToPeer"
+      helm_template: "charts/minecraft-operator/templates/networkpolicy.yaml - operator pod NetworkPolicy"
+
+  - id: ADR-034
+    date: 2026-02-26
+    status: accepted
+    decision: "Gateway API TCPRoute/UDPRoute for game traffic routing via the PaperMCServer controller"
+    reasoning: "Minecraft needs L4 routing (TCP game protocol + UDP query). Gateway API experimental channel provides TCPRoute and UDPRoute, which are the correct abstraction for L4. The controller creates routes per server pointing to the Service on port 25565. CRDs may not be installed, so the controller gracefully skips route management when CRDs are absent (meta.IsNoMatchError). At startup, SetupWithManager conditionally registers Owns() watches only when Gateway API CRDs are available. RCON port is excluded from routes for security (admin interface should not be publicly routed)."
+    alternatives:
+      - "Kubernetes Ingress: L7 only, cannot route raw TCP/UDP game traffic"
+      - "Manual TCPRoute/UDPRoute creation: Error-prone, drift from server config"
+      - "No routing support: Users must create routes manually for every server"
+    impact: "New GatewayConfig/GatewayParentRef/RouteConfig types in API, gateway_routes.go controller, RBAC for gateway.networking.k8s.io TCPRoutes/UDPRoutes, conditional Owns() in SetupWithManager"
+    components:
+      api_types: "api/v1beta1/papermcserver_types.go - GatewayConfig, GatewayParentRef, RouteConfig"
+      controller: "internal/controller/gateway_routes.go - ensureGatewayRoutes, reconcileTCPRoute, reconcileUDPRoute, buildBackendRef, buildParentRefs"
+      setup: "internal/controller/papermcserver_controller.go - gatewayAPIsAvailable, conditional Owns()"
 
 phases:
   phase_1_mvp:

@@ -96,6 +96,72 @@ type RouteConfig struct {
 	Enabled bool `json:"enabled"`
 }
 
+// NetworkConfig defines network policy configuration for a PaperMCServer.
+type NetworkConfig struct {
+	// NetworkPolicy configures the NetworkPolicy for this server.
+	// +optional
+	NetworkPolicy *ServerNetworkPolicy `json:"networkPolicy,omitempty"`
+}
+
+// ServerNetworkPolicy configures a Kubernetes NetworkPolicy for a PaperMCServer.
+type ServerNetworkPolicy struct {
+	// Enabled determines if NetworkPolicy is created for this server.
+	Enabled bool `json:"enabled"`
+
+	// AllowFrom defines additional ingress sources for the Minecraft port.
+	// Each entry is a standard Kubernetes NetworkPolicyPeer.
+	// +optional
+	AllowFrom []NetworkPolicySource `json:"allowFrom,omitempty"`
+
+	// RestrictEgress restricts outbound traffic to DNS and HTTPS only.
+	// +optional
+	// +kubebuilder:default=true
+	RestrictEgress *bool `json:"restrictEgress,omitempty"`
+
+	// AllowEgressTo defines additional egress destinations when restrictEgress is true.
+	// +optional
+	AllowEgressTo []NetworkPolicyDestination `json:"allowEgressTo,omitempty"`
+}
+
+// NetworkPolicySource defines an ingress source (CIDR or pod/namespace selector).
+type NetworkPolicySource struct {
+	// CIDR is an IPv4 block in CIDR notation (e.g., "10.0.0.0/8").
+	// IPv6 CIDRs are not supported. Semantic validation (valid octets, prefix length)
+	// is performed by the Kubernetes NetworkPolicy API at apply time.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$`
+	CIDR string `json:"cidr,omitempty"`
+
+	// PodSelector matches pods in the same namespace.
+	// +optional
+	PodSelector *metav1.LabelSelector `json:"podSelector,omitempty"`
+
+	// NamespaceSelector matches pods in selected namespaces.
+	// +optional
+	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
+}
+
+// NetworkPolicyDestination defines an egress destination (CIDR or port).
+type NetworkPolicyDestination struct {
+	// CIDR is an IPv4 block in CIDR notation (e.g., "203.0.113.0/24").
+	// IPv6 CIDRs are not supported. Semantic validation (valid octets, prefix length)
+	// is performed by the Kubernetes NetworkPolicy API at apply time.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$`
+	CIDR string `json:"cidr,omitempty"`
+
+	// Port is the destination port number.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port *int32 `json:"port,omitempty"`
+
+	// Protocol is the protocol (TCP or UDP). Defaults to TCP.
+	// +optional
+	// +kubebuilder:validation:Enum=TCP;UDP
+	Protocol *corev1.Protocol `json:"protocol,omitempty"`
+}
+
 // ServiceConfig defines configuration for the Kubernetes Service.
 type ServiceConfig struct {
 	// Type is the Service type (LoadBalancer, NodePort, or ClusterIP).
@@ -226,6 +292,10 @@ type PaperMCServerSpec struct {
 	// Backup configures VolumeSnapshot-based backups.
 	// +optional
 	Backup *BackupSpec `json:"backup,omitempty"`
+
+	// Network configures network policies for this server.
+	// +optional
+	Network *NetworkConfig `json:"network,omitempty"`
 
 	// PodTemplate is the template for the StatefulSet pod.
 	PodTemplate corev1.PodTemplateSpec `json:"podTemplate"`

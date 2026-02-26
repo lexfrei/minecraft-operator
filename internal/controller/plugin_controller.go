@@ -51,6 +51,7 @@ const (
 	urlCacheTTL = 1 * time.Hour
 
 	reasonChecksumMismatch = "ChecksumMismatch"
+	reasonFallbackVersion  = "FallbackVersion"
 )
 
 // errChecksumMismatch is a sentinel error for checksum verification failures.
@@ -180,9 +181,13 @@ func (r *PluginReconciler) doReconcile(ctx context.Context, plugin *mcv1beta1.Pl
 		return result, nil
 	}
 
-	// Update condition - metadata fetched successfully
-	r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,
-		reasonResolved, "Metadata fetched and servers matched")
+	// Update condition — only if not already set by URL fallback logic.
+	// setFallbackVersionCondition may have set VersionResolved=False with
+	// reason FallbackVersion; do not overwrite that signal.
+	if !hasCondition(plugin, conditionTypeVersionResolved, reasonFallbackVersion) {
+		r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,
+			reasonResolved, "Metadata fetched and servers matched")
+	}
 
 	// Step 4: Trigger reconciliation for matched PaperMCServer instances
 	// They will resolve plugin versions individually
@@ -430,6 +435,7 @@ func (r *PluginReconciler) resolveURLVersion(
 			"plugin", plugin.Name, "error", parseErr)
 
 		version := r.resolveVersionWithFallback(ctx, plugin, "")
+		r.setFallbackVersionCondition(plugin, version)
 
 		return []plugins.PluginVersion{{
 			Version:     version,
@@ -439,6 +445,7 @@ func (r *PluginReconciler) resolveURLVersion(
 	}
 
 	version := r.resolveVersionWithFallback(ctx, plugin, jarMeta.Version)
+	r.setFallbackVersionCondition(plugin, version)
 
 	var mcVersions []string
 	if jarMeta.APIVersion != "" {
@@ -472,6 +479,20 @@ func (r *PluginReconciler) resolveVersionWithFallback(
 		"plugin", plugin.Name, "version", "0.0.0")
 
 	return "0.0.0"
+}
+
+// setFallbackVersionCondition sets a condition when the "0.0.0" placeholder version is used,
+// so users can see in status why no real version was resolved.
+func (r *PluginReconciler) setFallbackVersionCondition(plugin *mcv1beta1.Plugin, version string) {
+	if version == "0.0.0" {
+		r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionFalse,
+			reasonFallbackVersion,
+			"Version could not be extracted from JAR or spec; using 0.0.0 placeholder")
+	} else {
+		r.setCondition(plugin, conditionTypeVersionResolved, metav1.ConditionTrue,
+			reasonResolved,
+			"Version resolved from JAR metadata or spec")
+	}
 }
 
 // urlCacheValid checks whether cached URL metadata is still valid.
@@ -614,6 +635,17 @@ func (r *PluginReconciler) setCondition(
 	}
 
 	meta.SetStatusCondition(&plugin.Status.Conditions, condition)
+}
+
+// hasCondition checks if the plugin has a condition with given type and reason.
+func hasCondition(plugin *mcv1beta1.Plugin, conditionType, reason string) bool {
+	for _, c := range plugin.Status.Conditions {
+		if c.Type == conditionType && c.Reason == reason {
+			return true
+		}
+	}
+
+	return false
 }
 
 // statusEqual compares two Plugin statuses for equality.

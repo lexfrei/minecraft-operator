@@ -101,7 +101,7 @@ test-integration: ## Run integration tests against Kind cluster mc-test
 	go test -tags=integration ./test/integration/ -v -ginkgo.v -timeout 5m
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter
+lint: golangci-lint helm-lint helm-schema-check helm-docs-check ## Run all linters
 	$(GOLANGCI_LINT) run
 
 .PHONY: lint-fix
@@ -158,6 +158,22 @@ NAMESPACE ?= minecraft-operator-system
 helm-lint: ## Lint Helm charts
 	helm lint charts/minecraft-operator
 
+.PHONY: helm-schema-check
+helm-schema-check: ## Validate values.yaml against JSON schema
+	@if [ -f "charts/minecraft-operator/values.schema.json" ]; then \
+		check-jsonschema --schemafile "charts/minecraft-operator/values.schema.json" "charts/minecraft-operator/values.yaml"; \
+	fi
+
+.PHONY: helm-docs-check
+helm-docs-check: ## Verify Helm README is up to date
+	@if [ -f "charts/minecraft-operator/README.md.gotmpl" ]; then \
+		helm-docs --chart-search-root=charts; \
+		if ! git diff --exit-code "charts/minecraft-operator/README.md" > /dev/null 2>&1; then \
+			echo "README.md is out of date. Run 'helm-docs --chart-search-root=charts' and commit."; \
+			exit 1; \
+		fi; \
+	fi
+
 .PHONY: helm-install
 helm-install: manifests ## Install operator via Helm
 	helm install minecraft-operator charts/minecraft-operator \
@@ -199,7 +215,7 @@ OAPI_CODEGEN_VERSION ?= v2.4.1
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v2.4.0
+GOLANGCI_LINT_VERSION ?= v2.10.1
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.

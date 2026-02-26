@@ -1,0 +1,208 @@
+# Contract: "NetworkPolicy restricts operator pod traffic to least-privilege"
+# These tests guarantee that enabling networkPolicy produces correct ingress/egress rules.
+suite: network policy
+templates:
+  - templates/networkpolicy.yaml
+tests:
+  - it: should not render NetworkPolicy when disabled (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render NetworkPolicy when enabled
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*-minecraft-operator$"
+
+  - it: should select operator pods via standard labels
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - isNotEmpty:
+          path: spec.podSelector.matchLabels
+
+  - it: should allow ingress on metrics port
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 8080
+          any: true
+
+  - it: should allow ingress on health port
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 8081
+          any: true
+
+  - it: should allow ingress on webui port when webui enabled
+    set:
+      networkPolicy.enabled: true
+      webui.enabled: true
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 8082
+          any: true
+
+  - it: should not include webui port when webui disabled
+    set:
+      networkPolicy.enabled: true
+      webui.enabled: false
+    asserts:
+      - notContains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 8082
+          any: true
+
+  - it: should allow egress to DNS on port 53
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - protocol: UDP
+                port: 53
+              - protocol: TCP
+                port: 53
+          any: true
+
+  - it: should allow egress to Kubernetes API on port 443
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - protocol: TCP
+                port: 443
+          any: true
+
+  - it: should use custom metrics port in ingress rule
+    set:
+      networkPolicy.enabled: true
+      metrics.port: 9090
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 9090
+          any: true
+
+  - it: should have both Ingress and Egress policy types
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+
+  - it: should allow egress to Kubernetes API on port 6443
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - protocol: TCP
+                port: 6443
+          any: true
+
+  - it: should allow RCON egress only to papermc pods on port 25575 across namespaces
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - podSelector:
+                  matchLabels:
+                    app: papermc
+                namespaceSelector: {}
+            ports:
+              - protocol: TCP
+                port: 25575
+          any: true
+
+  - it: should use custom health port in ingress rule
+    set:
+      networkPolicy.enabled: true
+      health.port: 9091
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 9091
+          any: true
+      - notContains:
+          path: spec.ingress
+          content:
+            ports:
+              - protocol: TCP
+                port: 8081
+          any: true
+
+  - it: should use custom RCON port in egress rule
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.rconPort: 25576
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - podSelector:
+                  matchLabels:
+                    app: papermc
+                namespaceSelector: {}
+            ports:
+              - protocol: TCP
+                port: 25576
+          any: true
+      - notContains:
+          path: spec.egress
+          content:
+            ports:
+              - protocol: TCP
+                port: 25575
+          any: true
+
+  - it: should have standard labels
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - exists:
+          path: metadata.labels["app.kubernetes.io/part-of"]

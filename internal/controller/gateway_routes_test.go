@@ -137,7 +137,7 @@ var _ = Describe("Gateway API Routes", func() {
 			Expect(tcpRoute.Spec.Rules[0].BackendRefs[0].Port).To(Equal(&port))
 		})
 
-		It("should include RCON port when RCON is enabled", func() {
+		It("should NOT include RCON port in TCPRoute even when RCON is enabled", func() {
 			server := createServer("gw-tcp-rcon", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
@@ -159,13 +159,12 @@ var _ = Describe("Gateway API Routes", func() {
 				Name: server.Name + "-tcp", Namespace: ns,
 			}, &tcpRoute)).To(Succeed())
 
-			// Should have 2 rules: minecraft + RCON
-			Expect(tcpRoute.Spec.Rules).To(HaveLen(2))
+			// RCON is an admin interface and must NOT be exposed via public Gateway.
+			// Only the game port should be routed.
+			Expect(tcpRoute.Spec.Rules).To(HaveLen(1))
 
 			mcPort := gatewayv1alpha2.PortNumber(25565)
-			rconPort := gatewayv1alpha2.PortNumber(25575)
 			Expect(tcpRoute.Spec.Rules[0].BackendRefs[0].Port).To(Equal(&mcPort))
-			Expect(tcpRoute.Spec.Rules[1].BackendRefs[0].Port).To(Equal(&rconPort))
 		})
 	})
 
@@ -348,6 +347,69 @@ var _ = Describe("Gateway API Routes", func() {
 			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
 			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "networking"))
 			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+		})
+	})
+
+	Context("delete race condition", func() {
+		It("should not error when TCPRoute is already deleted", func() {
+			server := createServer("gw-race-tcp", &mck8slexlav1beta1.GatewayConfig{
+				Enabled: true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
+					{Name: "gw", Namespace: "gw-ns"},
+				},
+				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
+			})
+
+			// Create the route
+			err := reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Manually delete the route (simulates GC race)
+			var route gatewayv1alpha2.TCPRoute
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-tcp", Namespace: ns,
+			}, &route)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &route)).To(Succeed())
+
+			// Now disable gateway — should not error on NotFound
+			server.Spec.Gateway = nil
+			err = reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("no-op update optimization", func() {
+		It("should not update TCPRoute when nothing changed", func() {
+			server := createServer("gw-noop-tcp", &mck8slexlav1beta1.GatewayConfig{
+				Enabled: true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
+					{Name: "gw", Namespace: "gw-ns"},
+				},
+				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
+			})
+
+			// First call — creates the route
+			err := reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Read ResourceVersion after create
+			var route gatewayv1alpha2.TCPRoute
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-tcp", Namespace: ns,
+			}, &route)).To(Succeed())
+			rvAfterCreate := route.ResourceVersion
+
+			// Second call — should be a no-op
+			err = reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// ResourceVersion should NOT change (no update was issued)
+			var routeAfter gatewayv1alpha2.TCPRoute
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: server.Name + "-tcp", Namespace: ns,
+			}, &routeAfter)).To(Succeed())
+			Expect(routeAfter.ResourceVersion).To(Equal(rvAfterCreate),
+				"TCPRoute should not be updated when nothing changed")
 		})
 	})
 

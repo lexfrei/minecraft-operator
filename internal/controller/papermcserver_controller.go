@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"reflect"
 	"regexp"
 	"strconv"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -37,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 const (
@@ -77,12 +80,13 @@ type RegistryAPI interface {
 // PaperMCServerReconciler reconciles a PaperMCServer object.
 type PaperMCServerReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Config         *rest.Config
-	PaperClient    PaperAPI
-	Solver         solver.Solver
-	RegistryClient RegistryAPI
-	Metrics        metrics.Recorder
+	Scheme            *runtime.Scheme
+	Config            *rest.Config
+	PaperClient       PaperAPI
+	Solver            solver.Solver
+	RegistryClient    RegistryAPI
+	Metrics           metrics.Recorder
+	OperatorNamespace string
 }
 
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers,verbs=get;list;watch;create;update;patch;delete
@@ -95,8 +99,9 @@ type PaperMCServerReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=pods/exec,verbs=create
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;delete
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=udproutes,verbs=get;list;watch;create;update;delete
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=udproutes,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 //nolint:revive // kubebuilder markers require no space after //
 
 // Reconcile implements the reconciliation loop for PaperMCServer resources.
@@ -176,11 +181,13 @@ func (r *PaperMCServerReconciler) doReconcile(ctx context.Context, server *mcv1b
 		return ctrl.Result{}, errors.New("desired version not resolved - cannot create infrastructure")
 	}
 
-	// Step 4: Check if updates are blocked
+	// Step 4: Log if updates are blocked.
+	// Infrastructure (StatefulSet, Service, NetworkPolicy, Gateway routes) is still
+	// reconciled to keep resources in sync. The actual version update is gated by
+	// the UpdateReconciler during the maintenance window.
 	if server.Status.UpdateBlocked != nil && server.Status.UpdateBlocked.Blocked {
-		slog.InfoContext(ctx, "Update blocked, skipping infrastructure update",
+		slog.InfoContext(ctx, "Update blocked by plugin incompatibility",
 			"reason", server.Status.UpdateBlocked.Reason)
-		// Don't proceed with StatefulSet update, but continue to update status
 	}
 
 	// Step 5: Ensure infrastructure (StatefulSet and Service)
@@ -239,6 +246,10 @@ func (r *PaperMCServerReconciler) ensureInfrastructure(
 
 	if err := r.ensureGatewayRoutes(ctx, server, matchedPlugins); err != nil {
 		return nil, errors.Wrap(err, "failed to ensure gateway routes")
+	}
+
+	if err := r.ensureNetworkPolicy(ctx, server, matchedPlugins); err != nil {
+		return nil, errors.Wrap(err, "failed to ensure network policy")
 	}
 
 	return statefulSet, nil
@@ -376,8 +387,10 @@ func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1beta1.PaperMCServ
 		return nil, errors.Wrap(err, "failed to build pod spec")
 	}
 
-	stsLabels := standardLabels(server.Name, "server")
+	// User labels go first; standard labels have priority and cannot be overridden.
+	stsLabels := make(map[string]string, len(server.Labels)+5)
 	maps.Copy(stsLabels, server.Labels)
+	maps.Copy(stsLabels, standardLabels(server.Name, "server"))
 
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -454,14 +467,25 @@ func (r *PaperMCServerReconciler) buildPodTemplate(
 	server *mcv1beta1.PaperMCServer,
 	podSpec *corev1.PodSpec,
 ) corev1.PodTemplateSpec {
-	podLabels := standardLabels(server.Name, "server")
+	// User labels first; standard labels have priority and cannot be overridden.
+	podLabels := make(map[string]string, len(server.Spec.PodTemplate.Labels)+7)
+	maps.Copy(podLabels, server.Spec.PodTemplate.Labels)
+	maps.Copy(podLabels, standardLabels(server.Name, "server"))
 	// Retain legacy selector labels for backward compatibility
 	podLabels["app"] = "papermc"
 	podLabels["mc.k8s.lex.la/server-name"] = server.Name
 
+	// Preserve user-supplied annotations.
+	var podAnnotations map[string]string
+	if len(server.Spec.PodTemplate.Annotations) > 0 {
+		podAnnotations = make(map[string]string, len(server.Spec.PodTemplate.Annotations))
+		maps.Copy(podAnnotations, server.Spec.PodTemplate.Annotations)
+	}
+
 	return corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: podLabels,
+			Labels:      podLabels,
+			Annotations: podAnnotations,
 		},
 		Spec: *podSpec,
 	}
@@ -578,20 +602,28 @@ func (r *PaperMCServerReconciler) ensureService(
 		return nil
 	}
 
-	// Service exists, update it
-	slog.InfoContext(ctx, "Updating existing Service", "name", serviceName)
-
-	// Preserve immutable fields
-	desiredService.ResourceVersion = existingService.ResourceVersion
-	desiredService.Spec.ClusterIP = existingService.Spec.ClusterIP
-	desiredService.Spec.ClusterIPs = existingService.Spec.ClusterIPs
-
-	// Set owner reference if not already set
-	if err := controllerutil.SetControllerReference(server, desiredService, r.Scheme); err != nil {
+	// Ensure owner reference for retroactive adoption.
+	ownerRefsBefore := len(existingService.OwnerReferences)
+	if err := controllerutil.SetControllerReference(server, &existingService, r.Scheme); err != nil {
 		return errors.Wrap(err, "failed to set owner reference")
 	}
+	ownerRefsChanged := len(existingService.OwnerReferences) != ownerRefsBefore
+	// Copy immutable fields so DeepEqual comparison is valid.
+	desiredService.Spec.ClusterIP = existingService.Spec.ClusterIP
+	desiredService.Spec.ClusterIPs = existingService.Spec.ClusterIPs
+	// Skip update if nothing changed.
+	if !ownerRefsChanged &&
+		reflect.DeepEqual(existingService.Spec, desiredService.Spec) &&
+		maps.Equal(existingService.Labels, desiredService.Labels) &&
+		maps.Equal(existingService.Annotations, desiredService.Annotations) {
+		return nil
+	}
+	slog.InfoContext(ctx, "Updating existing Service", "name", serviceName)
+	existingService.Spec = desiredService.Spec
+	existingService.Labels = desiredService.Labels
+	existingService.Annotations = desiredService.Annotations
 
-	if err := r.Update(ctx, desiredService); err != nil {
+	if err := r.Update(ctx, &existingService); err != nil {
 		return errors.Wrap(err, "failed to update service")
 	}
 
@@ -1801,16 +1833,32 @@ func updateHistoryEqual(a, b *mcv1beta1.UpdateHistory) bool {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PaperMCServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&mcv1beta1.PaperMCServer{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
+		Owns(&networkingv1.NetworkPolicy{}).
 		Watches(
 			&mcv1beta1.Plugin{},
 			handler.EnqueueRequestsFromMapFunc(r.findServersForPlugin),
-		).
-		Named("papermcserver").
-		Complete(r)
+		)
+
+	// Conditionally watch Gateway API resources if CRDs are installed.
+	if gatewayAPIsAvailable(mgr) {
+		builder = builder.
+			Owns(&gatewayv1alpha2.TCPRoute{}).
+			Owns(&gatewayv1alpha2.UDPRoute{})
+	}
+
+	return builder.Named("papermcserver").Complete(r)
+}
+
+// gatewayAPIsAvailable checks if Gateway API TCPRoute CRD is installed.
+func gatewayAPIsAvailable(mgr ctrl.Manager) bool {
+	gvk := gatewayv1alpha2.SchemeGroupVersion.WithKind("TCPRoute")
+	_, err := mgr.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
+
+	return err == nil
 }
 
 // findServersForPlugin maps Plugin changes to PaperMCServer reconciliation requests.

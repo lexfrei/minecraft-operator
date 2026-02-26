@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
+	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/templates"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -267,9 +268,9 @@ func (s *Server) fetchPluginListData(ctx context.Context, filterNamespace string
 	}
 
 	// Convert to template items
-	plugins := make([]templates.PluginListItem, 0, len(pluginsData))
+	pluginItems := make([]templates.PluginListItem, 0, len(pluginsData))
 	for _, data := range pluginsData {
-		plugins = append(plugins, pluginDataToListItem(data))
+		pluginItems = append(pluginItems, pluginDataToListItem(data))
 	}
 
 	// Convert namespaceSet to slice
@@ -279,7 +280,7 @@ func (s *Server) fetchPluginListData(ctx context.Context, filterNamespace string
 	}
 
 	return templates.PluginListData{
-		Plugins:           plugins,
+		Plugins:           pluginItems,
 		Namespaces:        namespaces,
 		SelectedNamespace: filterNamespace,
 	}, nil
@@ -361,25 +362,14 @@ func (s *Server) parsePluginFormToData(r *http.Request) (service.PluginCreateDat
 	name := r.FormValue("name")
 	namespace := r.FormValue("namespace")
 	sourceType := r.FormValue("sourceType")
-	project := r.FormValue("project")
-	pluginURL := r.FormValue("url")
-	checksum := r.FormValue("checksum")
 	updateStrategy := r.FormValue("updateStrategy")
 
 	if name == "" || namespace == "" || sourceType == "" || updateStrategy == "" {
 		return service.PluginCreateData{}, errors.New("missing required fields")
 	}
 
-	// Source-type-specific validation.
-	switch sourceType {
-	case "hangar":
-		if project == "" {
-			return service.PluginCreateData{}, errors.New("project is required for hangar source type")
-		}
-	case "url":
-		if pluginURL == "" {
-			return service.PluginCreateData{}, errors.New("URL is required for url source type")
-		}
+	if err := validatePluginSource(sourceType, r.FormValue("project"), r.FormValue("url")); err != nil {
+		return service.PluginCreateData{}, err
 	}
 
 	if !isValidKubernetesName(name) {
@@ -395,20 +385,55 @@ func (s *Server) parsePluginFormToData(r *http.Request) (service.PluginCreateDat
 		Namespace: namespace,
 		Source: service.PluginSourceData{
 			Type:     sourceType,
-			Project:  project,
-			URL:      pluginURL,
-			Checksum: checksum,
+			Project:  r.FormValue("project"),
+			URL:      r.FormValue("url"),
+			Checksum: r.FormValue("checksum"),
 		},
 		UpdateStrategy: updateStrategy,
+		UpdateDelay:    r.FormValue("updateDelay"),
 	}
 
-	if updateStrategy == "pin" || updateStrategy == "build-pin" {
+	parsePluginVersionFields(r, updateStrategy, &data)
+
+	return data, nil
+}
+
+// validatePluginSource validates source-type-specific fields.
+func validatePluginSource(sourceType, project, pluginURL string) error {
+	switch sourceType {
+	case "hangar":
+		if project == "" {
+			return errors.New("project is required for hangar source type")
+		}
+	case "url":
+		if pluginURL == "" {
+			return errors.New("URL is required for url source type")
+		}
+
+		if err := plugins.ValidateDownloadURL(pluginURL); err != nil {
+			return errors.Wrap(err, "invalid plugin URL")
+		}
+	default:
+		return errors.Newf("unsupported source type: %s", sourceType)
+	}
+
+	return nil
+}
+
+// parsePluginVersionFields reads version and build fields based on the update strategy.
+func parsePluginVersionFields(r *http.Request, strategy string, data *service.PluginCreateData) {
+	if strategy == "pin" || strategy == "build-pin" {
 		data.Version = r.FormValue("version")
 	}
 
-	data.UpdateDelay = r.FormValue("updateDelay")
-
-	return data, nil
+	if strategy == "build-pin" {
+		if buildStr := r.FormValue("build"); buildStr != "" {
+			var build int
+			if _, err := fmt.Sscanf(buildStr, "%d", &build); err == nil && build > 0 {
+				data.Build = build
+			}
+		}
+	}
 }
 
 // handlePluginDelete handles plugin deletion.

@@ -192,6 +192,8 @@ Open http://localhost:8082/ui
 | metrics.serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor (e.g., for Prometheus selector matching) |
 | metrics.serviceMonitor.scrapeTimeout | string | `""` | Scrape timeout (e.g., "10s"). Uses Prometheus default if empty |
 | nameOverride | string | `""` |  |
+| networkPolicy.enabled | bool | `false` | Enable NetworkPolicy for the operator pod. Restricts ingress to metrics/health/webui ports and egress to DNS + Kubernetes API. Requires a CNI that supports NetworkPolicy (Calico, Cilium, etc.). |
+| networkPolicy.rconPort | int | `25575` | RCON port for egress rules to managed Minecraft server pods. Change this if your servers use a non-default RCON port. |
 | nodeSelector | object | `{}` |  |
 | podAnnotations | object | `{}` |  |
 | podLabels | object | `{}` |  |

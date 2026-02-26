@@ -2110,6 +2110,45 @@ var _ = Describe("PaperMCServerController helpers", func() {
 			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
 		})
 
+		It("should not allow user labels to override standard labels", func() {
+			serverName := "test-label-override"
+			server := &mck8slexlav1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serverName,
+					Namespace: namespace,
+					Labels: map[string]string{
+						"app.kubernetes.io/managed-by": "user-override",
+						"custom-label":                 "custom-value",
+					},
+				},
+				Spec: mck8slexlav1beta1.PaperMCServerSpec{
+					UpdateStrategy: "latest",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "papermc"}},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, server)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, server) }()
+
+			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: serverName, Namespace: namespace}}
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var sts appsv1.StatefulSet
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: serverName, Namespace: namespace,
+			}, &sts)).To(Succeed())
+
+			// Standard labels must NOT be overridden by user labels
+			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+
+			// User labels should be preserved
+			Expect(sts.Labels).To(HaveKeyWithValue("custom-label", "custom-value"))
+		})
+
 		It("should set standard labels on StatefulSet pod template", func() {
 			serverName := "test-pod-labels"
 			server := &mck8slexlav1beta1.PaperMCServer{

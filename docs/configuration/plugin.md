@@ -174,7 +174,7 @@ spec:
 !!! info "Port Handling"
 
     The port is added as both TCP and UDP to the Service.
-    Port name format: `plugin-{pluginname}`
+    Port name format: `plugin-{port}-tcp` / `plugin-{port}-udp`
 
 ### compatibilityOverride
 

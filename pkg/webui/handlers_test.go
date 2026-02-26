@@ -254,7 +254,7 @@ func TestHandlePluginListShowsAllPlugins(t *testing.T) {
 				Type:    "hangar",
 				Project: "BlueMap",
 			},
-			UpdateStrategy: "pinned",
+			UpdateStrategy: "pin",
 			Version:        "5.4",
 		},
 	}
@@ -530,6 +530,108 @@ func TestParsePluginFormRejectsInvalidNamespace(t *testing.T) {
 	_, err := srv.parsePluginFormToData(req)
 	if err == nil {
 		t.Error("parsePluginFormToData should reject invalid namespace (spaces not allowed in K8s names)")
+	}
+}
+
+func TestParsePluginFormRejectsHTTPURL(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	form := url.Values{
+		"name":           {"my-plugin"},
+		"namespace":      {"default"},
+		"sourceType":     {"url"},
+		"url":            {"http://evil.com/plugin.jar"},
+		"updateStrategy": {"latest"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	_, err := srv.parsePluginFormToData(req)
+	if err == nil {
+		t.Error("parsePluginFormToData should reject HTTP URL (only HTTPS allowed)")
+	}
+}
+
+func TestParsePluginFormRejectsSSRFURL(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	form := url.Values{
+		"name":           {"my-plugin"},
+		"namespace":      {"default"},
+		"sourceType":     {"url"},
+		"url":            {"https://127.0.0.1/plugin.jar"},
+		"updateStrategy": {"latest"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	_, err := srv.parsePluginFormToData(req)
+	if err == nil {
+		t.Error("parsePluginFormToData should reject SSRF-blocked URL")
+	}
+}
+
+func TestParsePluginFormRejectsUnknownSourceType(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	form := url.Values{
+		"name":           {"my-plugin"},
+		"namespace":      {"default"},
+		"sourceType":     {"modrinth"},
+		"project":        {"SomeProject"},
+		"updateStrategy": {"latest"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	_, err := srv.parsePluginFormToData(req)
+	if err == nil {
+		t.Fatal("parsePluginFormToData should reject unknown source type")
+	}
+
+	if !strings.Contains(err.Error(), "unsupported") {
+		t.Errorf("error should mention 'unsupported', got: %v", err)
+	}
+}
+
+func TestParsePluginFormPassesBuildForBuildPin(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	form := url.Values{
+		"name":           {"my-plugin"},
+		"namespace":      {"default"},
+		"sourceType":     {"hangar"},
+		"project":        {"SomeProject"},
+		"updateStrategy": {"build-pin"},
+		"version":        {"1.0.0"},
+		"build":          {"42"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	data, err := srv.parsePluginFormToData(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if data.Build != 42 {
+		t.Errorf("expected build=42, got %d", data.Build)
+	}
+
+	if data.Version != "1.0.0" {
+		t.Errorf("expected version=1.0.0, got %q", data.Version)
 	}
 }
 

@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Four main controllers work together:
 
 1. **Plugin Controller**: Watches Plugin CRDs, fetches metadata from plugin repositories (Hangar, direct URL) or extracts from JARs, runs constraint solver to find best compatible version for ALL matched servers, updates Plugin.status
-2. **PaperMCServer Controller**: Watches PaperMCServer CRDs, finds all matched Plugins via selectors, ensures StatefulSet exists, runs solver for Paper version upgrades
+2. **PaperMCServer Controller**: Watches PaperMCServer CRDs, finds all matched Plugins via selectors, ensures StatefulSet/Service/NetworkPolicy exist, runs solver for Paper version upgrades
 3. **Update Controller**: Triggers on cron schedule, performs graceful RCON shutdown, downloads JARs to `plugins/update/`, deletes pod for StatefulSet recreation
 4. **Backup Controller**: Manages VolumeSnapshot-based backups with RCON hooks (`save-all`/`save-off`/`save-on`) for data consistency. Supports scheduled (cron), pre-update, and manual (annotation) triggers with configurable retention
 
@@ -52,6 +52,7 @@ Four main controllers work together:
 - `updateStrategy`: `latest`, `auto`, `pin`, or `build-pin` (defines version management behavior). For URL-source plugins, all strategies behave similarly since only one version exists (the JAR at the URL)
 - `version`: Specific version when using `pin` or `build-pin` strategy (also used as fallback version for URL-source plugins when JAR has no plugin.yml version)
 - `updateDelay`: Grace period before auto-applying new releases (e.g., `168h` for 7 days)
+- `port`: Optional TCP port exposed by the plugin (e.g., 8123 for Dynmap); used for Service ports and NetworkPolicy ingress rules
 - `instanceSelector`: Label selector to match PaperMCServer instances
 - `compatibilityOverride`: Manual compatibility specification for edge cases
 
@@ -75,14 +76,16 @@ Four main controllers work together:
 - `gracefulShutdown.timeout`: Must match StatefulSet `terminationGracePeriodSeconds`
 - `rcon`: RCON configuration for graceful shutdown
 - `backup`: VolumeSnapshot backup configuration (schedule, retention, beforeUpdate)
+- `network`: Network policy configuration (per-server NetworkPolicy with ingress/egress rules)
+- `gateway`: Gateway API configuration (TCPRoute/UDPRoute for game traffic via Gateway API)
 - `podTemplate`: StatefulSet pod spec
 
 **Status:**
 
-- `currentPaperVersion`: Observed running version
-- `currentPaperBuild`: Observed running build number
-- `desiredPaperVersion`: Target version (resolved from updateStrategy)
-- `desiredPaperBuild`: Target build (resolved from updateStrategy)
+- `currentVersion`: Observed running version
+- `currentBuild`: Observed running build number
+- `desiredVersion`: Target version (resolved from updateStrategy)
+- `desiredBuild`: Target build (resolved from updateStrategy)
 - `plugins`: List of matched Plugins with current/desired versions
 - `availableUpdate`: Solver result for next possible update
 - `lastUpdate`: History of previous update attempt
@@ -105,7 +108,7 @@ Four main controllers work together:
 1. Collect all matched Plugin resources
 2. Filter Paper versions by `updateDelay`
 3. Find MAX Paper version where: `∀ plugin ∈ plugins: ∃ plugin_version compatible with paper_version`
-4. Store result in `status.desiredPaperVersion` and `status.desiredPaperBuild`
+4. Store result in `status.desiredVersion` and `status.desiredBuild`
 5. Compare with current version to determine if update is available
 
 **Update Strategy Behaviors:**
@@ -130,10 +133,10 @@ Four main controllers work together:
      - `auto`: Run constraint solver for plugin compatibility
      - `pin`: Find latest build for pinned version
      - `build-pin`: Validate specified version-build exists
-   - Update `status.desiredPaperVersion` and `status.desiredPaperBuild`
+   - Update `status.desiredVersion` and `status.desiredBuild`
 
 2. **Maintenance Window** (via `maintenanceWindow.cron`):
-   - Check if `desiredPaperVersion` differs from `currentPaperVersion` and `updateDelay` satisfied
+   - Check if `desiredVersion` differs from `currentVersion` and `updateDelay` satisfied
    - Download Paper JAR (if changed) and plugin JARs to PVC
    - Copy plugins to `/data/plugins/update/` (Paper hot-swap mechanism)
    - Update StatefulSet image to `docker.io/lexfrei/papermc:{version}-{build}` (never uses `:latest` tag)

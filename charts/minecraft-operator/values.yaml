@@ -139,6 +139,16 @@ webui:
     #       - name: minecraft-operator-webui
     #         port: 8082
 
+# Network policy configuration
+networkPolicy:
+  # -- Enable NetworkPolicy for the operator pod.
+  # Restricts ingress to metrics/health/webui ports and egress to DNS + Kubernetes API.
+  # Requires a CNI that supports NetworkPolicy (Calico, Cilium, etc.).
+  enabled: false
+  # -- RCON port for egress rules to managed Minecraft server pods.
+  # Change this if your servers use a non-default RCON port.
+  rconPort: 25575
+
 # Node labels for pod assignment
 nodeSelector: {}
 
