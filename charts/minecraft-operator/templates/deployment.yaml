@@ -50,6 +50,9 @@ spec:
         - --webui-namespace={{ .Values.webui.namespace }}
         {{- end }}
         {{- end }}
+        {{- if .Values.webhook.enabled }}
+        - --enable-webhooks=true
+        {{- end }}
         {{- if and .Values.webhook.enabled .Values.webhook.certManager.enabled }}
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         {{- end }}

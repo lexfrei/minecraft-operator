@@ -341,6 +341,10 @@
           "enum": ["Fail", "Ignore"],
           "description": "Webhook failure policy."
         },
+        "caBundle": {
+          "type": "string",
+          "description": "Base64-encoded CA bundle for webhook TLS. Required when certManager is disabled."
+        },
         "certManager": {
           "type": "object",
           "additionalProperties": false,

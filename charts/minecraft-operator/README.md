@@ -213,6 +213,7 @@ Open http://localhost:8082/ui
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | The name of the service account to use. If not set and create is true, a name is generated using the fullname template. |
 | tolerations | list | `[]` |  |
+| webhook.caBundle | string | `""` | Base64-encoded CA bundle for webhook TLS verification. Required when certManager.enabled is false. The API server uses this CA to verify the webhook's TLS certificate. You can generate one with:   openssl req -x509 -newkey rsa:4096 -keyout tls.key -out tls.crt -days 365 -nodes -subj '/CN=webhook'   kubectl create secret tls <release>-webhook-cert --cert=tls.crt --key=tls.key -n <namespace>   caBundle: $(base64 < tls.crt) |
 | webhook.certManager | object | `{"enabled":false,"issuerRef":{"kind":"ClusterIssuer","name":"selfsigned-issuer"}}` | cert-manager integration for webhook TLS certificates. |
 | webhook.certManager.enabled | bool | `false` | Enable cert-manager Certificate resource for webhook TLS. If false, the operator generates self-signed certificates at startup. |
 | webhook.certManager.issuerRef.kind | string | `"ClusterIssuer"` | Issuer kind (Issuer or ClusterIssuer). |

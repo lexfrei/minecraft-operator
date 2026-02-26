@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Pre-push hook: runs lint and tests before allowing push.
+# To bypass in exceptional situations (e.g. pushing WIP branch):
+#   git push --no-verify
+
 echo "Running pre-push checks..."
 
 echo "==> make lint"

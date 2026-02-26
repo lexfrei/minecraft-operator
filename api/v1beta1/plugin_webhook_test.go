@@ -185,6 +185,56 @@ func TestPluginValidateUpdate_InvalidNewSpec(t *testing.T) {
 	require.Error(t, err)
 }
 
+// Issue 2: url.Parse accepts "https://" (no host) as valid.
+func TestPluginValidateCreate_URLHttpsNoHost(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Type = sourceTypeURL
+	p.Spec.Source.Project = ""
+	p.Spec.Source.URL = "https://"
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "host")
+}
+
+// Issue 5: URL without .jar extension should produce a warning.
+func TestPluginValidateCreate_URLWithoutJarExtensionWarns(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Type = sourceTypeURL
+	p.Spec.Source.Project = ""
+	p.Spec.Source.URL = "https://example.com/plugin"
+	p.Spec.Source.Checksum = testExampleChecksum
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.NotEmpty(t, warnings, "should warn when URL path does not end in .jar")
+}
+
+// Issue 6: auto strategy with version should be valid (no error).
+func TestPluginValidateCreate_AutoStrategyWithVersion(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.UpdateStrategy = "auto"
+	p.Spec.Version = testPluginVersion
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+// Issue 6: latest strategy should be valid (no error).
+func TestPluginValidateCreate_LatestStrategyValid(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.UpdateStrategy = "latest"
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
 func TestPluginValidateDelete_AlwaysAllowed(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()

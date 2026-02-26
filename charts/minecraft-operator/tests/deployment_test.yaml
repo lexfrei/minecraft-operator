@@ -198,3 +198,30 @@ tests:
       - matchRegex:
           path: spec.template.spec.serviceAccountName
           pattern: ".*-minecraft-operator$"
+
+  - it: should set enable-webhooks flag when webhooks enabled
+    set:
+      webhook:
+        enabled: true
+        caBundle: "LS0tLS1CRUdJTi..."
+        certManager:
+          enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--enable-webhooks=true"
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 9443
+            name: webhook
+            protocol: TCP
+
+  - it: should not set enable-webhooks flag when webhooks disabled
+    set:
+      webhook:
+        enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--enable-webhooks=true"

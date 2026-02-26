@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -50,7 +51,10 @@ func (v *PluginValidator) validate(p *Plugin) (admission.Warnings, error) {
 			))
 		}
 	case "url":
-		allErrs = append(allErrs, validateURLSource(p, specPath)...)
+		var urlWarnings admission.Warnings
+		urlWarnings, urlErrs := validateURLSource(p, specPath)
+		allErrs = append(allErrs, urlErrs...)
+		warnings = append(warnings, urlWarnings...)
 		if p.Spec.Source.Checksum == "" {
 			warnings = append(warnings, "spec.source.checksum is not set; downloads will not be integrity-verified")
 		}
@@ -62,29 +66,39 @@ func (v *PluginValidator) validate(p *Plugin) (admission.Warnings, error) {
 	return warnings, invalidIfNotEmpty(allErrs)
 }
 
-func validateURLSource(p *Plugin, specPath *field.Path) field.ErrorList {
+func validateURLSource(p *Plugin, specPath *field.Path) (admission.Warnings, field.ErrorList) {
 	var errs field.ErrorList
+
+	var warnings admission.Warnings
 
 	urlPath := specPath.Child("source", "url")
 
 	if p.Spec.Source.URL == "" {
 		errs = append(errs, field.Required(urlPath, "url is required for source type 'url'"))
 
-		return errs
+		return warnings, errs
 	}
 
 	parsed, err := url.Parse(p.Spec.Source.URL)
 	if err != nil {
 		errs = append(errs, field.Invalid(urlPath, p.Spec.Source.URL, fmt.Sprintf("invalid URL: %v", err)))
 
-		return errs
+		return warnings, errs
 	}
 
 	if parsed.Scheme != "https" {
 		errs = append(errs, field.Invalid(urlPath, p.Spec.Source.URL, "only https URLs are allowed"))
 	}
 
-	return errs
+	if parsed.Host == "" {
+		errs = append(errs, field.Invalid(urlPath, p.Spec.Source.URL, "URL must include a host"))
+	}
+
+	if !strings.HasSuffix(strings.ToLower(parsed.Path), ".jar") {
+		warnings = append(warnings, "spec.source.url path does not end in .jar; ensure the URL points to a valid plugin JAR")
+	}
+
+	return warnings, errs
 }
 
 func validatePluginStrategy(p *Plugin, specPath *field.Path) field.ErrorList {

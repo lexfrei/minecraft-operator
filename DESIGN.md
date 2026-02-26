@@ -1244,7 +1244,7 @@ rules:
 - Modrinth and SpigotMC support
 - SAT solver integration for optimization
 - Enhanced Web UI (basic web UI exists in `pkg/webui/`)
-- Webhook validation for CRDs (validate selector correctness)
+- ✅ Webhook validation for CRDs (validating admission webhooks for Plugin and PaperMCServer)
 
 ### Phase 3
 

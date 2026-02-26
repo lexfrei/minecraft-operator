@@ -231,6 +231,29 @@ func TestServerValidateCreate_GatewayEnabledWithParentRefs(t *testing.T) {
 	assert.Empty(t, warnings)
 }
 
+// Issue 6: auto strategy with version should be valid (no error).
+func TestServerValidateCreate_AutoStrategyWithVersion(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.UpdateStrategy = "auto"
+	s.Spec.Version = testServerVersion
+
+	warnings, err := v.ValidateCreate(context.Background(), s)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+// Issue 6: latest strategy should be valid (no error).
+func TestServerValidateCreate_LatestStrategyValid(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.UpdateStrategy = "latest"
+
+	warnings, err := v.ValidateCreate(context.Background(), s)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
 func TestServerValidateUpdate_Valid(t *testing.T) {
 	v := &PaperMCServerValidator{}
 	oldS := validServer()

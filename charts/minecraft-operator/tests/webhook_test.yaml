@@ -19,11 +19,12 @@ tests:
           count: 0
         template: templates/webhook-certificate.yaml
 
-  - it: should render service and webhook config when enabled
+  - it: should render service and webhook config when enabled with caBundle
     set:
       webhook:
         enabled: true
         failurePolicy: Fail
+        caBundle: "LS0tLS1CRUdJTi..."
         certManager:
           enabled: false
     asserts:
@@ -61,6 +62,7 @@ tests:
       webhook:
         enabled: true
         failurePolicy: Ignore
+        caBundle: "LS0tLS1CRUdJTi..."
         certManager:
           enabled: false
     asserts:
@@ -78,6 +80,7 @@ tests:
       webhook:
         enabled: true
         failurePolicy: Fail
+        caBundle: "LS0tLS1CRUdJTi..."
         certManager:
           enabled: false
     asserts:
@@ -109,11 +112,57 @@ tests:
           path: metadata.annotations["cert-manager.io/inject-ca-from"]
         template: templates/webhook-configuration.yaml
 
+  - it: should not render caBundle when cert-manager is enabled
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        certManager:
+          enabled: true
+          issuerRef:
+            kind: ClusterIssuer
+            name: selfsigned-issuer
+    asserts:
+      - notExists:
+          path: webhooks[0].clientConfig.caBundle
+        template: templates/webhook-configuration.yaml
+
+  - it: should fail when webhook enabled without cert-manager and without caBundle
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        certManager:
+          enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "webhook.caBundle is required when webhook is enabled and certManager is disabled. Provide a base64-encoded CA bundle or enable certManager."
+        template: templates/webhook-configuration.yaml
+
+  - it: should render caBundle when provided manually
+    set:
+      webhook:
+        enabled: true
+        failurePolicy: Fail
+        caBundle: "LS0tLS1CRUdJTi..."
+        certManager:
+          enabled: false
+    asserts:
+      - equal:
+          path: webhooks[0].clientConfig.caBundle
+          value: "LS0tLS1CRUdJTi..."
+        template: templates/webhook-configuration.yaml
+      - equal:
+          path: webhooks[1].clientConfig.caBundle
+          value: "LS0tLS1CRUdJTi..."
+        template: templates/webhook-configuration.yaml
+
   - it: should set webhook service port to 443
     set:
       webhook:
         enabled: true
         failurePolicy: Fail
+        caBundle: "LS0tLS1CRUdJTi..."
         certManager:
           enabled: false
     asserts:
