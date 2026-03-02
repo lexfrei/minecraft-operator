@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/a-h/templ v0.3.977
+	github.com/a-h/templ v0.3.1001
 	github.com/cockroachdb/errors v1.12.0
 	github.com/go-logr/logr v1.4.3
 	github.com/gorcon/rcon v1.4.0
