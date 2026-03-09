@@ -63,7 +63,7 @@ jobs:
       - name: Run Helm Unittest
         run: |
           if [ -d "charts/minecraft-operator/tests" ]; then
-            helm unittest charts/minecraft-operator --color --with-subchart=false
+            helm unittest charts/minecraft-operator --with-subchart=false
           fi
 
       - name: Run chart-testing lint
