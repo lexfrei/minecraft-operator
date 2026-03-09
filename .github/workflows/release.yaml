@@ -28,7 +28,7 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           # renovate: datasource=github-releases depName=helm/helm
-          version: "v3.20.0"
+          version: "v4.1.1"
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -42,7 +42,11 @@ jobs:
         run: |
           # helm-unittest
           # renovate: datasource=github-releases depName=helm-unittest/helm-unittest
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.0.3
+          if helm version --short | grep --quiet '^v4'; then
+            helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.0.3 --verify=false
+          else
+            helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.0.3
+          fi
 
           pip install check-jsonschema
 
@@ -225,7 +229,7 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           # renovate: datasource=github-releases depName=helm/helm
-          version: "v3.20.0"
+          version: "v4.1.1"
 
       - name: Install ORAS
         uses: oras-project/setup-oras@v1
