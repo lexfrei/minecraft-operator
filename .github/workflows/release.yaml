@@ -128,7 +128,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ matrix.arch }}
           path: /tmp/digests/*
@@ -143,7 +143,7 @@ jobs:
       digest: ${{ steps.inspect.outputs.digest }}
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/digests
           pattern: digests-*
@@ -339,7 +339,7 @@ jobs:
           COSIGN_EXPERIMENTAL: "1"
 
       - name: Upload chart artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: helm-charts
           path: "*.tgz"
@@ -358,7 +358,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download chart artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: helm-charts
           path: ./charts-dist
