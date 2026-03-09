@@ -35,6 +35,13 @@
       "automerge": true
     },
     {
+      "description": "Allow Renovate to bump go directive in go.mod",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchDepTypes": ["golang"],
+      "rangeStrategy": "bump"
+    },
+    {
       "matchManagers": ["github-actions"],
       "automerge": true
     },

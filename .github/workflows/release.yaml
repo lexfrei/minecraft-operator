@@ -28,7 +28,7 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           # renovate: datasource=github-releases depName=helm/helm
-          version: "v3.20.0"
+          version: "v4.1.1"
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -225,7 +225,7 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           # renovate: datasource=github-releases depName=helm/helm
-          version: "v3.20.0"
+          version: "v4.1.1"
 
       - name: Install ORAS
         uses: oras-project/setup-oras@v1
