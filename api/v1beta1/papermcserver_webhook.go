@@ -39,7 +39,7 @@ func (v *PaperMCServerValidator) ValidateDelete(_ context.Context, _ *PaperMCSer
 }
 
 func (v *PaperMCServerValidator) validate(s *PaperMCServer) (admission.Warnings, error) {
-	var allErrs field.ErrorList
+	allErrs := make(field.ErrorList, 0, 5)
 
 	specPath := field.NewPath("spec")
 

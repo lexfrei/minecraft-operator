@@ -35,16 +35,26 @@
       "automerge": true
     },
     {
+      "description": "Allow Renovate to bump go directive in go.mod",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchDepTypes": ["golang"],
+      "rangeStrategy": "bump"
+    },
+    {
       "matchManagers": ["github-actions"],
       "automerge": true
     },
     {
-      "matchDepNames": ["golang"],
-      "matchUpdateTypes": ["minor"],
+      "description": "Allow patch and minor updates for Go base image used in Containerfile",
+      "matchManagers": ["regex", "dockerfile"],
+      "matchDatasources": ["docker"],
+      "matchDepNames": ["docker.io/library/golang", "golang"],
+      "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
     },
     {
-      "matchDepPatterns": ["^ghcr.io/", "^docker.io/"],
+      "matchDepPatterns": ["^ghcr.io/lexfrei/", "^docker.io/lexfrei/"],
       "enabled": false,
       "description": "Disable updates for our own images"
     }

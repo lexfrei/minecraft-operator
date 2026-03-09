@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -1855,7 +1856,11 @@ func (r *PaperMCServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // gatewayAPIsAvailable checks if Gateway API TCPRoute CRD is installed.
 func gatewayAPIsAvailable(mgr ctrl.Manager) bool {
-	gvk := gatewayv1alpha2.SchemeGroupVersion.WithKind("TCPRoute")
+	gvk := schema.GroupVersionKind{
+		Group:   gatewayv1alpha2.GroupVersion.Group,
+		Version: gatewayv1alpha2.GroupVersion.Version,
+		Kind:    "TCPRoute",
+	}
 	_, err := mgr.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
 
 	return err == nil
