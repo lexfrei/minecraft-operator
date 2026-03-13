@@ -8,7 +8,7 @@ A single Helm install deploys a fully working operator. CRDs are embedded in the
 
 ```bash
 helm install minecraft-operator \
-  oci://ghcr.io/lexfrei/minecraft-operator \
+  oci://ghcr.io/lexfrei/charts/minecraft-operator \
   --namespace minecraft-operator-system \
   --create-namespace
 ```
@@ -76,7 +76,7 @@ Install with custom values:
 
 ```bash
 helm install minecraft-operator \
-  oci://ghcr.io/lexfrei/minecraft-operator \
+  oci://ghcr.io/lexfrei/charts/minecraft-operator \
   --namespace minecraft-operator-system \
   --values values.yaml
 ```
@@ -87,7 +87,7 @@ Upgrade the operator to a new version:
 
 ```bash
 helm upgrade minecraft-operator \
-  oci://ghcr.io/lexfrei/minecraft-operator \
+  oci://ghcr.io/lexfrei/charts/minecraft-operator \
   --namespace minecraft-operator-system
 ```
 

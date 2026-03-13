@@ -27,7 +27,7 @@ A Kubernetes operator for managing [PaperMC](https://papermc.io/) servers with a
 ### Install the Operator
 
 ```bash
-helm install minecraft-operator oci://ghcr.io/lexfrei/minecraft-operator \
+helm install minecraft-operator oci://ghcr.io/lexfrei/charts/minecraft-operator \
   --create-namespace \
   --namespace minecraft-operator-system
 ```

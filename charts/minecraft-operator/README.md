@@ -40,7 +40,7 @@ CRDs are embedded in the operator binary and applied automatically at startup vi
 
 ```bash
 helm install minecraft-operator \
-  oci://ghcr.io/lexfrei/minecraft-operator \
+  oci://ghcr.io/lexfrei/charts/minecraft-operator \
   --version 0.0.0-dev \
   --namespace minecraft-operator-system \
   --create-namespace
