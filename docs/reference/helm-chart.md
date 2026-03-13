@@ -7,7 +7,7 @@ Reference for Minecraft Operator Helm chart values.
 ```bash
 # Single step — CRDs are embedded and applied at startup via server-side apply
 helm install minecraft-operator \
-  oci://ghcr.io/lexfrei/minecraft-operator \
+  oci://ghcr.io/lexfrei/charts/minecraft-operator \
   --namespace minecraft-operator-system \
   --create-namespace
 ```
