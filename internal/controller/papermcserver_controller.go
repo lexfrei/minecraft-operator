@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -655,38 +656,45 @@ func buildServicePorts(server *mcv1beta1.PaperMCServer, matchedPlugins []mcv1bet
 		})
 	}
 
-	// Add plugin endpoint ports.
-	seenPorts := make(map[int32]bool)
-	seenPorts[25565] = true // minecraft
+	// Add plugin endpoint ports, deduplicating by port+protocol.
+	type portProto struct {
+		port  int32
+		proto corev1.Protocol
+	}
+
+	seenPortProto := make(map[portProto]bool)
+	seenPortProto[portProto{25565, corev1.ProtocolTCP}] = true // minecraft
 	if server.Spec.RCON.Enabled {
-		seenPorts[server.Spec.RCON.Port] = true // rcon
+		seenPortProto[portProto{server.Spec.RCON.Port, corev1.ProtocolTCP}] = true // rcon
 	}
 
 	for _, plugin := range matchedPlugins {
 		for _, ep := range plugin.Spec.Endpoints {
-			if seenPorts[ep.Port] {
-				continue
-			}
-
-			seenPorts[ep.Port] = true
-			portName := fmt.Sprintf("plugin-%s-%s", plugin.Name, ep.Name)
+			var proto corev1.Protocol
 
 			switch ep.Protocol {
 			case "UDP":
-				ports = append(ports, corev1.ServicePort{
-					Name:       portName + "-udp",
-					Port:       ep.Port,
-					TargetPort: intstr.FromInt32(ep.Port),
-					Protocol:   corev1.ProtocolUDP,
-				})
+				proto = corev1.ProtocolUDP
 			default: // TCP, HTTP, or empty (defaults to TCP)
-				ports = append(ports, corev1.ServicePort{
-					Name:       portName + "-tcp",
-					Port:       ep.Port,
-					TargetPort: intstr.FromInt32(ep.Port),
-					Protocol:   corev1.ProtocolTCP,
-				})
+				proto = corev1.ProtocolTCP
 			}
+
+			key := portProto{ep.Port, proto}
+			if seenPortProto[key] {
+				continue
+			}
+
+			seenPortProto[key] = true
+
+			// Port names must be <= 15 chars (IANA service name per RFC 6335).
+			portName := fmt.Sprintf("ep-%d-%s", ep.Port, strings.ToLower(string(proto[:3])))
+
+			ports = append(ports, corev1.ServicePort{
+				Name:       portName,
+				Port:       ep.Port,
+				TargetPort: intstr.FromInt32(ep.Port),
+				Protocol:   proto,
+			})
 		}
 	}
 
