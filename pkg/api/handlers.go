@@ -1020,19 +1020,46 @@ func convertEndpointsToAPI(endpoints []service.PluginEndpointData) *[]generated.
 }
 
 // validateEndpointRequest validates plugin endpoints from API request.
+//
+//nolint:cyclop // Validation requires checking multiple conditions
 func validateEndpointRequest(endpoints *[]generated.PluginEndpoint) string {
 	if endpoints == nil {
 		return ""
 	}
 
+	seenNames := make(map[string]bool, len(*endpoints))
+	seenPortProto := make(map[string]bool, len(*endpoints))
+
 	for _, ep := range *endpoints {
+		if ep.Name == "" {
+			return "Endpoint name is required"
+		}
+
 		if ep.Port < 1 || ep.Port > 65535 {
 			return fmt.Sprintf("Endpoint port must be between 1 and 65535, got %d", ep.Port)
 		}
 
-		if ep.Name == "" {
-			return "Endpoint name is required"
+		if ep.Protocol != nil && !ep.Protocol.Valid() {
+			return fmt.Sprintf("Invalid protocol %q, must be TCP, UDP, or HTTP", *ep.Protocol)
 		}
+
+		if seenNames[ep.Name] {
+			return fmt.Sprintf("Duplicate endpoint name %q", ep.Name)
+		}
+
+		seenNames[ep.Name] = true
+
+		proto := "TCP"
+		if ep.Protocol != nil {
+			proto = string(*ep.Protocol)
+		}
+
+		portProtoKey := fmt.Sprintf("%d/%s", ep.Port, proto)
+		if seenPortProto[portProtoKey] {
+			return fmt.Sprintf("Duplicate port+protocol combination: %s", portProtoKey)
+		}
+
+		seenPortProto[portProtoKey] = true
 	}
 
 	return ""
