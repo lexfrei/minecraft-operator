@@ -138,7 +138,7 @@ tests:
               - watch
 
   # ClusterRole: Gateway API route permissions
-  - it: should grant TCPRoute and UDPRoute management permissions
+  - it: should grant HTTPRoute, TCPRoute and UDPRoute management permissions
     template: templates/rbac/role.yaml
     asserts:
       - contains:
@@ -147,6 +147,7 @@ tests:
             apiGroups:
               - gateway.networking.k8s.io
             resources:
+              - httproutes
               - tcproutes
               - udproutes
             verbs:
