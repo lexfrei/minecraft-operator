@@ -39,6 +39,7 @@ type PluginData struct {
 	Version           string
 	Build             *int
 	UpdateDelay       *time.Duration
+	Endpoints         []PluginEndpointData
 	ResolvedVersion   string
 	MatchedServers    int
 	RepositoryStatus  string
@@ -76,6 +77,24 @@ type PluginEndpointData struct {
 	Name     string
 	Port     int32
 	Protocol string
+}
+
+// convertEndpointsFromCRD converts CRD endpoints to service layer data.
+func convertEndpointsFromCRD(endpoints []mck8slexlav1beta1.PluginEndpoint) []PluginEndpointData {
+	if len(endpoints) == 0 {
+		return nil
+	}
+
+	result := make([]PluginEndpointData, 0, len(endpoints))
+	for _, ep := range endpoints {
+		result = append(result, PluginEndpointData{
+			Name:     ep.Name,
+			Port:     ep.Port,
+			Protocol: ep.Protocol,
+		})
+	}
+
+	return result
 }
 
 // PluginCreateData contains data for creating a plugin.
@@ -292,6 +311,8 @@ func (s *PluginService) pluginToData(plugin *mck8slexlav1beta1.Plugin) PluginDat
 		MatchedServers:   len(plugin.Status.MatchedInstances),
 		RepositoryStatus: plugin.Status.RepositoryStatus,
 	}
+
+	data.Endpoints = convertEndpointsFromCRD(plugin.Spec.Endpoints)
 
 	if plugin.Spec.UpdateDelay != nil {
 		duration := plugin.Spec.UpdateDelay.Duration

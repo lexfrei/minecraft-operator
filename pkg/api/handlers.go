@@ -813,6 +813,8 @@ func pluginDataToDetail(data service.PluginData) generated.PluginDetail {
 		detail.MatchedInstances = &instances
 	}
 
+	detail.Endpoints = convertEndpointsToAPI(data.Endpoints)
+
 	// Convert available versions
 	if len(data.AvailableVersions) > 0 {
 		versions := make([]generated.PluginVersion, 0, len(data.AvailableVersions))
@@ -991,6 +993,30 @@ func pluginUpdateRequestToData(namespace, name string, req generated.PluginUpdat
 	}
 
 	return data
+}
+
+// convertEndpointsToAPI converts service endpoint data to generated API endpoints.
+func convertEndpointsToAPI(endpoints []service.PluginEndpointData) *[]generated.PluginEndpoint {
+	if len(endpoints) == 0 {
+		return nil
+	}
+
+	result := make([]generated.PluginEndpoint, 0, len(endpoints))
+	for _, ep := range endpoints {
+		endpoint := generated.PluginEndpoint{
+			Name: ep.Name,
+			Port: int(ep.Port),
+		}
+
+		if ep.Protocol != "" {
+			proto := generated.PluginEndpointProtocol(ep.Protocol)
+			endpoint.Protocol = &proto
+		}
+
+		result = append(result, endpoint)
+	}
+
+	return &result
 }
 
 // validateEndpointRequest validates plugin endpoints from API request.

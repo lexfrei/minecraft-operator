@@ -616,6 +616,53 @@ func TestGetPlugin_Found(t *testing.T) {
 	assert.Equal(t, "my-plugin", getResp.Name)
 }
 
+func TestGetPlugin_ReturnsEndpoints(t *testing.T) {
+	plugin := &mcv1beta1.Plugin{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "plugin-with-endpoints",
+			Namespace: "default",
+		},
+		Spec: mcv1beta1.PluginSpec{
+			Source: mcv1beta1.PluginSource{
+				Type:    "hangar",
+				Project: testProject,
+			},
+			UpdateStrategy: "latest",
+			Endpoints: []mcv1beta1.PluginEndpoint{
+				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+				{Name: "metrics", Port: 9100, Protocol: "TCP"},
+			},
+			InstanceSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "papermc"},
+			},
+		},
+	}
+
+	scheme := newTestScheme()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(plugin).
+		Build()
+
+	srv := NewServer(c, VersionInfo{Version: "test"})
+	ctx := context.Background()
+
+	resp, err := srv.GetPlugin(ctx, generated.GetPluginRequestObject{
+		Namespace: "default",
+		Name:      "plugin-with-endpoints",
+	})
+	require.NoError(t, err)
+
+	getResp, ok := resp.(generated.GetPlugin200JSONResponse)
+	require.True(t, ok, "Expected 200 response, got %T", resp)
+	require.NotNil(t, getResp.Endpoints, "Endpoints should not be nil")
+	require.Len(t, *getResp.Endpoints, 2)
+	assert.Equal(t, "web-ui", (*getResp.Endpoints)[0].Name)
+	assert.Equal(t, 8100, (*getResp.Endpoints)[0].Port)
+	assert.Equal(t, "metrics", (*getResp.Endpoints)[1].Name)
+	assert.Equal(t, 9100, (*getResp.Endpoints)[1].Port)
+}
+
 func TestGetPlugin_NotFound(t *testing.T) {
 	srv := newTestServer()
 	ctx := context.Background()
