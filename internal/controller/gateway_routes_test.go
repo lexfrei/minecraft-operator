@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -669,6 +670,46 @@ var _ = Describe("Gateway API Routes", func() {
 
 			Expect(httpRoute.OwnerReferences).To(HaveLen(1))
 			Expect(httpRoute.OwnerReferences[0].Name).To(Equal(server.Name))
+		})
+
+		It("should set HTTPRouteConfigValid=False when plugin not matched", func() {
+			server := createServer("http-cond-invalid", &mck8slexlav1beta1.GatewayConfig{
+				Enabled:    true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
+					{PluginName: "nonexistent-plugin", EndpointName: "web-ui", Hostname: "map.example.com"},
+				},
+			})
+
+			err := reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			cond := meta.FindStatusCondition(server.Status.Conditions, conditionTypeHTTPRouteConfigValid)
+			Expect(cond).NotTo(BeNil(), "HTTPRouteConfigValid condition should be set")
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal("InvalidRouteConfig"))
+			Expect(cond.Message).To(ContainSubstring("nonexistent-plugin"))
+		})
+
+		It("should set HTTPRouteConfigValid=True when all routes are valid", func() {
+			plugin := createPlugin("bluemap-cond-ok", []mck8slexlav1beta1.PluginEndpoint{
+				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+			})
+
+			server := createServer("http-cond-valid", &mck8slexlav1beta1.GatewayConfig{
+				Enabled:    true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
+					{PluginName: "bluemap-cond-ok", EndpointName: "web-ui", Hostname: "map.example.com"},
+				},
+			})
+
+			err := reconciler.ensureGatewayRoutes(ctx, server, []mck8slexlav1beta1.Plugin{*plugin})
+			Expect(err).NotTo(HaveOccurred())
+
+			cond := meta.FindStatusCondition(server.Status.Conditions, conditionTypeHTTPRouteConfigValid)
+			Expect(cond).NotTo(BeNil(), "HTTPRouteConfigValid condition should be set")
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 		})
 	})
 })

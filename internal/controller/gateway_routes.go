@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"maps"
 	"reflect"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -260,7 +261,8 @@ func (r *PaperMCServerReconciler) reconcileHTTPRoutes(
 	matchedPlugins []mcv1beta1.Plugin,
 	gwEnabled bool,
 ) error {
-	desired := r.buildDesiredHTTPRoutes(ctx, server, matchedPlugins, gwEnabled)
+	desired, issues := r.buildDesiredHTTPRoutes(ctx, server, matchedPlugins, gwEnabled)
+	r.setHTTPRouteCondition(server, issues)
 
 	existingMap, err := r.listOwnedHTTPRoutes(ctx, server)
 	if err != nil {
@@ -279,17 +281,42 @@ func (r *PaperMCServerReconciler) reconcileHTTPRoutes(
 	return r.deleteOrphanedHTTPRoutes(ctx, desired, existingMap)
 }
 
+const conditionTypeHTTPRouteConfigValid = "HTTPRouteConfigValid"
+
+// setHTTPRouteCondition sets the HTTPRouteConfigValid condition based on build issues.
+func (r *PaperMCServerReconciler) setHTTPRouteCondition(
+	server *mcv1beta1.PaperMCServer,
+	issues []string,
+) {
+	if server.Spec.Gateway == nil || len(server.Spec.Gateway.HTTPRoutes) == 0 {
+		return
+	}
+
+	if len(issues) == 0 {
+		r.setCondition(server, conditionTypeHTTPRouteConfigValid,
+			metav1.ConditionTrue, "AllRoutesValid",
+			"All httpRoutes reference valid plugins and HTTP endpoints")
+		return
+	}
+
+	r.setCondition(server, conditionTypeHTTPRouteConfigValid,
+		metav1.ConditionFalse, "InvalidRouteConfig",
+		fmt.Sprintf("Invalid httpRoutes: %s", strings.Join(issues, "; ")))
+}
+
 // buildDesiredHTTPRoutes computes the set of HTTPRoutes that should exist for this server.
+// Returns the desired routes and a list of issues for invalid httpRoutes entries.
 func (r *PaperMCServerReconciler) buildDesiredHTTPRoutes(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
 	matchedPlugins []mcv1beta1.Plugin,
 	gwEnabled bool,
-) map[string]gatewayv1.HTTPRoute {
+) (map[string]gatewayv1.HTTPRoute, []string) {
 	desired := make(map[string]gatewayv1.HTTPRoute)
+	var issues []string
 
 	if !gwEnabled || server.Spec.Gateway == nil {
-		return desired
+		return desired, nil
 	}
 
 	pluginMap := make(map[string]*mcv1beta1.Plugin, len(matchedPlugins))
@@ -300,15 +327,21 @@ func (r *PaperMCServerReconciler) buildDesiredHTTPRoutes(
 	for _, hr := range server.Spec.Gateway.HTTPRoutes {
 		plugin, found := pluginMap[hr.PluginName]
 		if !found {
-			slog.WarnContext(ctx, "HTTPRoute references plugin not matched to this server",
+			msg := fmt.Sprintf("plugin %q not matched to this server", hr.PluginName)
+			slog.WarnContext(ctx, "HTTPRoute references unmatched plugin",
 				"plugin", hr.PluginName, "server", server.Name)
+			issues = append(issues, msg)
+
 			continue
 		}
 
 		endpoint := findHTTPEndpoint(plugin, hr.EndpointName)
 		if endpoint == nil {
+			msg := fmt.Sprintf("plugin %q has no HTTP endpoint %q", hr.PluginName, hr.EndpointName)
 			slog.WarnContext(ctx, "HTTPRoute references non-existent or non-HTTP endpoint",
 				"plugin", hr.PluginName, "endpoint", hr.EndpointName)
+			issues = append(issues, msg)
+
 			continue
 		}
 
@@ -316,7 +349,7 @@ func (r *PaperMCServerReconciler) buildDesiredHTTPRoutes(
 		desired[route.Name] = *route
 	}
 
-	return desired
+	return desired, issues
 }
 
 // listOwnedHTTPRoutes lists HTTPRoutes owned by this server.
@@ -327,7 +360,10 @@ func (r *PaperMCServerReconciler) listOwnedHTTPRoutes(
 ) (map[string]*gatewayv1.HTTPRoute, error) {
 	var existingList gatewayv1.HTTPRouteList
 
-	if err := r.List(ctx, &existingList, client.InNamespace(server.Namespace)); err != nil {
+	if err := r.List(ctx, &existingList,
+		client.InNamespace(server.Namespace),
+		client.MatchingLabels{"mc.k8s.lex.la/route-type": "http"},
+	); err != nil {
 		if meta.IsNoMatchError(err) {
 			slog.DebugContext(ctx, "Gateway API HTTPRoute CRD not installed, skipping")
 			return nil, nil //nolint:nilnil // nil map signals CRD not installed
