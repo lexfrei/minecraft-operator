@@ -8,6 +8,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -455,13 +457,18 @@ func (r *PaperMCServerReconciler) buildHTTPRoute(
 	hostname := gatewayv1.Hostname(hr.Hostname)
 	backendPort := port
 
+	coreGroup := gatewayv1.Group("")
+	serviceKind := gatewayv1.Kind("Service")
+
 	rule := gatewayv1.HTTPRouteRule{
 		BackendRefs: []gatewayv1.HTTPBackendRef{
 			{
 				BackendRef: gatewayv1.BackendRef{
 					BackendObjectReference: gatewayv1.BackendObjectReference{
-						Name: gatewayv1.ObjectName(server.Name),
-						Port: &backendPort,
+						Group: &coreGroup,
+						Kind:  &serviceKind,
+						Name:  gatewayv1.ObjectName(server.Name),
+						Port:  &backendPort,
 					},
 				},
 			},
@@ -483,7 +490,9 @@ func (r *PaperMCServerReconciler) buildHTTPRoute(
 	labels := standardLabels(server.Name, "networking")
 	labels["mc.k8s.lex.la/route-type"] = "http"
 
-	routeName := fmt.Sprintf("%s-http-%s-%s", server.Name, hr.PluginName, hr.EndpointName)
+	routeName := truncateK8sName(
+		fmt.Sprintf("%s-http-%s-%s", server.Name, hr.PluginName, hr.EndpointName),
+	)
 
 	return &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
@@ -499,4 +508,23 @@ func (r *PaperMCServerReconciler) buildHTTPRoute(
 			Rules:     []gatewayv1.HTTPRouteRule{rule},
 		},
 	}
+}
+
+// maxK8sNameLength is the maximum length for Kubernetes resource names (RFC 1123 DNS subdomain).
+const maxK8sNameLength = 253
+
+// hashSuffixLength is the length of the hash suffix used when truncating names (8 hex chars + dash).
+const hashSuffixLength = 9
+
+// truncateK8sName truncates a Kubernetes resource name to maxK8sNameLength characters.
+// If truncation is needed, a SHA-256 hash suffix is appended to preserve uniqueness.
+func truncateK8sName(name string) string {
+	if len(name) <= maxK8sNameLength {
+		return name
+	}
+
+	hash := sha256.Sum256([]byte(name))
+	suffix := hex.EncodeToString(hash[:4])
+
+	return name[:maxK8sNameLength-hashSuffixLength] + "-" + suffix
 }
