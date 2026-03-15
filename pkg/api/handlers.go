@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"runtime"
 	"time"
 
@@ -1022,6 +1023,11 @@ func convertEndpointsToAPI(endpoints []service.PluginEndpointData) *[]generated.
 	return &result
 }
 
+// dnsLabelPattern matches valid DNS labels (lowercase alphanumeric with hyphens, 1-63 chars).
+var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+
+const maxEndpointNameLength = 63
+
 // validateEndpointRequest validates plugin endpoints from API request.
 //
 //nolint:cyclop // Validation requires checking multiple conditions
@@ -1036,6 +1042,13 @@ func validateEndpointRequest(endpoints *[]generated.PluginEndpoint) string {
 	for _, ep := range *endpoints {
 		if ep.Name == "" {
 			return "Endpoint name is required"
+		}
+
+		if len(ep.Name) > maxEndpointNameLength || !dnsLabelPattern.MatchString(ep.Name) {
+			return fmt.Sprintf(
+				"Endpoint name %q must be a valid DNS label (lowercase alphanumeric/hyphens, max 63 chars)",
+				ep.Name,
+			)
 		}
 
 		if ep.Port < 1 || ep.Port > 65535 {

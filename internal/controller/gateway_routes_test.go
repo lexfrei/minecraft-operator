@@ -711,5 +711,31 @@ var _ = Describe("Gateway API Routes", func() {
 			Expect(cond).NotTo(BeNil(), "HTTPRouteConfigValid condition should be set")
 			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 		})
+
+		It("should clear stale HTTPRouteConfigValid condition when httpRoutes removed", func() {
+			server := createServer("http-cond-stale", &mck8slexlav1beta1.GatewayConfig{
+				Enabled:    true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
+					{PluginName: "nonexistent", EndpointName: "web-ui", Hostname: "map.example.com"},
+				},
+			})
+
+			// First reconcile sets condition=False due to invalid plugin reference.
+			err := reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+			cond := meta.FindStatusCondition(server.Status.Conditions, conditionTypeHTTPRouteConfigValid)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+
+			// Remove httpRoutes from spec.
+			server.Spec.Gateway.HTTPRoutes = nil
+			err = reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Condition should be removed entirely.
+			cond = meta.FindStatusCondition(server.Status.Conditions, conditionTypeHTTPRouteConfigValid)
+			Expect(cond).To(BeNil(), "Stale HTTPRouteConfigValid condition should be cleared")
+		})
 	})
 })

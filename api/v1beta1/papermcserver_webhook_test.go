@@ -457,6 +457,38 @@ func TestServerValidateCreate_HTTPRoutesEmptyListValid(t *testing.T) {
 	assert.Empty(t, warnings)
 }
 
+func TestServerValidateCreate_HTTPRoutesInvalidHostname(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.Gateway = &GatewayConfig{
+		Enabled:    true,
+		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		HTTPRoutes: []PluginHTTPRoute{
+			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "not a valid hostname!"},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "hostname")
+}
+
+func TestServerValidateCreate_HTTPRoutesPathPrefixNoSlash(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.Gateway = &GatewayConfig{
+		Enabled:    true,
+		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		HTTPRoutes: []PluginHTTPRoute{
+			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "map.example.com", PathPrefix: "map"},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pathPrefix")
+}
+
 func TestServerValidateCreate_HTTPRoutesWithPathPrefix(t *testing.T) {
 	v := &PaperMCServerValidator{}
 	s := validServer()

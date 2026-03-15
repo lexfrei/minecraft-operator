@@ -9,10 +9,17 @@ package v1beta1
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/robfig/cron/v3"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+)
+
+// hostnamePattern matches valid RFC 1123 hostnames.
+var hostnamePattern = regexp.MustCompile(
+	`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`,
 )
 
 // cronParser is the standard 5-field cron parser (minute hour dom month dow).
@@ -209,6 +216,18 @@ func validateHTTPRoutes(routes []PluginHTTPRoute, gwPath *field.Path) field.Erro
 
 		if route.Hostname == "" {
 			errs = append(errs, field.Required(routePath.Child("hostname"), "hostname is required"))
+		} else if !hostnamePattern.MatchString(strings.ToLower(route.Hostname)) {
+			errs = append(errs, field.Invalid(
+				routePath.Child("hostname"), route.Hostname,
+				"must be a valid RFC 1123 hostname",
+			))
+		}
+
+		if route.PathPrefix != "" && !strings.HasPrefix(route.PathPrefix, "/") {
+			errs = append(errs, field.Invalid(
+				routePath.Child("pathPrefix"), route.PathPrefix,
+				"pathPrefix must start with '/'",
+			))
 		}
 
 		if route.PluginName != "" && route.EndpointName != "" {

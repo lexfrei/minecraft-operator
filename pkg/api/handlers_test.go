@@ -1146,6 +1146,34 @@ func TestCreatePlugin_InvalidProtocol_ShouldReturn400(t *testing.T) {
 	assert.Contains(t, badResp.Error, "Invalid protocol")
 }
 
+func TestCreatePlugin_InvalidEndpointName_ShouldReturn400(t *testing.T) {
+	srv := newTestServer()
+	ctx := context.Background()
+
+	project := testProject
+	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
+		Body: &generated.CreatePluginJSONRequestBody{
+			Name:      "bad-name-plugin",
+			Namespace: "default",
+			Endpoints: &[]generated.PluginEndpoint{
+				{Name: "INVALID_NAME", Port: 8100},
+			},
+			Source: generated.PluginSource{
+				Type:    "hangar",
+				Project: &project,
+			},
+			InstanceSelector: generated.LabelSelector{
+				MatchLabels: &map[string]string{"app": "papermc"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	badResp, ok := resp.(generated.CreatePlugin400JSONResponse)
+	require.True(t, ok, "Expected 400 response for invalid endpoint name, got %T", resp)
+	assert.Contains(t, badResp.Error, "DNS label")
+}
+
 func TestLabelSelectorToK8s_WithExpressions(t *testing.T) {
 	key := "app"
 	operator := generated.LabelSelectorRequirementOperator("In")

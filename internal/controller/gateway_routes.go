@@ -284,11 +284,14 @@ func (r *PaperMCServerReconciler) reconcileHTTPRoutes(
 const conditionTypeHTTPRouteConfigValid = "HTTPRouteConfigValid"
 
 // setHTTPRouteCondition sets the HTTPRouteConfigValid condition based on build issues.
+// Clears the condition when no httpRoutes are configured to avoid stale status.
 func (r *PaperMCServerReconciler) setHTTPRouteCondition(
 	server *mcv1beta1.PaperMCServer,
 	issues []string,
 ) {
 	if server.Spec.Gateway == nil || len(server.Spec.Gateway.HTTPRoutes) == 0 {
+		// Remove stale condition when httpRoutes are no longer configured.
+		meta.RemoveStatusCondition(&server.Status.Conditions, conditionTypeHTTPRouteConfigValid)
 		return
 	}
 
