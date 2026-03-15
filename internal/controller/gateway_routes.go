@@ -8,6 +8,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"maps"
 	"reflect"
@@ -26,12 +27,12 @@ import (
 
 const minecraftPort int32 = 25565
 
-// ensureGatewayRoutes creates, updates, or deletes Gateway API TCPRoute and UDPRoute
-// resources based on the server's gateway configuration.
+// ensureGatewayRoutes creates, updates, or deletes Gateway API TCPRoute, UDPRoute,
+// and HTTPRoute resources based on the server's gateway configuration.
 func (r *PaperMCServerReconciler) ensureGatewayRoutes(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
-	_ []mcv1beta1.Plugin,
+	matchedPlugins []mcv1beta1.Plugin,
 ) error {
 	gwEnabled := server.Spec.Gateway != nil && server.Spec.Gateway.Enabled
 
@@ -41,6 +42,10 @@ func (r *PaperMCServerReconciler) ensureGatewayRoutes(
 
 	if err := r.reconcileUDPRoute(ctx, server, gwEnabled); err != nil {
 		return errors.Wrap(err, "failed to reconcile UDPRoute")
+	}
+
+	if err := r.reconcileHTTPRoutes(ctx, server, matchedPlugins, gwEnabled); err != nil {
+		return errors.Wrap(err, "failed to reconcile HTTPRoutes")
 	}
 
 	return nil
@@ -242,6 +247,201 @@ func buildBackendRef(serviceName string, port int32) gatewayv1alpha2.BackendRef 
 		BackendObjectReference: gatewayv1.BackendObjectReference{
 			Name: gatewayv1.ObjectName(serviceName),
 			Port: &p,
+		},
+	}
+}
+
+// reconcileHTTPRoutes creates, updates, or deletes HTTPRoute resources for plugin HTTP endpoints.
+func (r *PaperMCServerReconciler) reconcileHTTPRoutes(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+	gwEnabled bool,
+) error {
+	// Build a map of matched plugins by name for quick lookup.
+	pluginMap := make(map[string]*mcv1beta1.Plugin, len(matchedPlugins))
+	for i := range matchedPlugins {
+		pluginMap[matchedPlugins[i].Name] = &matchedPlugins[i]
+	}
+
+	// Build set of desired HTTPRoute names.
+	desired := make(map[string]gatewayv1.HTTPRoute)
+
+	if gwEnabled && server.Spec.Gateway != nil {
+		for _, hr := range server.Spec.Gateway.HTTPRoutes {
+			plugin, found := pluginMap[hr.PluginName]
+			if !found {
+				slog.WarnContext(ctx, "HTTPRoute references plugin not matched to this server",
+					"plugin", hr.PluginName, "server", server.Name)
+				continue
+			}
+
+			endpoint := findHTTPEndpoint(plugin, hr.EndpointName)
+			if endpoint == nil {
+				slog.WarnContext(ctx, "HTTPRoute references non-existent or non-HTTP endpoint",
+					"plugin", hr.PluginName, "endpoint", hr.EndpointName)
+				continue
+			}
+
+			route := r.buildHTTPRoute(server, hr, endpoint.Port)
+			desired[route.Name] = *route
+		}
+	}
+
+	// List existing HTTPRoutes in the namespace and filter by owner reference.
+	var existingList gatewayv1.HTTPRouteList
+
+	err := r.List(ctx, &existingList, client.InNamespace(server.Namespace))
+	if err != nil {
+		if meta.IsNoMatchError(err) {
+			slog.DebugContext(ctx, "Gateway API HTTPRoute CRD not installed, skipping")
+			return nil
+		}
+
+		return errors.Wrap(err, "failed to list HTTPRoutes")
+	}
+
+	existingMap := make(map[string]*gatewayv1.HTTPRoute)
+	for i := range existingList.Items {
+		route := &existingList.Items[i]
+		if route.Labels["mc.k8s.lex.la/route-type"] == "http" && isOwnedBy(route, server) {
+			existingMap[route.Name] = route
+		}
+	}
+
+	// Create or update desired routes.
+	for name, desiredRoute := range desired {
+		existing, exists := existingMap[name]
+		if !exists {
+			slog.InfoContext(ctx, "Creating HTTPRoute", "name", name)
+			route := desiredRoute
+			if err := controllerutil.SetControllerReference(server, &route, r.Scheme); err != nil {
+				return errors.Wrap(err, "failed to set owner reference on HTTPRoute")
+			}
+
+			if err := r.Create(ctx, &route); err != nil {
+				if meta.IsNoMatchError(err) {
+					slog.DebugContext(ctx, "Gateway API HTTPRoute CRD not installed, skipping")
+					return nil
+				}
+
+				return errors.Wrap(err, "failed to create HTTPRoute")
+			}
+
+			continue
+		}
+
+		// Update if changed.
+		ownerRefsBefore := len(existing.OwnerReferences)
+		if err := controllerutil.SetControllerReference(server, existing, r.Scheme); err != nil {
+			return errors.Wrap(err, "failed to set owner reference on HTTPRoute")
+		}
+
+		ownerRefsChanged := len(existing.OwnerReferences) != ownerRefsBefore
+		if !ownerRefsChanged &&
+			reflect.DeepEqual(existing.Spec, desiredRoute.Spec) &&
+			maps.Equal(existing.Labels, desiredRoute.Labels) {
+			continue
+		}
+
+		slog.InfoContext(ctx, "Updating HTTPRoute", "name", name)
+		existing.Spec = desiredRoute.Spec
+		existing.Labels = desiredRoute.Labels
+
+		if err := r.Update(ctx, existing); err != nil {
+			return errors.Wrap(err, "failed to update HTTPRoute")
+		}
+	}
+
+	// Delete orphaned routes.
+	for name, existing := range existingMap {
+		if _, wanted := desired[name]; !wanted {
+			slog.InfoContext(ctx, "Deleting orphaned HTTPRoute", "name", name)
+
+			if err := r.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
+				return errors.Wrap(err, "failed to delete orphaned HTTPRoute")
+			}
+		}
+	}
+
+	return nil
+}
+
+// isOwnedBy checks if a route is owned by the given server.
+func isOwnedBy(route *gatewayv1.HTTPRoute, server *mcv1beta1.PaperMCServer) bool {
+	for _, ref := range route.OwnerReferences {
+		if ref.UID == server.UID {
+			return true
+		}
+	}
+
+	return false
+}
+
+// findHTTPEndpoint finds an HTTP-protocol endpoint by name in a plugin.
+func findHTTPEndpoint(plugin *mcv1beta1.Plugin, endpointName string) *mcv1beta1.PluginEndpoint {
+	for i := range plugin.Spec.Endpoints {
+		ep := &plugin.Spec.Endpoints[i]
+		if ep.Name == endpointName && ep.Protocol == "HTTP" {
+			return ep
+		}
+	}
+
+	return nil
+}
+
+// buildHTTPRoute constructs the desired HTTPRoute for a plugin endpoint.
+func (r *PaperMCServerReconciler) buildHTTPRoute(
+	server *mcv1beta1.PaperMCServer,
+	hr mcv1beta1.PluginHTTPRoute,
+	port int32,
+) *gatewayv1.HTTPRoute {
+	parentRefs := convertParentRefs(server.Spec.Gateway.ParentRefs)
+	hostname := gatewayv1.Hostname(hr.Hostname)
+	backendPort := gatewayv1.PortNumber(port)
+
+	rule := gatewayv1.HTTPRouteRule{
+		BackendRefs: []gatewayv1.HTTPBackendRef{
+			{
+				BackendRef: gatewayv1.BackendRef{
+					BackendObjectReference: gatewayv1.BackendObjectReference{
+						Name: gatewayv1.ObjectName(server.Name),
+						Port: &backendPort,
+					},
+				},
+			},
+		},
+	}
+
+	if hr.PathPrefix != "" {
+		pathType := gatewayv1.PathMatchPathPrefix
+		rule.Matches = []gatewayv1.HTTPRouteMatch{
+			{
+				Path: &gatewayv1.HTTPPathMatch{
+					Type:  &pathType,
+					Value: &hr.PathPrefix,
+				},
+			},
+		}
+	}
+
+	labels := standardLabels(server.Name, "networking")
+	labels["mc.k8s.lex.la/route-type"] = "http"
+
+	routeName := fmt.Sprintf("%s-http-%s-%s", server.Name, hr.PluginName, hr.EndpointName)
+
+	return &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      routeName,
+			Namespace: server.Namespace,
+			Labels:    labels,
+		},
+		Spec: gatewayv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{
+				ParentRefs: parentRefs,
+			},
+			Hostnames: []gatewayv1.Hostname{hostname},
+			Rules:     []gatewayv1.HTTPRouteRule{rule},
 		},
 	}
 }

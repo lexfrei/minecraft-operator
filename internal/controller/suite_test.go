@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
@@ -53,6 +54,9 @@ var _ = BeforeSuite(func() {
 
 	var err error
 	err = mck8slexlav1beta1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = gatewayv1.Install(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = gatewayv1alpha2.Install(scheme.Scheme)

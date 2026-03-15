@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
@@ -433,6 +434,241 @@ var _ = Describe("Gateway API Routes", func() {
 
 			Expect(tcpRoute.OwnerReferences).To(HaveLen(1))
 			Expect(tcpRoute.OwnerReferences[0].Name).To(Equal(server.Name))
+		})
+	})
+
+	// --- HTTPRoute tests ---
+
+	Context("HTTPRoute reconciliation", func() {
+		createPlugin := func(name string, endpoints []mck8slexlav1beta1.PluginEndpoint) *mck8slexlav1beta1.Plugin {
+			plugin := &mck8slexlav1beta1.Plugin{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: ns,
+				},
+				Spec: mck8slexlav1beta1.PluginSpec{
+					Source:           mck8slexlav1beta1.PluginSource{Type: "hangar", Project: name},
+					UpdateStrategy:   "latest",
+					InstanceSelector: metav1.LabelSelector{},
+					Endpoints:        endpoints,
+				},
+			}
+			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
+			return plugin
+		}
+
+		It("should create HTTPRoute when plugin has HTTP endpoint and server has httpRoutes", func() {
+			plugin := createPlugin("bluemap", []mck8slexlav1beta1.PluginEndpoint{
+				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+			})
+
+			server := createServer("http-route-create", &mck8slexlav1beta1.GatewayConfig{
+				Enabled:    true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				TCPRoute:   &mck8slexlav1beta1.RouteConfig{Enabled: true},
+				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
+					{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "map.example.com"},
+				},
+			})
+
+			err := reconciler.ensureGatewayRoutes(ctx, server, []mck8slexlav1beta1.Plugin{*plugin})
+			Expect(err).NotTo(HaveOccurred())
+
+			var httpRoute gatewayv1.HTTPRoute
+			routeName := server.Name + "-http-bluemap-web-ui"
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: routeName, Namespace: ns,
+			}, &httpRoute)).To(Succeed())
+
+			Expect(httpRoute.Spec.Hostnames).To(HaveLen(1))
+			Expect(string(httpRoute.Spec.Hostnames[0])).To(Equal("map.example.com"))
+			Expect(httpRoute.Spec.ParentRefs).To(HaveLen(1))
+			Expect(string(httpRoute.Spec.ParentRefs[0].Name)).To(Equal("my-gateway"))
+			Expect(httpRoute.Spec.Rules).To(HaveLen(1))
+			Expect(httpRoute.Spec.Rules[0].BackendRefs).To(HaveLen(1))
+			Expect(int32(*httpRoute.Spec.Rules[0].BackendRefs[0].Port)).To(Equal(int32(8100)))
+		})
+
+		It("should NOT create HTTPRoute when gateway is disabled", func() {
+			plugin := createPlugin("bluemap-gw-off", []mck8slexlav1beta1.PluginEndpoint{
+				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+			})
+
+			server := createServer("http-route-gw-off", &mck8slexlav1beta1.GatewayConfig{
+				Enabled: false,
+				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
+					{PluginName: "bluemap-gw-off", EndpointName: "web-ui", Hostname: "map.example.com"},
+				},
+			})
+
+			err := reconciler.ensureGatewayRoutes(ctx, server, []mck8slexlav1beta1.Plugin{*plugin})
+			Expect(err).NotTo(HaveOccurred())
+
+			var httpRouteList gatewayv1.HTTPRouteList
+			Expect(k8sClient.List(ctx, &httpRouteList, client.InNamespace(ns))).To(Succeed())
+			Expect(httpRouteList.Items).To(BeEmpty())
+		})
+
+		It("should NOT create HTTPRoute when referenced plugin is not in matchedPlugins", func() {
+			server := createServer("http-route-no-plugin", &mck8slexlav1beta1.GatewayConfig{
+				Enabled:    true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
+					{PluginName: "nonexistent", EndpointName: "web-ui", Hostname: "map.example.com"},
+				},
+			})
+
+			err := reconciler.ensureGatewayRoutes(ctx, server, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			var httpRouteList gatewayv1.HTTPRouteList
+			Expect(k8sClient.List(ctx, &httpRouteList, client.InNamespace(ns))).To(Succeed())
+			// Only TCPRoute should exist, no HTTPRoute
+			for _, route := range httpRouteList.Items {
+				Expect(route.Name).NotTo(ContainSubstring("http-"))
+			}
+		})
+
+		It("should NOT create HTTPRoute when endpoint protocol is not HTTP", func() {
+			plugin := createPlugin("tcp-plugin", []mck8slexlav1beta1.PluginEndpoint{
+				{Name: "game", Port: 8100, Protocol: "TCP"},
+			})
+
+			server := createServer("http-route-wrong-proto", &mck8slexlav1beta1.GatewayConfig{
+				Enabled:    true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
+					{PluginName: "tcp-plugin", EndpointName: "game", Hostname: "map.example.com"},
+				},
+			})
+
+			err := reconciler.ensureGatewayRoutes(ctx, server, []mck8slexlav1beta1.Plugin{*plugin})
+			Expect(err).NotTo(HaveOccurred())
+
+			var httpRouteList gatewayv1.HTTPRouteList
+			Expect(k8sClient.List(ctx, &httpRouteList, client.InNamespace(ns))).To(Succeed())
+			for _, route := range httpRouteList.Items {
+				Expect(route.Name).NotTo(ContainSubstring("http-"))
+			}
+		})
+
+		It("should delete orphaned HTTPRoute when removed from server spec", func() {
+			plugin := createPlugin("bluemap-orphan", []mck8slexlav1beta1.PluginEndpoint{
+				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+			})
+
+			server := createServer("http-route-orphan", &mck8slexlav1beta1.GatewayConfig{
+				Enabled:    true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				TCPRoute:   &mck8slexlav1beta1.RouteConfig{Enabled: true},
+				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
+					{PluginName: "bluemap-orphan", EndpointName: "web-ui", Hostname: "map.example.com"},
+				},
+			})
+
+			plugins := []mck8slexlav1beta1.Plugin{*plugin}
+			err := reconciler.ensureGatewayRoutes(ctx, server, plugins)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify HTTPRoute was created
+			routeName := server.Name + "-http-bluemap-orphan-web-ui"
+			var httpRoute gatewayv1.HTTPRoute
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: routeName, Namespace: ns,
+			}, &httpRoute)).To(Succeed())
+
+			// Remove httpRoutes from server spec
+			server.Spec.Gateway.HTTPRoutes = nil
+			err = reconciler.ensureGatewayRoutes(ctx, server, plugins)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify HTTPRoute was deleted
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name: routeName, Namespace: ns,
+			}, &httpRoute)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should update HTTPRoute when hostname changes", func() {
+			plugin := createPlugin("bluemap-update", []mck8slexlav1beta1.PluginEndpoint{
+				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+			})
+
+			server := createServer("http-route-update", &mck8slexlav1beta1.GatewayConfig{
+				Enabled:    true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
+					{PluginName: "bluemap-update", EndpointName: "web-ui", Hostname: "old.example.com"},
+				},
+			})
+
+			plugins := []mck8slexlav1beta1.Plugin{*plugin}
+			err := reconciler.ensureGatewayRoutes(ctx, server, plugins)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Update hostname
+			server.Spec.Gateway.HTTPRoutes[0].Hostname = "new.example.com"
+			err = reconciler.ensureGatewayRoutes(ctx, server, plugins)
+			Expect(err).NotTo(HaveOccurred())
+
+			var httpRoute gatewayv1.HTTPRoute
+			routeName := server.Name + "-http-bluemap-update-web-ui"
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: routeName, Namespace: ns,
+			}, &httpRoute)).To(Succeed())
+			Expect(string(httpRoute.Spec.Hostnames[0])).To(Equal("new.example.com"))
+		})
+
+		It("should create HTTPRoute with pathPrefix", func() {
+			plugin := createPlugin("bluemap-path", []mck8slexlav1beta1.PluginEndpoint{
+				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+			})
+
+			server := createServer("http-route-path", &mck8slexlav1beta1.GatewayConfig{
+				Enabled:    true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
+					{PluginName: "bluemap-path", EndpointName: "web-ui", Hostname: "mc.example.com", PathPrefix: "/map"},
+				},
+			})
+
+			err := reconciler.ensureGatewayRoutes(ctx, server, []mck8slexlav1beta1.Plugin{*plugin})
+			Expect(err).NotTo(HaveOccurred())
+
+			var httpRoute gatewayv1.HTTPRoute
+			routeName := server.Name + "-http-bluemap-path-web-ui"
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: routeName, Namespace: ns,
+			}, &httpRoute)).To(Succeed())
+
+			Expect(httpRoute.Spec.Rules[0].Matches).To(HaveLen(1))
+			Expect(string(*httpRoute.Spec.Rules[0].Matches[0].Path.Value)).To(Equal("/map"))
+		})
+
+		It("should set owner reference on HTTPRoute", func() {
+			plugin := createPlugin("bluemap-owner", []mck8slexlav1beta1.PluginEndpoint{
+				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+			})
+
+			server := createServer("http-route-owner", &mck8slexlav1beta1.GatewayConfig{
+				Enabled:    true,
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
+					{PluginName: "bluemap-owner", EndpointName: "web-ui", Hostname: "map.example.com"},
+				},
+			})
+
+			err := reconciler.ensureGatewayRoutes(ctx, server, []mck8slexlav1beta1.Plugin{*plugin})
+			Expect(err).NotTo(HaveOccurred())
+
+			var httpRoute gatewayv1.HTTPRoute
+			routeName := server.Name + "-http-bluemap-owner-web-ui"
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name: routeName, Namespace: ns,
+			}, &httpRoute)).To(Succeed())
+
+			Expect(httpRoute.OwnerReferences).To(HaveLen(1))
+			Expect(httpRoute.OwnerReferences[0].Name).To(Equal(server.Name))
 		})
 	})
 })

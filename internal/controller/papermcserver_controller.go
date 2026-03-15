@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -102,6 +103,7 @@ type PaperMCServerReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=pods/exec,verbs=create
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=udproutes,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 //nolint:revive // kubebuilder markers require no space after //
 
@@ -1858,6 +1860,10 @@ func (r *PaperMCServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			Owns(&gatewayv1alpha2.UDPRoute{})
 	}
 
+	if httpRouteAvailable(mgr) {
+		builder = builder.Owns(&gatewayv1.HTTPRoute{})
+	}
+
 	return builder.Named("papermcserver").Complete(r)
 }
 
@@ -1867,6 +1873,18 @@ func gatewayAPIsAvailable(mgr ctrl.Manager) bool {
 		Group:   gatewayv1alpha2.GroupVersion.Group,
 		Version: gatewayv1alpha2.GroupVersion.Version,
 		Kind:    "TCPRoute",
+	}
+	_, err := mgr.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
+
+	return err == nil
+}
+
+// httpRouteAvailable checks if Gateway API HTTPRoute CRD is installed.
+func httpRouteAvailable(mgr ctrl.Manager) bool {
+	gvk := schema.GroupVersionKind{
+		Group:   gatewayv1.GroupVersion.Group,
+		Version: gatewayv1.GroupVersion.Version,
+		Kind:    "HTTPRoute",
 	}
 	_, err := mgr.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
 
