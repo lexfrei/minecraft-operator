@@ -409,6 +409,40 @@ func TestServerValidateCreate_HTTPRoutesEmptyHostname(t *testing.T) {
 	assert.Contains(t, err.Error(), "hostname")
 }
 
+func TestServerValidateCreate_HTTPRoutesDuplicateHostnamePathPrefix(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.Gateway = &GatewayConfig{
+		Enabled:    true,
+		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		HTTPRoutes: []PluginHTTPRoute{
+			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "map.example.com", PathPrefix: "/map"},
+			{PluginName: "dynmap", EndpointName: "dynmap-ui", Hostname: "map.example.com", PathPrefix: "/map"},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "map.example.com")
+}
+
+func TestServerValidateCreate_HTTPRoutesSameHostnameDifferentPathValid(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.Gateway = &GatewayConfig{
+		Enabled:    true,
+		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		HTTPRoutes: []PluginHTTPRoute{
+			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "mc.example.com", PathPrefix: "/map"},
+			{PluginName: "dynmap", EndpointName: "dynmap-ui", Hostname: "mc.example.com", PathPrefix: "/dynmap"},
+		},
+	}
+
+	warnings, err := v.ValidateCreate(context.Background(), s)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
 func TestServerValidateCreate_HTTPRoutesEmptyListValid(t *testing.T) {
 	v := &PaperMCServerValidator{}
 	s := validServer()

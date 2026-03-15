@@ -193,7 +193,8 @@ func validateHTTPRoutes(routes []PluginHTTPRoute, gwPath *field.Path) field.Erro
 	var errs field.ErrorList
 
 	routesPath := gwPath.Child("httpRoutes")
-	seen := make(map[string]bool)
+	seenPluginEndpoint := make(map[string]bool)
+	seenHostPath := make(map[string]bool)
 
 	for i, route := range routes {
 		routePath := routesPath.Index(i)
@@ -212,13 +213,25 @@ func validateHTTPRoutes(routes []PluginHTTPRoute, gwPath *field.Path) field.Erro
 
 		if route.PluginName != "" && route.EndpointName != "" {
 			key := route.PluginName + "/" + route.EndpointName
-			if seen[key] {
+			if seenPluginEndpoint[key] {
 				errs = append(errs, field.Duplicate(
 					routePath,
 					fmt.Sprintf("%s/%s", route.PluginName, route.EndpointName),
 				))
 			} else {
-				seen[key] = true
+				seenPluginEndpoint[key] = true
+			}
+		}
+
+		if route.Hostname != "" {
+			hostPathKey := route.Hostname + "|" + route.PathPrefix
+			if seenHostPath[hostPathKey] {
+				errs = append(errs, field.Duplicate(
+					routePath,
+					fmt.Sprintf("hostname=%s pathPrefix=%s", route.Hostname, route.PathPrefix),
+				))
+			} else {
+				seenHostPath[hostPathKey] = true
 			}
 		}
 	}
