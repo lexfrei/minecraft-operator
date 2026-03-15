@@ -159,15 +159,68 @@ func validateBackup(s *PaperMCServer, specPath *field.Path) field.ErrorList {
 func validateGateway(s *PaperMCServer, specPath *field.Path) field.ErrorList {
 	var errs field.ErrorList
 
-	if s.Spec.Gateway == nil || !s.Spec.Gateway.Enabled {
+	if s.Spec.Gateway == nil {
 		return nil
+	}
+
+	gwPath := specPath.Child("gateway")
+
+	// HTTPRoutes require gateway to be enabled.
+	if !s.Spec.Gateway.Enabled && len(s.Spec.Gateway.HTTPRoutes) > 0 {
+		errs = append(errs, field.Forbidden(
+			gwPath.Child("httpRoutes"),
+			"httpRoutes require gateway.enabled=true",
+		))
+	}
+
+	if !s.Spec.Gateway.Enabled {
+		return errs
 	}
 
 	if len(s.Spec.Gateway.ParentRefs) == 0 {
 		errs = append(errs, field.Required(
-			specPath.Child("gateway", "parentRefs"),
+			gwPath.Child("parentRefs"),
 			"at least one parentRef is required when gateway is enabled",
 		))
+	}
+
+	errs = append(errs, validateHTTPRoutes(s.Spec.Gateway.HTTPRoutes, gwPath)...)
+
+	return errs
+}
+
+func validateHTTPRoutes(routes []PluginHTTPRoute, gwPath *field.Path) field.ErrorList {
+	var errs field.ErrorList
+
+	routesPath := gwPath.Child("httpRoutes")
+	seen := make(map[string]bool)
+
+	for i, route := range routes {
+		routePath := routesPath.Index(i)
+
+		if route.PluginName == "" {
+			errs = append(errs, field.Required(routePath.Child("pluginName"), "pluginName is required"))
+		}
+
+		if route.EndpointName == "" {
+			errs = append(errs, field.Required(routePath.Child("endpointName"), "endpointName is required"))
+		}
+
+		if route.Hostname == "" {
+			errs = append(errs, field.Required(routePath.Child("hostname"), "hostname is required"))
+		}
+
+		if route.PluginName != "" && route.EndpointName != "" {
+			key := route.PluginName + "/" + route.EndpointName
+			if seen[key] {
+				errs = append(errs, field.Duplicate(
+					routePath,
+					fmt.Sprintf("%s/%s", route.PluginName, route.EndpointName),
+				))
+			} else {
+				seen[key] = true
+			}
+		}
 	}
 
 	return errs
