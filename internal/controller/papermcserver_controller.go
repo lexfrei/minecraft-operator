@@ -653,7 +653,7 @@ func buildServicePorts(server *mcv1beta1.PaperMCServer, matchedPlugins []mcv1bet
 		})
 	}
 
-	// Add plugin ports (TCP+UDP for each)
+	// Add plugin endpoint ports.
 	seenPorts := make(map[int32]bool)
 	seenPorts[25565] = true // minecraft
 	if server.Spec.RCON.Enabled {
@@ -661,23 +661,30 @@ func buildServicePorts(server *mcv1beta1.PaperMCServer, matchedPlugins []mcv1bet
 	}
 
 	for _, plugin := range matchedPlugins {
-		if plugin.Spec.Port != nil && !seenPorts[*plugin.Spec.Port] {
-			seenPorts[*plugin.Spec.Port] = true
-			portName := fmt.Sprintf("plugin-%d", *plugin.Spec.Port)
-			// Add TCP port
-			ports = append(ports, corev1.ServicePort{
-				Name:       portName + "-tcp",
-				Port:       *plugin.Spec.Port,
-				TargetPort: intstr.FromInt(int(*plugin.Spec.Port)),
-				Protocol:   corev1.ProtocolTCP,
-			})
-			// Add UDP port
-			ports = append(ports, corev1.ServicePort{
-				Name:       portName + "-udp",
-				Port:       *plugin.Spec.Port,
-				TargetPort: intstr.FromInt(int(*plugin.Spec.Port)),
-				Protocol:   corev1.ProtocolUDP,
-			})
+		for _, ep := range plugin.Spec.Endpoints {
+			if seenPorts[ep.Port] {
+				continue
+			}
+
+			seenPorts[ep.Port] = true
+			portName := fmt.Sprintf("plugin-%s-%s", plugin.Name, ep.Name)
+
+			switch ep.Protocol {
+			case "UDP":
+				ports = append(ports, corev1.ServicePort{
+					Name:       portName + "-udp",
+					Port:       ep.Port,
+					TargetPort: intstr.FromInt32(ep.Port),
+					Protocol:   corev1.ProtocolUDP,
+				})
+			default: // TCP, HTTP, or empty (defaults to TCP)
+				ports = append(ports, corev1.ServicePort{
+					Name:       portName + "-tcp",
+					Port:       ep.Port,
+					TargetPort: intstr.FromInt32(ep.Port),
+					Protocol:   corev1.ProtocolTCP,
+				})
+			}
 		}
 	}
 

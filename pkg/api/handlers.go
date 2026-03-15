@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"runtime"
 	"time"
@@ -380,10 +381,10 @@ func (s *Server) CreatePlugin(
 		}, nil
 	}
 
-	if req.Body.Port != nil && (*req.Body.Port < 1 || *req.Body.Port > 65535) {
+	if errMsg := validateEndpointRequest(req.Body.Endpoints); errMsg != "" {
 		return generated.CreatePlugin400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{
-				Error: "Port must be between 1 and 65535",
+				Error: errMsg,
 				Code:  ptr(generated.INVALIDREQUEST),
 			},
 		}, nil
@@ -471,10 +472,10 @@ func (s *Server) UpdatePlugin(
 		}, nil
 	}
 
-	if req.Body.Port != nil && (*req.Body.Port < 1 || *req.Body.Port > 65535) {
+	if errMsg := validateEndpointRequest(req.Body.Endpoints); errMsg != "" {
 		return generated.UpdatePlugin400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{
-				Error: "Port must be between 1 and 65535",
+				Error: errMsg,
 				Code:  ptr(generated.INVALIDREQUEST),
 			},
 		}, nil
@@ -931,8 +932,20 @@ func pluginCreateRequestToData(req generated.PluginCreateRequest) service.Plugin
 	if req.UpdateDelay != nil {
 		data.UpdateDelay = *req.UpdateDelay
 	}
-	if req.Port != nil {
-		data.Port = int32(*req.Port)
+	if req.Endpoints != nil {
+		endpoints := make([]service.PluginEndpointData, 0, len(*req.Endpoints))
+		for _, ep := range *req.Endpoints {
+			proto := "TCP"
+			if ep.Protocol != nil {
+				proto = string(*ep.Protocol)
+			}
+			endpoints = append(endpoints, service.PluginEndpointData{
+				Name:     ep.Name,
+				Port:     int32(ep.Port),
+				Protocol: proto,
+			})
+		}
+		data.Endpoints = endpoints
 	}
 
 	return data
@@ -957,9 +970,20 @@ func pluginUpdateRequestToData(namespace, name string, req generated.PluginUpdat
 	if req.UpdateDelay != nil {
 		data.UpdateDelay = req.UpdateDelay
 	}
-	if req.Port != nil {
-		port := int32(*req.Port)
-		data.Port = &port
+	if req.Endpoints != nil {
+		endpoints := make([]service.PluginEndpointData, 0, len(*req.Endpoints))
+		for _, ep := range *req.Endpoints {
+			proto := "TCP"
+			if ep.Protocol != nil {
+				proto = string(*ep.Protocol)
+			}
+			endpoints = append(endpoints, service.PluginEndpointData{
+				Name:     ep.Name,
+				Port:     int32(ep.Port),
+				Protocol: proto,
+			})
+		}
+		data.Endpoints = &endpoints
 	}
 	if req.InstanceSelector != nil {
 		selector := labelSelectorToK8s(*req.InstanceSelector)
@@ -967,6 +991,25 @@ func pluginUpdateRequestToData(namespace, name string, req generated.PluginUpdat
 	}
 
 	return data
+}
+
+// validateEndpointRequest validates plugin endpoints from API request.
+func validateEndpointRequest(endpoints *[]generated.PluginEndpoint) string {
+	if endpoints == nil {
+		return ""
+	}
+
+	for _, ep := range *endpoints {
+		if ep.Port < 1 || ep.Port > 65535 {
+			return fmt.Sprintf("Endpoint port must be between 1 and 65535, got %d", ep.Port)
+		}
+
+		if ep.Name == "" {
+			return "Endpoint name is required"
+		}
+	}
+
+	return ""
 }
 
 // labelSelectorToK8s converts generated.LabelSelector to metav1.LabelSelector.

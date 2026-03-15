@@ -185,7 +185,7 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 		mcRule.From = append(mcRule.From, peer)
 	}
 
-	pluginRules := buildPluginIngressRules(matchedPlugins, tcpProto, mcRule.From)
+	pluginRules := buildPluginIngressRules(matchedPlugins, mcRule.From)
 	rconRules := r.buildRCONIngressRule(ctx, server, tcpProto)
 	rules := make([]networkingv1.NetworkPolicyIngressRule, 0, 1+len(pluginRules)+len(rconRules))
 	rules = append(rules, mcRule)
@@ -195,33 +195,45 @@ func (r *PaperMCServerReconciler) buildNetworkPolicyIngress(
 	return rules, nil
 }
 
-// buildPluginIngressRules creates ingress rules for plugins that expose custom ports.
+// buildPluginIngressRules creates ingress rules for plugins that expose endpoints.
 // Uses the same From peers as the Minecraft port rule (same-namespace + allowFrom).
+// Protocol is derived per endpoint: TCP and HTTP map to TCP, UDP maps to UDP.
 func buildPluginIngressRules(
 	matchedPlugins []mcv1beta1.Plugin,
-	proto corev1.Protocol,
 	fromPeers []networkingv1.NetworkPolicyPeer,
 ) []networkingv1.NetworkPolicyIngressRule {
-	seen := make(map[int32]bool)
+	type portProto struct {
+		port  int32
+		proto corev1.Protocol
+	}
+
+	seen := make(map[portProto]bool)
 	rules := make([]networkingv1.NetworkPolicyIngressRule, 0, len(matchedPlugins))
 
 	for _, plugin := range matchedPlugins {
-		if plugin.Spec.Port == nil {
-			continue
+		for _, ep := range plugin.Spec.Endpoints {
+			var proto corev1.Protocol
+
+			switch ep.Protocol {
+			case "UDP":
+				proto = corev1.ProtocolUDP
+			default: // TCP, HTTP, or empty
+				proto = corev1.ProtocolTCP
+			}
+
+			key := portProto{ep.Port, proto}
+			if seen[key] {
+				continue
+			}
+
+			seen[key] = true
+
+			port := intstr.FromInt32(ep.Port)
+			rules = append(rules, networkingv1.NetworkPolicyIngressRule{
+				Ports: []networkingv1.NetworkPolicyPort{{Protocol: &proto, Port: &port}},
+				From:  slices.Clone(fromPeers),
+			})
 		}
-
-		portNum := *plugin.Spec.Port
-		if seen[portNum] {
-			continue
-		}
-
-		seen[portNum] = true
-
-		port := intstr.FromInt32(portNum)
-		rules = append(rules, networkingv1.NetworkPolicyIngressRule{
-			Ports: []networkingv1.NetworkPolicyPort{{Protocol: &proto, Port: &port}},
-			From:  slices.Clone(fromPeers),
-		})
 	}
 
 	return rules

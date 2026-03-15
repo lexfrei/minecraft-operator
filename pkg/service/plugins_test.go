@@ -205,7 +205,9 @@ func TestPluginService_CreatePlugin_Success(t *testing.T) {
 		UpdateStrategy: "latest",
 		UpdateDelay:    "168h",
 		Build:          42,
-		Port:           25565,
+		Endpoints: []PluginEndpointData{
+			{Name: "web-ui", Port: 8123, Protocol: "HTTP"},
+		},
 	}
 
 	err := svc.CreatePlugin(context.Background(), data)
@@ -222,8 +224,9 @@ func TestPluginService_CreatePlugin_Success(t *testing.T) {
 	assert.Equal(t, 168*time.Hour, plugin.Spec.UpdateDelay.Duration)
 	assert.NotNil(t, plugin.Spec.Build)
 	assert.Equal(t, 42, *plugin.Spec.Build)
-	assert.NotNil(t, plugin.Spec.Port)
-	assert.Equal(t, int32(25565), *plugin.Spec.Port)
+	require.Len(t, plugin.Spec.Endpoints, 1)
+	assert.Equal(t, "web-ui", plugin.Spec.Endpoints[0].Name)
+	assert.Equal(t, int32(8123), plugin.Spec.Endpoints[0].Port)
 }
 
 func TestPluginService_CreatePlugin_MinimalData(t *testing.T) {
@@ -252,7 +255,7 @@ func TestPluginService_CreatePlugin_MinimalData(t *testing.T) {
 	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "minimal-plugin"}, &plugin)
 	require.NoError(t, err)
 	assert.Nil(t, plugin.Spec.Build)
-	assert.Nil(t, plugin.Spec.Port)
+	assert.Empty(t, plugin.Spec.Endpoints)
 	assert.Nil(t, plugin.Spec.UpdateDelay)
 }
 

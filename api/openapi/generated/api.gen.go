@@ -109,6 +109,27 @@ func (e LabelSelectorRequirementOperator) Valid() bool {
 	}
 }
 
+// Defines values for PluginEndpointProtocol.
+const (
+	HTTP PluginEndpointProtocol = "HTTP"
+	TCP  PluginEndpointProtocol = "TCP"
+	UDP  PluginEndpointProtocol = "UDP"
+)
+
+// Valid indicates whether the value is a known member of the PluginEndpointProtocol enum.
+func (e PluginEndpointProtocol) Valid() bool {
+	switch e {
+	case HTTP:
+		return true
+	case TCP:
+		return true
+	case UDP:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PluginSourceType.
 const (
 	Hangar PluginSourceType = "hangar"
@@ -408,6 +429,9 @@ type PluginCreateRequest struct {
 	// CompatibilityOverride Manual compatibility specification
 	CompatibilityOverride *CompatibilityOverride `json:"compatibilityOverride,omitempty"`
 
+	// Endpoints Network endpoints exposed by this plugin
+	Endpoints *[]PluginEndpoint `json:"endpoints,omitempty"`
+
 	// InstanceSelector Kubernetes label selector
 	InstanceSelector LabelSelector `json:"instanceSelector"`
 
@@ -416,9 +440,6 @@ type PluginCreateRequest struct {
 
 	// Namespace Kubernetes namespace
 	Namespace string `json:"namespace"`
-
-	// Port Network port to expose via Service
-	Port *int `json:"port,omitempty"`
 
 	// Source Plugin source configuration
 	Source PluginSource `json:"source"`
@@ -455,6 +476,9 @@ type PluginDetail struct {
 	// DeletionProgress JAR cleanup progress during plugin deletion
 	DeletionProgress *[]DeletionProgressEntry `json:"deletionProgress,omitempty"`
 
+	// Endpoints Network endpoints exposed by this plugin
+	Endpoints *[]PluginEndpoint `json:"endpoints,omitempty"`
+
 	// InstanceSelector Kubernetes label selector
 	InstanceSelector *LabelSelector `json:"instanceSelector,omitempty"`
 
@@ -472,9 +496,6 @@ type PluginDetail struct {
 
 	// Namespace Kubernetes namespace
 	Namespace string `json:"namespace"`
-
-	// Port Network port exposed by the plugin (added to Service)
-	Port *int `json:"port,omitempty"`
 
 	// Project Project identifier in the repository
 	Project *string `json:"project,omitempty"`
@@ -512,6 +533,21 @@ type PluginDetail struct {
 	// Version Pinned version (for pin/build-pin strategies)
 	Version *string `json:"version,omitempty"`
 }
+
+// PluginEndpoint A network endpoint exposed by a plugin
+type PluginEndpoint struct {
+	// Name Unique endpoint name within the plugin
+	Name string `json:"name"`
+
+	// Port Port number
+	Port int `json:"port"`
+
+	// Protocol Network protocol: TCP, UDP, or HTTP
+	Protocol *PluginEndpointProtocol `json:"protocol,omitempty"`
+}
+
+// PluginEndpointProtocol Network protocol: TCP, UDP, or HTTP
+type PluginEndpointProtocol string
 
 // PluginListResponse defines model for PluginListResponse.
 type PluginListResponse struct {
@@ -602,11 +638,11 @@ type PluginUpdateRequest struct {
 	// CompatibilityOverride Manual compatibility specification
 	CompatibilityOverride *CompatibilityOverride `json:"compatibilityOverride,omitempty"`
 
+	// Endpoints Network endpoints exposed by this plugin
+	Endpoints *[]PluginEndpoint `json:"endpoints,omitempty"`
+
 	// InstanceSelector Kubernetes label selector
 	InstanceSelector *LabelSelector `json:"instanceSelector,omitempty"`
-
-	// Port Network port to expose
-	Port *int `json:"port,omitempty"`
 
 	// Source Plugin source configuration
 	Source *PluginSource `json:"source,omitempty"`
