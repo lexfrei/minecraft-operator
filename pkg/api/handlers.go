@@ -12,6 +12,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// defaultProtocol is the default network protocol for plugin endpoints.
+const defaultProtocol = "TCP"
+
 // Ensure Server implements StrictServerInterface.
 var _ generated.StrictServerInterface = (*Server)(nil)
 
@@ -937,7 +940,7 @@ func pluginCreateRequestToData(req generated.PluginCreateRequest) service.Plugin
 	if req.Endpoints != nil {
 		endpoints := make([]service.PluginEndpointData, 0, len(*req.Endpoints))
 		for _, ep := range *req.Endpoints {
-			proto := "TCP"
+			proto := defaultProtocol
 			if ep.Protocol != nil {
 				proto = string(*ep.Protocol)
 			}
@@ -975,7 +978,7 @@ func pluginUpdateRequestToData(namespace, name string, req generated.PluginUpdat
 	if req.Endpoints != nil {
 		endpoints := make([]service.PluginEndpointData, 0, len(*req.Endpoints))
 		for _, ep := range *req.Endpoints {
-			proto := "TCP"
+			proto := defaultProtocol
 			if ep.Protocol != nil {
 				proto = string(*ep.Protocol)
 			}
@@ -1049,7 +1052,7 @@ func validateEndpointRequest(endpoints *[]generated.PluginEndpoint) string {
 
 		seenNames[ep.Name] = true
 
-		proto := "TCP"
+		proto := defaultProtocol
 		if ep.Protocol != nil {
 			proto = string(*ep.Protocol)
 		}
