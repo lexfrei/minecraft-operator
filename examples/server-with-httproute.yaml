@@ -1,0 +1,66 @@
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: PaperMCServer
+metadata:
+  name: mc-server
+  namespace: default
+  labels:
+    type: vanilla
+spec:
+  updateStrategy: "auto"
+
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+
+  gracefulShutdown:
+    timeout: 300s
+
+  rcon:
+    enabled: true
+    port: 25575
+    passwordSecret:
+      name: mc-server-rcon
+      key: password
+
+  # Gateway API configuration for game traffic and plugin HTTP endpoints
+  gateway:
+    enabled: true
+    parentRefs:
+      - name: my-gateway
+        namespace: gateway-system
+
+    # TCPRoute for Minecraft game traffic (port 25565)
+    tcpRoute:
+      enabled: true
+
+    # HTTPRoutes for plugin web interfaces
+    # Each entry creates a Gateway API HTTPRoute resource
+    httpRoutes:
+      # BlueMap web map — requires Plugin "bluemap" with HTTP endpoint "web-ui"
+      - pluginName: bluemap
+        endpointName: web-ui
+        hostname: map.minecraft.example.com
+
+      # Plan analytics — requires Plugin "plan" with HTTP endpoint "web-ui"
+      - pluginName: plan
+        endpointName: web-ui
+        hostname: analytics.minecraft.example.com
+        pathPrefix: /plan
+
+  podTemplate:
+    spec:
+      containers:
+        - name: minecraft
+          image: docker.io/lexfrei/papermc:1.21.1-91
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+          env:
+            - name: EULA
+              value: "TRUE"
