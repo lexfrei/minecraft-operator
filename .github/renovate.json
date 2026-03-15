@@ -6,6 +6,8 @@
     ":semanticCommitTypeAll(chore)"
   ],
   "labels": ["dependencies"],
+  "platformAutomerge": true,
+  "automergeStrategy": "squash",
   "regexManagers": [
     {
       "fileMatch": ["\\.github/workflows/.*\\.ya?ml$"],
