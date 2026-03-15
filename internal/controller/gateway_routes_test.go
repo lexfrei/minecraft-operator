@@ -486,7 +486,7 @@ var _ = Describe("Gateway API Routes", func() {
 			Expect(string(httpRoute.Spec.ParentRefs[0].Name)).To(Equal("my-gateway"))
 			Expect(httpRoute.Spec.Rules).To(HaveLen(1))
 			Expect(httpRoute.Spec.Rules[0].BackendRefs).To(HaveLen(1))
-			Expect(int32(*httpRoute.Spec.Rules[0].BackendRefs[0].Port)).To(Equal(int32(8100)))
+			Expect(*httpRoute.Spec.Rules[0].BackendRefs[0].Port).To(Equal(int32(8100)))
 		})
 
 		It("should NOT create HTTPRoute when gateway is disabled", func() {
@@ -642,7 +642,7 @@ var _ = Describe("Gateway API Routes", func() {
 			}, &httpRoute)).To(Succeed())
 
 			Expect(httpRoute.Spec.Rules[0].Matches).To(HaveLen(1))
-			Expect(string(*httpRoute.Spec.Rules[0].Matches[0].Path.Value)).To(Equal("/map"))
+			Expect(*httpRoute.Spec.Rules[0].Matches[0].Path.Value).To(Equal("/map"))
 		})
 
 		It("should set owner reference on HTTPRoute", func() {

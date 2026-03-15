@@ -258,107 +258,162 @@ func (r *PaperMCServerReconciler) reconcileHTTPRoutes(
 	matchedPlugins []mcv1beta1.Plugin,
 	gwEnabled bool,
 ) error {
-	// Build a map of matched plugins by name for quick lookup.
+	desired := r.buildDesiredHTTPRoutes(ctx, server, matchedPlugins, gwEnabled)
+
+	existingMap, err := r.listOwnedHTTPRoutes(ctx, server)
+	if err != nil {
+		return err
+	}
+
+	if existingMap == nil {
+		// HTTPRoute CRD not installed, skip.
+		return nil
+	}
+
+	if err := r.applyHTTPRouteChanges(ctx, server, desired, existingMap); err != nil {
+		return err
+	}
+
+	return r.deleteOrphanedHTTPRoutes(ctx, desired, existingMap)
+}
+
+// buildDesiredHTTPRoutes computes the set of HTTPRoutes that should exist for this server.
+func (r *PaperMCServerReconciler) buildDesiredHTTPRoutes(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+	gwEnabled bool,
+) map[string]gatewayv1.HTTPRoute {
+	desired := make(map[string]gatewayv1.HTTPRoute)
+
+	if !gwEnabled || server.Spec.Gateway == nil {
+		return desired
+	}
+
 	pluginMap := make(map[string]*mcv1beta1.Plugin, len(matchedPlugins))
 	for i := range matchedPlugins {
 		pluginMap[matchedPlugins[i].Name] = &matchedPlugins[i]
 	}
 
-	// Build set of desired HTTPRoute names.
-	desired := make(map[string]gatewayv1.HTTPRoute)
-
-	if gwEnabled && server.Spec.Gateway != nil {
-		for _, hr := range server.Spec.Gateway.HTTPRoutes {
-			plugin, found := pluginMap[hr.PluginName]
-			if !found {
-				slog.WarnContext(ctx, "HTTPRoute references plugin not matched to this server",
-					"plugin", hr.PluginName, "server", server.Name)
-				continue
-			}
-
-			endpoint := findHTTPEndpoint(plugin, hr.EndpointName)
-			if endpoint == nil {
-				slog.WarnContext(ctx, "HTTPRoute references non-existent or non-HTTP endpoint",
-					"plugin", hr.PluginName, "endpoint", hr.EndpointName)
-				continue
-			}
-
-			route := r.buildHTTPRoute(server, hr, endpoint.Port)
-			desired[route.Name] = *route
+	for _, hr := range server.Spec.Gateway.HTTPRoutes {
+		plugin, found := pluginMap[hr.PluginName]
+		if !found {
+			slog.WarnContext(ctx, "HTTPRoute references plugin not matched to this server",
+				"plugin", hr.PluginName, "server", server.Name)
+			continue
 		}
+
+		endpoint := findHTTPEndpoint(plugin, hr.EndpointName)
+		if endpoint == nil {
+			slog.WarnContext(ctx, "HTTPRoute references non-existent or non-HTTP endpoint",
+				"plugin", hr.PluginName, "endpoint", hr.EndpointName)
+			continue
+		}
+
+		route := r.buildHTTPRoute(server, hr, endpoint.Port)
+		desired[route.Name] = *route
 	}
 
-	// List existing HTTPRoutes in the namespace and filter by owner reference.
+	return desired
+}
+
+// listOwnedHTTPRoutes lists HTTPRoutes owned by this server.
+// Returns nil map if HTTPRoute CRD is not installed.
+func (r *PaperMCServerReconciler) listOwnedHTTPRoutes(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+) (map[string]*gatewayv1.HTTPRoute, error) {
 	var existingList gatewayv1.HTTPRouteList
 
-	err := r.List(ctx, &existingList, client.InNamespace(server.Namespace))
-	if err != nil {
+	if err := r.List(ctx, &existingList, client.InNamespace(server.Namespace)); err != nil {
 		if meta.IsNoMatchError(err) {
 			slog.DebugContext(ctx, "Gateway API HTTPRoute CRD not installed, skipping")
-			return nil
+			return nil, nil //nolint:nilnil // nil map signals CRD not installed
 		}
 
-		return errors.Wrap(err, "failed to list HTTPRoutes")
+		return nil, errors.Wrap(err, "failed to list HTTPRoutes")
 	}
 
-	existingMap := make(map[string]*gatewayv1.HTTPRoute)
+	result := make(map[string]*gatewayv1.HTTPRoute)
 	for i := range existingList.Items {
 		route := &existingList.Items[i]
 		if route.Labels["mc.k8s.lex.la/route-type"] == "http" && isOwnedBy(route, server) {
-			existingMap[route.Name] = route
+			result[route.Name] = route
 		}
 	}
 
-	// Create or update desired routes.
+	return result, nil
+}
+
+// applyHTTPRouteChanges creates or updates desired HTTPRoutes.
+func (r *PaperMCServerReconciler) applyHTTPRouteChanges(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+	desired map[string]gatewayv1.HTTPRoute,
+	existing map[string]*gatewayv1.HTTPRoute,
+) error {
 	for name, desiredRoute := range desired {
-		existing, exists := existingMap[name]
+		current, exists := existing[name]
 		if !exists {
 			slog.InfoContext(ctx, "Creating HTTPRoute", "name", name)
+
 			route := desiredRoute
 			if err := controllerutil.SetControllerReference(server, &route, r.Scheme); err != nil {
 				return errors.Wrap(err, "failed to set owner reference on HTTPRoute")
 			}
 
 			if err := r.Create(ctx, &route); err != nil {
-				if meta.IsNoMatchError(err) {
-					slog.DebugContext(ctx, "Gateway API HTTPRoute CRD not installed, skipping")
-					return nil
-				}
-
 				return errors.Wrap(err, "failed to create HTTPRoute")
 			}
 
 			continue
 		}
 
-		// Update if changed.
-		ownerRefsBefore := len(existing.OwnerReferences)
-		if err := controllerutil.SetControllerReference(server, existing, r.Scheme); err != nil {
-			return errors.Wrap(err, "failed to set owner reference on HTTPRoute")
-		}
-
-		ownerRefsChanged := len(existing.OwnerReferences) != ownerRefsBefore
-		if !ownerRefsChanged &&
-			reflect.DeepEqual(existing.Spec, desiredRoute.Spec) &&
-			maps.Equal(existing.Labels, desiredRoute.Labels) {
-			continue
-		}
-
-		slog.InfoContext(ctx, "Updating HTTPRoute", "name", name)
-		existing.Spec = desiredRoute.Spec
-		existing.Labels = desiredRoute.Labels
-
-		if err := r.Update(ctx, existing); err != nil {
-			return errors.Wrap(err, "failed to update HTTPRoute")
+		if err := r.updateHTTPRouteIfChanged(ctx, server, current, desiredRoute); err != nil {
+			return err
 		}
 	}
 
-	// Delete orphaned routes.
-	for name, existing := range existingMap {
+	return nil
+}
+
+// updateHTTPRouteIfChanged updates an existing HTTPRoute if its spec or labels differ.
+func (r *PaperMCServerReconciler) updateHTTPRouteIfChanged(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+	existing *gatewayv1.HTTPRoute,
+	desired gatewayv1.HTTPRoute,
+) error {
+	ownerRefsBefore := len(existing.OwnerReferences)
+	if err := controllerutil.SetControllerReference(server, existing, r.Scheme); err != nil {
+		return errors.Wrap(err, "failed to set owner reference on HTTPRoute")
+	}
+
+	ownerRefsChanged := len(existing.OwnerReferences) != ownerRefsBefore
+	if !ownerRefsChanged &&
+		reflect.DeepEqual(existing.Spec, desired.Spec) &&
+		maps.Equal(existing.Labels, desired.Labels) {
+		return nil
+	}
+
+	slog.InfoContext(ctx, "Updating HTTPRoute", "name", existing.Name)
+	existing.Spec = desired.Spec
+	existing.Labels = desired.Labels
+
+	return errors.Wrap(r.Update(ctx, existing), "failed to update HTTPRoute")
+}
+
+// deleteOrphanedHTTPRoutes removes HTTPRoutes that are no longer desired.
+func (r *PaperMCServerReconciler) deleteOrphanedHTTPRoutes(
+	ctx context.Context,
+	desired map[string]gatewayv1.HTTPRoute,
+	existing map[string]*gatewayv1.HTTPRoute,
+) error {
+	for name, route := range existing {
 		if _, wanted := desired[name]; !wanted {
 			slog.InfoContext(ctx, "Deleting orphaned HTTPRoute", "name", name)
 
-			if err := r.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
+			if err := r.Delete(ctx, route); err != nil && !apierrors.IsNotFound(err) {
 				return errors.Wrap(err, "failed to delete orphaned HTTPRoute")
 			}
 		}
@@ -398,7 +453,7 @@ func (r *PaperMCServerReconciler) buildHTTPRoute(
 ) *gatewayv1.HTTPRoute {
 	parentRefs := convertParentRefs(server.Spec.Gateway.ParentRefs)
 	hostname := gatewayv1.Hostname(hr.Hostname)
-	backendPort := gatewayv1.PortNumber(port)
+	backendPort := port
 
 	rule := gatewayv1.HTTPRouteRule{
 		BackendRefs: []gatewayv1.HTTPBackendRef{
