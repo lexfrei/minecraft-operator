@@ -59,6 +59,45 @@ spec:
                 required:
                 - enabled
                 type: object
+              endpoints:
+                description: |-
+                  Endpoints lists network endpoints exposed by this plugin.
+                  Each endpoint creates a port on the Service of matched servers.
+                  HTTP endpoints additionally enable HTTPRoute creation when servers have gateway.httpRoutes configured.
+                items:
+                  description: PluginEndpoint describes a network endpoint exposed
+                    by a plugin.
+                  properties:
+                    name:
+                      description: |-
+                        Name is a unique identifier for this endpoint within the plugin.
+                        Must be a valid DNS label (lowercase, alphanumeric, hyphens).
+                      maxLength: 63
+                      pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+                      type: string
+                    port:
+                      description: Port is the TCP/UDP port number this endpoint listens
+                        on.
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    protocol:
+                      default: TCP
+                      description: |-
+                        Protocol is the network protocol for this endpoint.
+                        TCP and UDP create Service ports directly.
+                        HTTP creates a TCP Service port and enables HTTPRoute creation on servers with gateway config.
+                      enum:
+                      - TCP
+                      - UDP
+                      - HTTP
+                      type: string
+                  required:
+                  - name
+                  - port
+                  type: object
+                type: array
               instanceSelector:
                 description: InstanceSelector selects which PaperMCServer instances
                   to apply this plugin to.
@@ -106,15 +145,6 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-map-type: atomic
-              port:
-                description: |-
-                  Port is the network port that this plugin exposes (optional).
-                  If specified, this port will be added to the Service of all matched servers (TCP+UDP).
-                  Example: 8123 for Dynmap web interface.
-                format: int32
-                maximum: 65535
-                minimum: 1
-                type: integer
               source:
                 description: Source specifies where to fetch the plugin.
                 properties:

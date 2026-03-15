@@ -78,6 +78,9 @@ func (v *PluginValidator) validate(p *Plugin) (admission.Warnings, error) {
 	// Strategy-specific validation.
 	allErrs = append(allErrs, validatePluginStrategy(p, specPath)...)
 
+	// Endpoint validation.
+	allErrs = append(allErrs, validateEndpoints(p, specPath)...)
+
 	return warnings, invalidIfNotEmpty(allErrs)
 }
 
@@ -149,6 +152,66 @@ func validatePluginStrategy(p *Plugin, specPath *field.Path) field.ErrorList {
 			p.Spec.UpdateStrategy,
 			[]string{"latest", "auto", "pin", "build-pin"},
 		))
+	}
+
+	return errs
+}
+
+func validateEndpoints(p *Plugin, specPath *field.Path) field.ErrorList {
+	var errs field.ErrorList
+
+	epsPath := specPath.Child("endpoints")
+	seenNames := make(map[string]bool)
+
+	type portProto struct {
+		port     int32
+		protocol string
+	}
+
+	seenPortProto := make(map[portProto]bool)
+
+	for i, ep := range p.Spec.Endpoints {
+		epPath := epsPath.Index(i)
+
+		if ep.Name == "" {
+			errs = append(errs, field.Required(epPath.Child("name"), "endpoint name is required"))
+		} else if seenNames[ep.Name] {
+			errs = append(errs, field.Duplicate(epPath.Child("name"), ep.Name))
+		} else {
+			seenNames[ep.Name] = true
+		}
+
+		if ep.Port < 1 || ep.Port > 65535 {
+			errs = append(errs, field.Invalid(
+				epPath.Child("port"), ep.Port,
+				"port must be between 1 and 65535",
+			))
+		}
+
+		proto := ep.Protocol
+		if proto == "" {
+			proto = "TCP"
+		}
+
+		switch proto {
+		case "TCP", "UDP", "HTTP":
+			// valid
+		default:
+			errs = append(errs, field.NotSupported(
+				epPath.Child("protocol"), ep.Protocol,
+				[]string{"TCP", "UDP", "HTTP"},
+			))
+		}
+
+		key := portProto{ep.Port, proto}
+		if seenPortProto[key] {
+			errs = append(errs, field.Duplicate(
+				epPath.Child("port"),
+				fmt.Sprintf("%d/%s", ep.Port, proto),
+			))
+		} else {
+			seenPortProto[key] = true
+		}
 	}
 
 	return errs

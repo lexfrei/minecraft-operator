@@ -299,3 +299,127 @@ func TestPluginValidateDelete_AlwaysAllowed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, warnings)
 }
+
+// --- Endpoint validation tests ---
+
+func TestPluginValidateCreate_EndpointsValid(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Endpoints = []PluginEndpoint{
+		{Name: "web-ui", Port: 8123, Protocol: "HTTP"},
+		{Name: "metrics", Port: 9100, Protocol: "TCP"},
+	}
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestPluginValidateCreate_EndpointsEmptyIsValid(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Endpoints = nil
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestPluginValidateCreate_EndpointsDuplicateNames(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Endpoints = []PluginEndpoint{
+		{Name: "web-ui", Port: 8123, Protocol: "HTTP"},
+		{Name: "web-ui", Port: 9100, Protocol: "TCP"},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "web-ui")
+}
+
+func TestPluginValidateCreate_EndpointsDuplicatePortProtocol(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Endpoints = []PluginEndpoint{
+		{Name: "web-ui", Port: 8123, Protocol: "TCP"},
+		{Name: "other", Port: 8123, Protocol: "TCP"},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "8123")
+}
+
+func TestPluginValidateCreate_EndpointsSamePortDifferentProtocol(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Endpoints = []PluginEndpoint{
+		{Name: "game-tcp", Port: 8123, Protocol: "TCP"},
+		{Name: "game-udp", Port: 8123, Protocol: "UDP"},
+	}
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestPluginValidateCreate_EndpointInvalidProtocol(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Endpoints = []PluginEndpoint{
+		{Name: "bad", Port: 8123, Protocol: "SCTP"},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "protocol")
+}
+
+func TestPluginValidateCreate_EndpointDefaultProtocol(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Endpoints = []PluginEndpoint{
+		{Name: "basic", Port: 8123}, // Protocol empty → defaults to TCP
+	}
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestPluginValidateCreate_EndpointPortZero(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Endpoints = []PluginEndpoint{
+		{Name: "bad", Port: 0, Protocol: "TCP"},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "port")
+}
+
+func TestPluginValidateCreate_EndpointPortTooHigh(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Endpoints = []PluginEndpoint{
+		{Name: "bad", Port: 70000, Protocol: "TCP"},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "port")
+}
+
+func TestPluginValidateCreate_EndpointEmptyName(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Endpoints = []PluginEndpoint{
+		{Name: "", Port: 8123, Protocol: "TCP"},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "name")
+}

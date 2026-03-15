@@ -41,6 +41,27 @@ type CompatibilityOverride struct {
 	MinecraftVersions []string `json:"minecraftVersions,omitempty"`
 }
 
+// PluginEndpoint describes a network endpoint exposed by a plugin.
+type PluginEndpoint struct {
+	// Name is a unique identifier for this endpoint within the plugin.
+	// Must be a valid DNS label (lowercase, alphanumeric, hyphens).
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
+	Name string `json:"name"`
+
+	// Port is the TCP/UDP port number this endpoint listens on.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port"`
+
+	// Protocol is the network protocol for this endpoint.
+	// TCP and UDP create Service ports directly.
+	// HTTP creates a TCP Service port and enables HTTPRoute creation on servers with gateway config.
+	// +kubebuilder:validation:Enum=TCP;UDP;HTTP
+	// +kubebuilder:default=TCP
+	Protocol string `json:"protocol,omitempty"`
+}
+
 // PluginSpec defines the desired state of Plugin.
 type PluginSpec struct {
 	// Source specifies where to fetch the plugin.
@@ -73,13 +94,11 @@ type PluginSpec struct {
 	// InstanceSelector selects which PaperMCServer instances to apply this plugin to.
 	InstanceSelector metav1.LabelSelector `json:"instanceSelector"`
 
-	// Port is the network port that this plugin exposes (optional).
-	// If specified, this port will be added to the Service of all matched servers (TCP+UDP).
-	// Example: 8123 for Dynmap web interface.
+	// Endpoints lists network endpoints exposed by this plugin.
+	// Each endpoint creates a port on the Service of matched servers.
+	// HTTP endpoints additionally enable HTTPRoute creation when servers have gateway.httpRoutes configured.
 	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	Port *int32 `json:"port,omitempty"`
+	Endpoints []PluginEndpoint `json:"endpoints,omitempty"`
 
 	// CompatibilityOverride allows manual compatibility specification for edge cases.
 	// +optional
