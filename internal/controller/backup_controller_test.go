@@ -477,8 +477,6 @@ func TestBackupReconciler_ServerNotFound(t *testing.T) {
 	assert.Equal(t, ctrl.Result{}, result)
 }
 
-func boolPtr(b bool) *bool { return &b }
-
 func TestBackupReconciler_PreSnapshotHookFailureStillSendsSaveOn(t *testing.T) {
 	scheme := newBackupTestScheme()
 

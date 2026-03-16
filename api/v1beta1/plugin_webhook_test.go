@@ -601,3 +601,46 @@ func TestPluginValidateCreate_EndpointEmptyName(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "name")
 }
+
+// source.project with shell-unsafe characters must be rejected at admission time,
+// because it is used as a fallback for pluginDirName in config injection scripts.
+func TestPluginValidateCreate_SourceProjectWithDollarSign(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Project = "Evil$Plugin"
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "shell-unsafe")
+}
+
+func TestPluginValidateCreate_SourceProjectWithBacktick(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Project = "Evil`Plugin"
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "shell-unsafe")
+}
+
+func TestPluginValidateCreate_SourceProjectWithPathTraversal(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Project = "../etc/passwd"
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "..")
+}
+
+// Valid source.project names must still pass.
+func TestPluginValidateCreate_SourceProjectSafeNameOK(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Project = "BlueMap"
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}

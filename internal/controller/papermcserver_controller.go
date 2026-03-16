@@ -164,6 +164,18 @@ func (r *PaperMCServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
+	// If config injection is blocked by missing ConfigMaps, requeue sooner so
+	// the operator notices when the ConfigMaps are created.
+	if cond := meta.FindStatusCondition(server.Status.Conditions, conditionTypeConfigInjectionReady); cond != nil &&
+		cond.Status == metav1.ConditionFalse {
+		configRequeue := 30 * time.Second
+		if result.RequeueAfter > 0 && result.RequeueAfter < configRequeue {
+			return result, nil
+		}
+
+		return ctrl.Result{RequeueAfter: configRequeue}, nil
+	}
+
 	return result, nil
 }
 
@@ -2061,4 +2073,56 @@ func (r *PaperMCServerReconciler) findServersForPlugin(ctx context.Context, obj 
 		"servers", len(requests))
 
 	return requests
+}
+
+// volumesChanged compares operator-managed volumes between existing and desired specs.
+// Kubernetes-injected volumes (e.g., projected SA tokens) are ignored because they
+// only exist in the existing spec and are not managed by the operator.
+//
+// Operator-managed volume names are: "data", "config-script", and any name starting with "cm-".
+func volumesChanged(existing, desired []corev1.Volume) bool {
+	desiredMap := make(map[string]corev1.Volume, len(desired))
+	for _, v := range desired {
+		desiredMap[v.Name] = v
+	}
+
+	// Check that all desired volumes exist in existing and match.
+	for name, dv := range desiredMap {
+		found := false
+
+		for _, ev := range existing {
+			if ev.Name == name {
+				found = true
+
+				if !reflect.DeepEqual(ev, dv) {
+					return true
+				}
+
+				break
+			}
+		}
+
+		if !found {
+			return true // desired volume missing from existing
+		}
+	}
+
+	// Check reverse: if existing has operator-managed volumes not in desired, that's a removal.
+	for _, ev := range existing {
+		if !isOperatorManagedVolume(ev.Name) {
+			continue
+		}
+
+		if _, inDesired := desiredMap[ev.Name]; !inDesired {
+			return true // operator-managed volume was removed from desired
+		}
+	}
+
+	return false
+}
+
+// isOperatorManagedVolume returns true if the volume name is managed by the operator.
+// Operator-managed volumes: "data", "config-script", and any name starting with "cm-".
+func isOperatorManagedVolume(name string) bool {
+	return name == "data" || name == "config-script" || strings.HasPrefix(name, "cm-")
 }

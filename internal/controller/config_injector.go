@@ -39,6 +39,9 @@ const (
 	configScriptKey = "inject-configs.sh"
 )
 
+// boolPtr returns a pointer to the given bool value.
+func boolPtr(b bool) *bool { return &b }
+
 // configMapVolumeRef tracks a ConfigMap that needs to be mounted as a volume.
 type configMapVolumeRef struct {
 	// VolumeName is the sanitized volume name: cm-{configmap-name} (max 63 chars).
@@ -350,6 +353,13 @@ func buildConfigInjection(
 		Image:        "busybox:1.37",
 		Command:      []string{"sh", configScriptPath + "/" + configScriptKey},
 		VolumeMounts: mounts,
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: boolPtr(false),
+			ReadOnlyRootFilesystem:   boolPtr(true),
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		},
 	}
 
 	return initContainer, volumes, scriptCM

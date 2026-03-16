@@ -12,6 +12,7 @@ import (
 	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -478,6 +479,13 @@ func TestBuildConfigInjection_InitContainerSecurityDefaults(t *testing.T) {
 	require.NotNil(t, initContainer)
 	assert.Equal(t, "config-injector", initContainer.Name)
 	assert.Equal(t, "busybox:1.37", initContainer.Image)
+
+	// SecurityContext hardening: privilege escalation blocked, read-only root, all caps dropped.
+	require.NotNil(t, initContainer.SecurityContext, "init container must have SecurityContext")
+	assert.Equal(t, boolPtr(false), initContainer.SecurityContext.AllowPrivilegeEscalation)
+	assert.Equal(t, boolPtr(true), initContainer.SecurityContext.ReadOnlyRootFilesystem)
+	require.NotNil(t, initContainer.SecurityContext.Capabilities)
+	assert.Contains(t, initContainer.SecurityContext.Capabilities.Drop, corev1.Capability("ALL"))
 }
 
 func TestBuildConfigInjection_MultipleConfigMaps(t *testing.T) {

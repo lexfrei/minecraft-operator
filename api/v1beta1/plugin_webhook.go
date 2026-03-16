@@ -45,6 +45,12 @@ func (v *PluginValidator) validate(p *Plugin) (admission.Warnings, error) {
 
 	specPath := field.NewPath("spec")
 
+	// Validate source.project for shell-unsafe characters regardless of source type.
+	// The project name is used as a fallback for pluginDirName in config injection scripts.
+	if p.Spec.Source.Project != "" {
+		allErrs = append(allErrs, validateSafeName(p.Spec.Source.Project, specPath.Child("source", "project"))...)
+	}
+
 	// Source-specific validation.
 	switch p.Spec.Source.Type {
 	case "hangar":
@@ -256,13 +262,33 @@ func validatePluginConfigs(p *Plugin, specPath *field.Path) field.ErrorList {
 	return errs
 }
 
-// validateSafeName checks a name doesn't contain path traversal characters.
+// shellUnsafeChars are characters that can break shell quoting or enable injection.
+// These are rejected in pluginDirName, source.project, config paths, and ConfigMap keys at admission time.
+var shellUnsafeChars = []string{`"`, "'", "`", "$", `\`, "\n", "\r"}
+
+// containsShellUnsafeChars returns true if s contains any shell-unsafe characters.
+func containsShellUnsafeChars(s string) bool {
+	for _, ch := range shellUnsafeChars {
+		if strings.Contains(s, ch) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// validateSafeName checks a name doesn't contain path traversal or shell-unsafe characters.
 func validateSafeName(name string, fldPath *field.Path) field.ErrorList {
 	var errs field.ErrorList
 
 	if strings.Contains(name, "/") || strings.Contains(name, "..") {
 		errs = append(errs, field.Invalid(fldPath, name,
 			"must not contain '/' or '..'"))
+	}
+
+	if containsShellUnsafeChars(name) {
+		errs = append(errs, field.Invalid(fldPath, name,
+			`must not contain shell-unsafe characters ('"', "'", '`+"`"+`', '$', '\', newline, carriage return)`))
 	}
 
 	return errs

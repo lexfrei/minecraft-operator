@@ -1307,6 +1307,10 @@ decisions:
       config_injector: "internal/controller/config_injector.go - buildConfigScript, buildConfigInjection, collectReferencedConfigMaps"
       controller: "internal/controller/papermcserver_controller.go - ensureConfigScriptConfigMap, validateReferencedConfigMaps, buildPodSpec config injection"
       webhook: "api/v1beta1/plugin_webhook.go - validatePluginConfigs, validateSafeName; api/v1beta1/papermcserver_webhook.go - validateServerPluginConfigs, validateServerConfigFiles"
+    known_limitations:
+      - "Init container image (busybox) is hardcoded and not configurable via Helm values or operator flags"
+      - "Volume names 'data', 'config-script', and 'cm-*' are reserved by the operator and may conflict with user podTemplate volumes"
+      - "Changes to referenced ConfigMap content are not detected by the operator. Only ConfigMap existence is validated. Content changes take effect on next pod restart."
 
 phases:
   phase_1_mvp:
