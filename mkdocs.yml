@@ -168,6 +168,7 @@ nav:
       - Dependencies: architecture/dependencies.md
   - Operations:
       - operations/index.md
+      - Migration to v2.0: operations/migration-v2.md
       - Troubleshooting: operations/troubleshooting.md
   - Development:
       - development/index.md
