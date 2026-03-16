@@ -504,3 +504,314 @@ func TestServerValidateCreate_HTTPRoutesWithPathPrefix(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, warnings)
 }
+
+// --- PluginConfigs validation tests ---
+
+func TestServerValidateCreate_PluginConfigsValid(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.PluginConfigs = []ServerPluginConfig{
+		{
+			PluginName: "bluemap",
+			Configs: []PluginConfigFile{
+				{
+					ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-config", Key: "core.conf"},
+					Path:         "core.conf",
+					Overwrite:    "always",
+				},
+			},
+		},
+	}
+
+	warnings, err := v.ValidateCreate(context.Background(), s)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestServerValidateCreate_PluginConfigsMissingPluginName(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.PluginConfigs = []ServerPluginConfig{
+		{
+			PluginName: "",
+			Configs: []PluginConfigFile{
+				{
+					ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-config", Key: "core.conf"},
+					Path:         "core.conf",
+				},
+			},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pluginName")
+}
+
+func TestServerValidateCreate_PluginConfigsPathTraversal(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.PluginConfigs = []ServerPluginConfig{
+		{
+			PluginName: "bluemap",
+			Configs: []PluginConfigFile{
+				{
+					ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
+					Path:         "../etc/passwd",
+				},
+			},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "..")
+}
+
+func TestServerValidateCreate_PluginConfigsAbsolutePath(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.PluginConfigs = []ServerPluginConfig{
+		{
+			PluginName: "bluemap",
+			Configs: []PluginConfigFile{
+				{
+					ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
+					Path:         "/etc/passwd",
+				},
+			},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path")
+}
+
+func TestServerValidateCreate_PluginConfigsMissingConfigMapName(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.PluginConfigs = []ServerPluginConfig{
+		{
+			PluginName: "bluemap",
+			Configs: []PluginConfigFile{
+				{
+					ConfigMapRef: ConfigMapKeyRef{Name: "", Key: "core.conf"},
+					Path:         "core.conf",
+				},
+			},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "configMapRef")
+}
+
+func TestServerValidateCreate_PluginConfigsMissingConfigMapKey(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.PluginConfigs = []ServerPluginConfig{
+		{
+			PluginName: "bluemap",
+			Configs: []PluginConfigFile{
+				{
+					ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-config", Key: ""},
+					Path:         "core.conf",
+				},
+			},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "configMapRef")
+}
+
+func TestServerValidateCreate_PluginConfigsDuplicatePath(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.PluginConfigs = []ServerPluginConfig{
+		{
+			PluginName: "bluemap",
+			Configs: []PluginConfigFile{
+				{
+					ConfigMapRef: ConfigMapKeyRef{Name: "cm1", Key: "core.conf"},
+					Path:         "core.conf",
+				},
+				{
+					ConfigMapRef: ConfigMapKeyRef{Name: "cm2", Key: "core.conf"},
+					Path:         "core.conf",
+				},
+			},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "core.conf")
+}
+
+func TestServerValidateCreate_PluginConfigsEmptyList(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.PluginConfigs = nil
+
+	warnings, err := v.ValidateCreate(context.Background(), s)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+// --- ServerConfigs validation tests ---
+
+func TestServerValidateCreate_ServerConfigsValid(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.ServerConfigs = []ServerConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
+			Path:         "server.properties",
+			Overwrite:    "always",
+		},
+	}
+
+	warnings, err := v.ValidateCreate(context.Background(), s)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestServerValidateCreate_ServerConfigsPathTraversal(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.ServerConfigs = []ServerConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
+			Path:         "../etc/passwd",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "..")
+}
+
+func TestServerValidateCreate_ServerConfigsAbsolutePath(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.ServerConfigs = []ServerConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
+			Path:         "/etc/passwd",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path")
+}
+
+func TestServerValidateCreate_ServerConfigsMissingConfigMapName(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.ServerConfigs = []ServerConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "", Key: "server.properties"},
+			Path:         "server.properties",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "configMapRef")
+}
+
+func TestServerValidateCreate_ServerConfigsMissingConfigMapKey(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.ServerConfigs = []ServerConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: ""},
+			Path:         "server.properties",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "configMapRef")
+}
+
+func TestServerValidateCreate_ServerConfigsDuplicatePath(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.ServerConfigs = []ServerConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "cm1", Key: "server.properties"},
+			Path:         "server.properties",
+		},
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "cm2", Key: "server.properties"},
+			Path:         "server.properties",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "server.properties")
+}
+
+func TestServerValidateCreate_ServerConfigsEmptyPath(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.ServerConfigs = []ServerConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
+			Path:         "",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), s)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path")
+}
+
+func TestServerValidateCreate_ServerConfigsSubdirectoryPath(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.ServerConfigs = []ServerConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: "paper-global.yml"},
+			Path:         "config/paper-global.yml",
+			Overwrite:    "ifNotExists",
+		},
+	}
+
+	warnings, err := v.ValidateCreate(context.Background(), s)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestServerValidateCreate_MixedPluginAndServerConfigs(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	s := validServer()
+	s.Spec.PluginConfigs = []ServerPluginConfig{
+		{
+			PluginName: "bluemap",
+			Configs: []PluginConfigFile{
+				{
+					ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-config", Key: "core.conf"},
+					Path:         "core.conf",
+				},
+			},
+		},
+	}
+	s.Spec.ServerConfigs = []ServerConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
+			Path:         "server.properties",
+		},
+	}
+
+	warnings, err := v.ValidateCreate(context.Background(), s)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}

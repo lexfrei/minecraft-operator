@@ -55,6 +55,8 @@ func (v *PaperMCServerValidator) validate(s *PaperMCServer) (admission.Warnings,
 	allErrs = append(allErrs, validateRCON(s, specPath)...)
 	allErrs = append(allErrs, validateBackup(s, specPath)...)
 	allErrs = append(allErrs, validateGateway(s, specPath)...)
+	allErrs = append(allErrs, validateServerPluginConfigs(s, specPath)...)
+	allErrs = append(allErrs, validateServerConfigFiles(s, specPath)...)
 
 	return nil, invalidIfNotEmpty(allErrs)
 }
@@ -192,6 +194,67 @@ func validateGateway(s *PaperMCServer, specPath *field.Path) field.ErrorList {
 	}
 
 	errs = append(errs, validateHTTPRoutes(s.Spec.Gateway.HTTPRoutes, gwPath)...)
+
+	return errs
+}
+
+func validateServerPluginConfigs(s *PaperMCServer, specPath *field.Path) field.ErrorList {
+	var errs field.ErrorList
+
+	if len(s.Spec.PluginConfigs) == 0 {
+		return nil
+	}
+
+	pluginConfigsPath := specPath.Child("pluginConfigs")
+
+	for i, pc := range s.Spec.PluginConfigs {
+		pcPath := pluginConfigsPath.Index(i)
+
+		if pc.PluginName == "" {
+			errs = append(errs, field.Required(pcPath.Child("pluginName"), "pluginName is required"))
+		}
+
+		seenPaths := make(map[string]bool)
+
+		for j, cfg := range pc.Configs {
+			cfgPath := pcPath.Child("configs").Index(j)
+			errs = append(errs, validateConfigFile(cfg.ConfigMapRef, cfg.Path, cfgPath)...)
+
+			if cfg.Path != "" {
+				if seenPaths[cfg.Path] {
+					errs = append(errs, field.Duplicate(cfgPath.Child("path"), cfg.Path))
+				} else {
+					seenPaths[cfg.Path] = true
+				}
+			}
+		}
+	}
+
+	return errs
+}
+
+func validateServerConfigFiles(s *PaperMCServer, specPath *field.Path) field.ErrorList {
+	var errs field.ErrorList
+
+	if len(s.Spec.ServerConfigs) == 0 {
+		return nil
+	}
+
+	serverConfigsPath := specPath.Child("serverConfigs")
+	seenPaths := make(map[string]bool)
+
+	for i, cfg := range s.Spec.ServerConfigs {
+		cfgPath := serverConfigsPath.Index(i)
+		errs = append(errs, validateConfigFile(cfg.ConfigMapRef, cfg.Path, cfgPath)...)
+
+		if cfg.Path != "" {
+			if seenPaths[cfg.Path] {
+				errs = append(errs, field.Duplicate(cfgPath.Child("path"), cfg.Path))
+			} else {
+				seenPaths[cfg.Path] = true
+			}
+		}
+	}
 
 	return errs
 }
