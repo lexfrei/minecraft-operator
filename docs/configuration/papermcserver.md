@@ -271,6 +271,77 @@ kubectl annotate papermcserver my-server \
   --namespace minecraft
 ```
 
+### pluginConfigs
+
+**Optional** — Overrides plugin config files for this specific server. When a file path
+matches a plugin's default config, the server version wins (whole-file replacement).
+
+| Field | Description |
+| --- | --- |
+| `pluginName` | Name of the Plugin CRD (same namespace) |
+| `configs[].configMapRef.name` | ConfigMap name |
+| `configs[].configMapRef.key` | Key within the ConfigMap |
+| `configs[].path` | Target path relative to plugin directory |
+| `configs[].overwrite` | `always` (default) or `ifNotExists` |
+
+```yaml
+spec:
+  pluginConfigs:
+    - pluginName: bluemap
+      configs:
+        - configMapRef:
+            name: prod-bluemap
+            key: core.conf
+          path: core.conf
+          overwrite: always
+```
+
+!!! info "Merge Priority"
+
+    For a given plugin file path, the resolution order is:
+
+    1. **Server override** (`pluginConfigs[pluginName].configs[path]`) — if present, used
+    2. **Plugin default** (`Plugin.spec.configs[path]`) — fallback
+    3. **No config** — file not managed by the operator
+
+    There is no deep merge. The entire file is replaced.
+
+### serverConfigs
+
+**Optional** — Server-level config files placed relative to the workdir (`/data`).
+Use this for `server.properties`, `paper-global.yml`, `bukkit.yml`, and similar files.
+
+| Field | Description |
+| --- | --- |
+| `configMapRef.name` | ConfigMap name (same namespace) |
+| `configMapRef.key` | Key within the ConfigMap |
+| `path` | Target path relative to `/data` |
+| `overwrite` | `always` (default) or `ifNotExists` |
+
+```yaml
+spec:
+  serverConfigs:
+    - configMapRef:
+        name: mc-server-config
+        key: server.properties
+      path: server.properties
+      overwrite: always
+    - configMapRef:
+        name: mc-server-config
+        key: paper-global.yml
+      path: config/paper-global.yml
+      overwrite: ifNotExists
+```
+
+!!! info "Implementation Detail"
+
+    Config files are injected via a `config-injector` init container that runs before
+    the PaperMC container. The init container uses `busybox:1.37` and executes a
+    generated shell script that copies files from ConfigMap volumes to the data PVC.
+
+    The script ConfigMap (`{server-name}-config-script`) is managed by the operator
+    and automatically updated when configs change.
+
 ### podTemplate
 
 **Required** — Template for the StatefulSet pod.
@@ -432,6 +503,7 @@ Standard Kubernetes conditions.
 | `CronScheduleValid` | Maintenance window cron is valid |
 | `BackupCronValid` | Backup cron schedule is valid |
 | `BackupReady` | VolumeSnapshot API is available for backups |
+| `ConfigInjectionReady` | All referenced ConfigMaps for config injection are available |
 
 ## Complete Example
 

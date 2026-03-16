@@ -271,6 +271,34 @@ type BackupRecord struct {
 	Trigger string `json:"trigger"`
 }
 
+// ServerPluginConfig overrides plugin config files for a specific server.
+type ServerPluginConfig struct {
+	// PluginName references a Plugin CRD by name (same namespace).
+	PluginName string `json:"pluginName"`
+
+	// Configs overrides or adds config files for this plugin on this server.
+	// Files with the same path as plugin defaults replace them entirely.
+	Configs []PluginConfigFile `json:"configs"`
+}
+
+// ServerConfigFile defines a server-level config file to be injected into the server workdir.
+type ServerConfigFile struct {
+	// ConfigMapRef references a ConfigMap key containing the file content.
+	ConfigMapRef ConfigMapKeyRef `json:"configMapRef"`
+
+	// Path is the target file path relative to the server workdir (/data).
+	// E.g., "server.properties", "paper-global.yml".
+	// Must not start with "/" or contain "..".
+	Path string `json:"path"`
+
+	// Overwrite determines if existing files are overwritten on pod restart.
+	// "always" replaces the file every time (CRD is source of truth).
+	// "ifNotExists" only writes the file if it doesn't exist (preserves manual edits).
+	// +kubebuilder:validation:Enum=always;ifNotExists
+	// +kubebuilder:default=always
+	Overwrite string `json:"overwrite,omitempty"`
+}
+
 // PaperMCServerSpec defines the desired state of PaperMCServer.
 type PaperMCServerSpec struct {
 	// UpdateStrategy defines the update strategy for Paper version.
@@ -322,6 +350,16 @@ type PaperMCServerSpec struct {
 	// Network configures network policies for this server.
 	// +optional
 	Network *NetworkConfig `json:"network,omitempty"`
+
+	// PluginConfigs overrides plugin config files for this server.
+	// When a file path matches a plugin's default config, the server version wins.
+	// +optional
+	PluginConfigs []ServerPluginConfig `json:"pluginConfigs,omitempty"`
+
+	// ServerConfigs defines server-level config files (relative to workdir /data).
+	// E.g., server.properties, paper-global.yml, bukkit.yml.
+	// +optional
+	ServerConfigs []ServerConfigFile `json:"serverConfigs,omitempty"`
 
 	// PodTemplate is the template for the StatefulSet pod.
 	PodTemplate corev1.PodTemplateSpec `json:"podTemplate"`

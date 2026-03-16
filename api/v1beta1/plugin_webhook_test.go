@@ -24,6 +24,7 @@ const (
 	testPluginVersion   = "2.5.0"
 	testExampleJARURL   = "https://example.com/plugin.jar"
 	testExampleChecksum = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	testPluginDirName   = "BlueMap"
 )
 
 func validPlugin() *Plugin {
@@ -300,6 +301,183 @@ func TestPluginValidateDelete_AlwaysAllowed(t *testing.T) {
 	assert.Empty(t, warnings)
 }
 
+// --- Config validation tests ---
+
+func TestPluginValidateCreate_ConfigsValid(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.PluginDirName = testPluginDirName
+	p.Spec.Configs = []PluginConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
+			Path:         "core.conf",
+			Overwrite:    "always",
+		},
+	}
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestPluginValidateCreate_ConfigsWithoutPluginDirName(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Configs = []PluginConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
+			Path:         "core.conf",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pluginDirName")
+}
+
+func TestPluginValidateCreate_ConfigPathTraversal(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.PluginDirName = testPluginDirName
+	p.Spec.Configs = []PluginConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
+			Path:         "../../../etc/passwd",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path")
+}
+
+func TestPluginValidateCreate_ConfigAbsolutePath(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.PluginDirName = testPluginDirName
+	p.Spec.Configs = []PluginConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
+			Path:         "/etc/passwd",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path")
+}
+
+func TestPluginValidateCreate_ConfigEmptyPath(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.PluginDirName = testPluginDirName
+	p.Spec.Configs = []PluginConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
+			Path:         "",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path")
+}
+
+func TestPluginValidateCreate_ConfigEmptyConfigMapRef(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.PluginDirName = testPluginDirName
+	p.Spec.Configs = []PluginConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "", Key: "test"},
+			Path:         "core.conf",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "name")
+}
+
+func TestPluginValidateCreate_PluginDirNameTraversal(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.PluginDirName = "../escape"
+	p.Spec.Configs = []PluginConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
+			Path:         "core.conf",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pluginDirName")
+}
+
+func TestPluginValidateCreate_PluginDirNameWithSlash(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.PluginDirName = "some/path"
+	p.Spec.Configs = []PluginConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
+			Path:         "core.conf",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pluginDirName")
+}
+
+func TestPluginValidateCreate_ConfigDuplicatePaths(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.PluginDirName = testPluginDirName
+	p.Spec.Configs = []PluginConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "a", Key: "x"},
+			Path:         "core.conf",
+		},
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "b", Key: "y"},
+			Path:         "core.conf",
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "core.conf")
+}
+
+func TestPluginValidateCreate_ConfigNestedPath(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.PluginDirName = testPluginDirName
+	p.Spec.Configs = []PluginConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "overworld"},
+			Path:         "maps/overworld.conf",
+			Overwrite:    "ifNotExists",
+		},
+	}
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestPluginValidateCreate_NoConfigsNoPluginDirNameOK(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	// No configs, no pluginDirName — valid
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
 // --- Endpoint validation tests ---
 
 func TestPluginValidateCreate_EndpointsValid(t *testing.T) {
@@ -422,4 +600,47 @@ func TestPluginValidateCreate_EndpointEmptyName(t *testing.T) {
 	_, err := v.ValidateCreate(context.Background(), p)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "name")
+}
+
+// source.project with shell-unsafe characters must be rejected at admission time,
+// because it is used as a fallback for pluginDirName in config injection scripts.
+func TestPluginValidateCreate_SourceProjectWithDollarSign(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Project = "Evil$Plugin"
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "shell-unsafe")
+}
+
+func TestPluginValidateCreate_SourceProjectWithBacktick(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Project = "Evil`Plugin"
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "shell-unsafe")
+}
+
+func TestPluginValidateCreate_SourceProjectWithPathTraversal(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Project = "../etc/passwd"
+
+	_, err := v.ValidateCreate(context.Background(), p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "..")
+}
+
+// Valid source.project names must still pass.
+func TestPluginValidateCreate_SourceProjectSafeNameOK(t *testing.T) {
+	v := &PluginValidator{}
+	p := validPlugin()
+	p.Spec.Source.Project = "BlueMap"
+
+	warnings, err := v.ValidateCreate(context.Background(), p)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
 }

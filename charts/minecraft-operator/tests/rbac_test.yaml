@@ -65,8 +65,8 @@ tests:
             verbs:
               - create
 
-  # ClusterRole: Secret read for RCON password
-  - it: should grant Secret access for RCON password retrieval
+  # ClusterRole: Secret/ConfigMap/PVC/Service access
+  - it: should grant core resource management permissions
     template: templates/rbac/role.yaml
     asserts:
       - contains:
@@ -75,6 +75,7 @@ tests:
             apiGroups:
               - ""
             resources:
+              - configmaps
               - persistentvolumeclaims
               - secrets
               - services

@@ -46,25 +46,26 @@ import (
 )
 
 const (
-	conditionTypeServerReady      = "Ready"
-	conditionTypeStatefulSetReady = "StatefulSetReady"
-	conditionTypeUpdateAvailable  = "UpdateAvailable"
-	conditionTypeUpdateBlocked    = "UpdateBlocked"
-	conditionTypeSolverRunning    = "SolverRunning"
-	reasonServerReconcileSuccess  = "ReconcileSuccess"
-	reasonServerReconcileError    = "ReconcileError"
-	reasonStatefulSetCreated      = "StatefulSetCreated"
-	reasonStatefulSetNotReady     = "StatefulSetNotReady"
-	reasonStatefulSetReady        = "StatefulSetReady"
-	reasonUpdateFound             = "UpdateFound"
-	reasonNoUpdate                = "NoUpdate"
-	reasonUpdateBlocked           = "UpdateBlocked"
-	reasonUpdateUnblocked         = "UpdateUnblocked"
-	reasonSolverStarted           = "SolverStarted"
-	reasonSolverCompleted         = "SolverCompleted"
-	reasonSolverFailed            = "SolverFailed"
-	defaultStorageSize            = "10Gi"
-	defaultTerminationGracePeriod = int64(300)
+	conditionTypeServerReady          = "Ready"
+	conditionTypeStatefulSetReady     = "StatefulSetReady"
+	conditionTypeUpdateAvailable      = "UpdateAvailable"
+	conditionTypeUpdateBlocked        = "UpdateBlocked"
+	conditionTypeSolverRunning        = "SolverRunning"
+	conditionTypeConfigInjectionReady = "ConfigInjectionReady"
+	reasonServerReconcileSuccess      = "ReconcileSuccess"
+	reasonServerReconcileError        = "ReconcileError"
+	reasonStatefulSetCreated          = "StatefulSetCreated"
+	reasonStatefulSetNotReady         = "StatefulSetNotReady"
+	reasonStatefulSetReady            = "StatefulSetReady"
+	reasonUpdateFound                 = "UpdateFound"
+	reasonNoUpdate                    = "NoUpdate"
+	reasonUpdateBlocked               = "UpdateBlocked"
+	reasonUpdateUnblocked             = "UpdateUnblocked"
+	reasonSolverStarted               = "SolverStarted"
+	reasonSolverCompleted             = "SolverCompleted"
+	reasonSolverFailed                = "SolverFailed"
+	defaultStorageSize                = "10Gi"
+	defaultTerminationGracePeriod     = int64(300)
 )
 
 // PaperAPI abstracts PaperMC API operations for testability.
@@ -97,6 +98,7 @@ type PaperMCServerReconciler struct {
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=plugins,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
@@ -160,6 +162,18 @@ func (r *PaperMCServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if err != nil {
 		return ctrl.Result{}, err
+	}
+
+	// If config injection is blocked by missing ConfigMaps, requeue sooner so
+	// the operator notices when the ConfigMaps are created.
+	if cond := meta.FindStatusCondition(server.Status.Conditions, conditionTypeConfigInjectionReady); cond != nil &&
+		cond.Status == metav1.ConditionFalse {
+		configRequeue := 30 * time.Second
+		if result.RequeueAfter > 0 && result.RequeueAfter < configRequeue {
+			return result, nil
+		}
+
+		return ctrl.Result{RequeueAfter: configRequeue}, nil
 	}
 
 	return result, nil
@@ -239,7 +253,11 @@ func (r *PaperMCServerReconciler) ensureInfrastructure(
 	server *mcv1beta1.PaperMCServer,
 	matchedPlugins []mcv1beta1.Plugin,
 ) (*appsv1.StatefulSet, error) {
-	statefulSet, err := r.ensureStatefulSet(ctx, server)
+	if err := r.ensureConfigScriptConfigMap(ctx, server, matchedPlugins); err != nil {
+		return nil, errors.Wrap(err, "failed to ensure config script configmap")
+	}
+
+	statefulSet, err := r.ensureStatefulSet(ctx, server, matchedPlugins)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to ensure statefulset")
 	}
@@ -257,6 +275,141 @@ func (r *PaperMCServerReconciler) ensureInfrastructure(
 	}
 
 	return statefulSet, nil
+}
+
+// ensureConfigScriptConfigMap creates or updates the config injection script ConfigMap.
+// If no configs are defined, this is a no-op.
+// Also validates that all referenced ConfigMaps exist and sets ConfigInjectionReady condition.
+func (r *PaperMCServerReconciler) ensureConfigScriptConfigMap(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) error {
+	_, _, scriptCM := buildConfigInjection(server, matchedPlugins)
+	if scriptCM == nil {
+		// Clear stale condition when no configs are configured.
+		meta.RemoveStatusCondition(&server.Status.Conditions, conditionTypeConfigInjectionReady)
+
+		return r.deleteOrphanedConfigScriptConfigMap(ctx, server)
+	}
+
+	// Validate referenced ConfigMaps exist.
+	r.validateReferencedConfigMaps(ctx, server, matchedPlugins)
+
+	// Set owner reference so the ConfigMap is garbage collected with the server.
+	if err := controllerutil.SetControllerReference(server, scriptCM, r.Scheme); err != nil {
+		return errors.Wrap(err, "failed to set owner reference on config script configmap")
+	}
+
+	// Create or update the ConfigMap.
+	var existing corev1.ConfigMap
+
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      scriptCM.Name,
+		Namespace: scriptCM.Namespace,
+	}, &existing)
+
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to get config script configmap")
+		}
+
+		slog.InfoContext(ctx, "Creating config script ConfigMap", "name", scriptCM.Name)
+
+		if err := r.Create(ctx, scriptCM); err != nil {
+			return errors.Wrap(err, "failed to create config script configmap")
+		}
+
+		return nil
+	}
+
+	// Update if content changed.
+	if existing.Data[configScriptKey] != scriptCM.Data[configScriptKey] {
+		slog.InfoContext(ctx, "Updating config script ConfigMap", "name", scriptCM.Name)
+		existing.Data = scriptCM.Data
+
+		if err := r.Update(ctx, &existing); err != nil {
+			return errors.Wrap(err, "failed to update config script configmap")
+		}
+	}
+
+	return nil
+}
+
+// deleteOrphanedConfigScriptConfigMap removes the config script ConfigMap when
+// no configs are defined. This prevents stale ConfigMaps from lingering after
+// all configs are removed from the server spec.
+func (r *PaperMCServerReconciler) deleteOrphanedConfigScriptConfigMap(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+) error {
+	var existing corev1.ConfigMap
+
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      server.Name + "-config-script",
+		Namespace: server.Namespace,
+	}, &existing)
+	if err == nil {
+		if delErr := r.Delete(ctx, &existing); delErr != nil && !apierrors.IsNotFound(delErr) {
+			return errors.Wrap(delErr, "failed to delete orphaned config script configmap")
+		}
+	} else if !apierrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to check for orphaned config script configmap")
+	}
+
+	return nil
+}
+
+// validateReferencedConfigMaps checks that all ConfigMaps referenced by config
+// injection actually exist in the namespace. Sets ConfigInjectionReady condition.
+func (r *PaperMCServerReconciler) validateReferencedConfigMaps(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) {
+	refs := collectReferencedConfigMaps(server, matchedPlugins)
+	if len(refs) == 0 {
+		return
+	}
+
+	var missing []string
+
+	for _, ref := range refs {
+		var cm corev1.ConfigMap
+
+		err := r.Get(ctx, client.ObjectKey{
+			Name:      ref.Name,
+			Namespace: server.Namespace,
+		}, &cm)
+
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				missing = append(missing, fmt.Sprintf("%s/%s", ref.Name, ref.Key))
+			} else {
+				slog.WarnContext(ctx, "Failed to check ConfigMap existence",
+					"error", err, "configmap", ref.Name)
+				missing = append(missing, fmt.Sprintf("%s/%s (check failed)", ref.Name, ref.Key))
+			}
+
+			continue
+		}
+
+		// Check if the key exists in the ConfigMap (Data or BinaryData).
+		if _, inData := cm.Data[ref.Key]; !inData {
+			if _, inBinary := cm.BinaryData[ref.Key]; !inBinary {
+				missing = append(missing, fmt.Sprintf("%s/%s (key not found)", ref.Name, ref.Key))
+			}
+		}
+	}
+
+	if len(missing) > 0 {
+		r.setCondition(server, conditionTypeConfigInjectionReady, metav1.ConditionFalse,
+			"ConfigMapsMissing",
+			fmt.Sprintf("Referenced ConfigMaps not found: %s", strings.Join(missing, ", ")))
+	} else {
+		r.setCondition(server, conditionTypeConfigInjectionReady, metav1.ConditionTrue,
+			"ConfigMapsReady", "All referenced ConfigMaps are available")
+	}
 }
 
 // updateServerStatus updates all status fields for the server.
@@ -339,6 +492,7 @@ func (r *PaperMCServerReconciler) findMatchedPlugins(
 func (r *PaperMCServerReconciler) ensureStatefulSet(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) (*appsv1.StatefulSet, error) {
 	statefulSetName := server.Name
 	var statefulSet appsv1.StatefulSet
@@ -349,8 +503,23 @@ func (r *PaperMCServerReconciler) ensureStatefulSet(
 	}, &statefulSet)
 
 	if err == nil {
-		// StatefulSet exists
-		slog.InfoContext(ctx, "StatefulSet already exists", "name", statefulSetName)
+		// StatefulSet exists — check if pod template needs updating.
+		desired, buildErr := r.buildStatefulSet(server, matchedPlugins)
+		if buildErr != nil {
+			return &statefulSet, errors.Wrap(buildErr, "failed to build desired statefulset for comparison")
+		}
+
+		if !reflect.DeepEqual(statefulSet.Spec.Template.Spec.InitContainers, desired.Spec.Template.Spec.InitContainers) ||
+			volumesChanged(statefulSet.Spec.Template.Spec.Volumes, desired.Spec.Template.Spec.Volumes) ||
+			statefulSet.Spec.Template.Spec.Containers[0].Image != desired.Spec.Template.Spec.Containers[0].Image {
+			slog.InfoContext(ctx, "Updating StatefulSet pod template", "name", statefulSetName)
+			statefulSet.Spec.Template = desired.Spec.Template
+
+			if updateErr := r.Update(ctx, &statefulSet); updateErr != nil {
+				return nil, errors.Wrap(updateErr, "failed to update statefulset")
+			}
+		}
+
 		return &statefulSet, nil
 	}
 
@@ -361,7 +530,7 @@ func (r *PaperMCServerReconciler) ensureStatefulSet(
 	// StatefulSet doesn't exist, create it
 	slog.InfoContext(ctx, "Creating new StatefulSet", "name", statefulSetName)
 
-	newStatefulSet, err := r.buildStatefulSet(server)
+	newStatefulSet, err := r.buildStatefulSet(server, matchedPlugins)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build statefulset")
 	}
@@ -382,11 +551,14 @@ func (r *PaperMCServerReconciler) ensureStatefulSet(
 }
 
 // buildStatefulSet constructs a StatefulSet for the PaperMCServer.
-func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1beta1.PaperMCServer) (*appsv1.StatefulSet, error) {
+func (r *PaperMCServerReconciler) buildStatefulSet(
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) (*appsv1.StatefulSet, error) {
 	replicas := int32(1)
 	serviceName := server.Name
 
-	podSpec, err := r.buildPodSpec(server)
+	podSpec, err := r.buildPodSpec(server, matchedPlugins)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build pod spec")
 	}
@@ -417,7 +589,10 @@ func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1beta1.PaperMCServ
 // buildPodSpec constructs the pod spec with configured container.
 // CRITICAL: This function MUST NEVER generate an image tag with :latest.
 // All images MUST use concrete version-build tags (e.g., docker.io/lexfrei/papermc:1.21.1-91).
-func (r *PaperMCServerReconciler) buildPodSpec(server *mcv1beta1.PaperMCServer) (*corev1.PodSpec, error) {
+func (r *PaperMCServerReconciler) buildPodSpec(
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) (*corev1.PodSpec, error) {
 	podSpec := server.Spec.PodTemplate.Spec.DeepCopy()
 
 	if len(podSpec.Containers) == 0 {
@@ -452,6 +627,13 @@ func (r *PaperMCServerReconciler) buildPodSpec(server *mcv1beta1.PaperMCServer) 
 		terminationGracePeriod = int64(server.Spec.GracefulShutdown.Timeout.Seconds())
 	}
 	podSpec.TerminationGracePeriodSeconds = &terminationGracePeriod
+
+	// Inject config injection init container and volumes if configs are defined.
+	initContainer, configVolumes, _ := buildConfigInjection(server, matchedPlugins)
+	if initContainer != nil {
+		podSpec.InitContainers = append([]corev1.Container{*initContainer}, podSpec.InitContainers...)
+		podSpec.Volumes = append(podSpec.Volumes, configVolumes...)
+	}
 
 	return podSpec, nil
 }
@@ -1935,4 +2117,56 @@ func (r *PaperMCServerReconciler) findServersForPlugin(ctx context.Context, obj 
 		"servers", len(requests))
 
 	return requests
+}
+
+// volumesChanged compares operator-managed volumes between existing and desired specs.
+// Kubernetes-injected volumes (e.g., projected SA tokens) are ignored because they
+// only exist in the existing spec and are not managed by the operator.
+//
+// Operator-managed volume names are: "data", "config-script", and any name starting with "cm-".
+func volumesChanged(existing, desired []corev1.Volume) bool {
+	desiredMap := make(map[string]corev1.Volume, len(desired))
+	for _, v := range desired {
+		desiredMap[v.Name] = v
+	}
+
+	// Check that all desired volumes exist in existing and match.
+	for name, dv := range desiredMap {
+		found := false
+
+		for _, ev := range existing {
+			if ev.Name == name {
+				found = true
+
+				if !reflect.DeepEqual(ev, dv) {
+					return true
+				}
+
+				break
+			}
+		}
+
+		if !found {
+			return true // desired volume missing from existing
+		}
+	}
+
+	// Check reverse: if existing has operator-managed volumes not in desired, that's a removal.
+	for _, ev := range existing {
+		if !isOperatorManagedVolume(ev.Name) {
+			continue
+		}
+
+		if _, inDesired := desiredMap[ev.Name]; !inDesired {
+			return true // operator-managed volume was removed from desired
+		}
+	}
+
+	return false
+}
+
+// isOperatorManagedVolume returns true if the volume name is managed by the operator.
+// Operator-managed volumes: "data", "config-script", and any name starting with "cm-".
+func isOperatorManagedVolume(name string) bool {
+	return name == "data" || name == "config-script" || strings.HasPrefix(name, "cm-")
 }

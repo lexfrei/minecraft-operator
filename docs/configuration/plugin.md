@@ -190,6 +190,67 @@ spec:
     - **HTTP** endpoints additionally enable HTTPRoute creation on servers with `gateway.httpRoutes` configured
     - Port name format: `ep-{port}-{proto}` (e.g., `ep-8123-tcp`)
 
+### pluginDirName
+
+**Optional** — The plugin's directory name under `plugins/`. Must match the `name` field
+in the plugin's `plugin.yml`. Defaults to `source.project` if not set. Required when
+`configs` are specified.
+
+```yaml
+spec:
+  pluginDirName: BlueMap
+```
+
+!!! warning "Directory Name Matching"
+
+    The `pluginDirName` must exactly match the directory that the plugin creates under
+    `plugins/`. Check the plugin's `plugin.yml` for the correct `name` field. An incorrect
+    value will cause config files to be placed in the wrong directory.
+
+### configs
+
+**Optional** — Default config files for this plugin. Files are copied to
+`plugins/{pluginDirName}/` on matched servers via an init container.
+
+Servers can override specific files via `spec.pluginConfigs`.
+
+| Field | Description |
+| --- | --- |
+| `configMapRef.name` | ConfigMap name (same namespace) |
+| `configMapRef.key` | Key within the ConfigMap |
+| `path` | Target path relative to plugin directory |
+| `overwrite` | `always` (default) or `ifNotExists` |
+
+```yaml
+spec:
+  pluginDirName: BlueMap
+  configs:
+    - configMapRef:
+        name: bluemap-defaults
+        key: core.conf
+      path: core.conf
+      overwrite: always
+    - configMapRef:
+        name: bluemap-defaults
+        key: overworld.conf
+      path: maps/overworld.conf
+      overwrite: ifNotExists
+```
+
+!!! info "Overwrite Policy"
+
+    - **`always`**: The file is replaced on every pod restart. The ConfigMap is the source
+      of truth. Manual edits on the PVC are lost.
+    - **`ifNotExists`**: The file is only written if it doesn't already exist on the PVC.
+      This preserves manual edits made inside the running container.
+
+!!! info "Path Validation"
+
+    - Paths must be relative (no leading `/`)
+    - Paths must not contain `..` (no path traversal)
+    - Subdirectories are created automatically (e.g., `maps/overworld.conf`)
+    - Duplicate paths within the same plugin are rejected by the webhook
+
 ### compatibilityOverride
 
 **Optional** — Manual compatibility specification for plugins without proper metadata.

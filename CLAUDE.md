@@ -53,6 +53,8 @@ Four main controllers work together:
 - `version`: Specific version when using `pin` or `build-pin` strategy (also used as fallback version for URL-source plugins when JAR has no plugin.yml version)
 - `updateDelay`: Grace period before auto-applying new releases (e.g., `168h` for 7 days)
 - `endpoints`: Optional list of network endpoints (name, port, protocol: TCP/UDP/HTTP) exposed by the plugin; used for Service ports, NetworkPolicy ingress rules, and HTTPRoute creation
+- `pluginDirName`: Plugin directory name under `plugins/` (defaults to `source.project`; required when `configs` are specified)
+- `configs`: Default config files for this plugin, referencing ConfigMap keys, with path and overwrite policy (`always`/`ifNotExists`)
 - `instanceSelector`: Label selector to match PaperMCServer instances
 - `compatibilityOverride`: Manual compatibility specification for edge cases
 
@@ -78,6 +80,8 @@ Four main controllers work together:
 - `backup`: VolumeSnapshot backup configuration (schedule, retention, beforeUpdate)
 - `network`: Network policy configuration (per-server NetworkPolicy with ingress/egress rules)
 - `gateway`: Gateway API configuration (TCPRoute/UDPRoute for game traffic via Gateway API)
+- `pluginConfigs`: Per-server overrides for plugin config files (ConfigMap refs, path, overwrite policy)
+- `serverConfigs`: Server-level config files relative to workdir `/data` (e.g., `server.properties`)
 - `podTemplate`: StatefulSet pod spec
 
 **Status:**

@@ -45,6 +45,12 @@ func (v *PluginValidator) validate(p *Plugin) (admission.Warnings, error) {
 
 	specPath := field.NewPath("spec")
 
+	// Validate source.project for shell-unsafe characters regardless of source type.
+	// The project name is used as a fallback for pluginDirName in config injection scripts.
+	if p.Spec.Source.Project != "" {
+		allErrs = append(allErrs, validateSafeName(p.Spec.Source.Project, specPath.Child("source", "project"))...)
+	}
+
 	// Source-specific validation.
 	switch p.Spec.Source.Type {
 	case "hangar":
@@ -80,6 +86,9 @@ func (v *PluginValidator) validate(p *Plugin) (admission.Warnings, error) {
 
 	// Endpoint validation.
 	allErrs = append(allErrs, validateEndpoints(p, specPath)...)
+
+	// Config validation.
+	allErrs = append(allErrs, validatePluginConfigs(p, specPath)...)
 
 	return warnings, invalidIfNotEmpty(allErrs)
 }
@@ -212,6 +221,112 @@ func validateEndpoints(p *Plugin, specPath *field.Path) field.ErrorList {
 		} else {
 			seenPortProto[key] = true
 		}
+	}
+
+	return errs
+}
+
+func validatePluginConfigs(p *Plugin, specPath *field.Path) field.ErrorList {
+	var errs field.ErrorList
+
+	if len(p.Spec.Configs) == 0 {
+		return nil
+	}
+
+	// pluginDirName is required when configs are specified.
+	if p.Spec.PluginDirName == "" {
+		errs = append(errs, field.Required(
+			specPath.Child("pluginDirName"),
+			"pluginDirName is required when configs are specified",
+		))
+	} else {
+		errs = append(errs, validateSafeName(p.Spec.PluginDirName, specPath.Child("pluginDirName"))...)
+	}
+
+	configsPath := specPath.Child("configs")
+	seenPaths := make(map[string]bool)
+
+	for i, cfg := range p.Spec.Configs {
+		cfgPath := configsPath.Index(i)
+		errs = append(errs, validateConfigFile(cfg.ConfigMapRef, cfg.Path, cfgPath)...)
+
+		if cfg.Path != "" {
+			if seenPaths[cfg.Path] {
+				errs = append(errs, field.Duplicate(cfgPath.Child("path"), cfg.Path))
+			} else {
+				seenPaths[cfg.Path] = true
+			}
+		}
+	}
+
+	return errs
+}
+
+// safeShellPattern matches strings containing only safe characters for shell interpolation.
+// Allows: alphanumeric, dash, underscore, dot, forward slash (for paths), space is NOT allowed.
+var safeShellPattern = regexp.MustCompile(`^[a-zA-Z0-9._/-]+$`)
+
+// containsShellUnsafeChars returns true if s contains characters unsafe for shell interpolation.
+// Uses a whitelist approach: only alphanumeric, dash, underscore, dot, and forward slash are allowed.
+func containsShellUnsafeChars(s string) bool {
+	return !safeShellPattern.MatchString(s)
+}
+
+// validateSafeName checks a name doesn't contain path traversal or shell-unsafe characters.
+func validateSafeName(name string, fldPath *field.Path) field.ErrorList {
+	var errs field.ErrorList
+
+	if strings.Contains(name, "/") || strings.Contains(name, "..") {
+		errs = append(errs, field.Invalid(fldPath, name,
+			"must not contain '/' or '..'"))
+	}
+
+	if containsShellUnsafeChars(name) {
+		errs = append(errs, field.Invalid(fldPath, name,
+			`must not contain shell-unsafe characters ('"', "'", '`+"`"+`', '$', '\', newline, carriage return)`))
+	}
+
+	return errs
+}
+
+// validateConfigFile validates a config file entry (path + configMapRef).
+// Checks path safety (no traversal, no absolute, no shell-unsafe chars)
+// and configMapRef completeness + safety.
+func validateConfigFile(ref ConfigMapKeyRef, path string, fldPath *field.Path) field.ErrorList {
+	var errs field.ErrorList
+
+	if path == "" {
+		errs = append(errs, field.Required(fldPath.Child("path"), "path is required"))
+	} else {
+		if strings.HasPrefix(path, "/") {
+			errs = append(errs, field.Invalid(fldPath.Child("path"), path,
+				"must be a relative path, not starting with '/'"))
+		}
+
+		if strings.Contains(path, "..") {
+			errs = append(errs, field.Invalid(fldPath.Child("path"), path,
+				"must not contain '..' (path traversal)"))
+		}
+
+		if containsShellUnsafeChars(path) {
+			errs = append(errs, field.Invalid(fldPath.Child("path"), path,
+				"must not contain shell-unsafe characters (quotes, backticks, $, backslash, newlines)"))
+		}
+	}
+
+	if ref.Name == "" {
+		errs = append(errs, field.Required(fldPath.Child("configMapRef", "name"),
+			"ConfigMap name is required"))
+	} else {
+		errs = append(errs, validateSafeName(ref.Name, fldPath.Child("configMapRef", "name"))...)
+	}
+
+	if ref.Key == "" {
+		errs = append(errs, field.Required(fldPath.Child("configMapRef", "key"),
+			"ConfigMap key is required"))
+	} else if containsShellUnsafeChars(ref.Key) {
+		errs = append(errs, field.Invalid(fldPath.Child("configMapRef", "key"), ref.Key,
+			"must not contain shell-unsafe characters"))
 	}
 
 	return errs

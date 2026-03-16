@@ -1,0 +1,15 @@
+# Server configuration files
+# Referenced by PaperMCServer CRD: spec.serverConfigs[].configMapRef
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mc-server-config
+  namespace: default
+data:
+  server.properties: |
+    max-players=50
+    view-distance=12
+    simulation-distance=10
+    motd=A Minecraft Server managed by minecraft-operator
+    enable-rcon=true
+    rcon.port=25575

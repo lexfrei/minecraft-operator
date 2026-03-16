@@ -1,0 +1,85 @@
+# Example: PaperMCServer with plugin config overrides and server-level configs
+#
+# This server:
+# 1. Overrides BlueMap's core.conf (higher render distance for production)
+# 2. Manages server.properties declaratively
+# 3. Uses ifNotExists for paper-global.yml to preserve manual edits
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: PaperMCServer
+metadata:
+  name: production
+  namespace: default
+  labels:
+    environment: production
+    type: vanilla
+spec:
+  updateStrategy: "auto"
+
+  updateSchedule:
+    checkCron: "0 3 * * *"
+    maintenanceWindow:
+      enabled: true
+      cron: "0 4 * * 0"
+
+  gracefulShutdown:
+    timeout: 300s
+
+  rcon:
+    enabled: true
+    port: 25575
+    passwordSecret:
+      name: production-rcon
+      key: password
+
+  # Override plugin config files for this server
+  # Files with the same path as plugin defaults replace them entirely
+  pluginConfigs:
+    - pluginName: bluemap
+      configs:
+        - configMapRef:
+            name: prod-bluemap
+            key: core.conf
+          path: core.conf
+          overwrite: always
+
+  # Server-level config files (relative to workdir /data)
+  serverConfigs:
+    - configMapRef:
+        name: mc-server-config
+        key: server.properties
+      path: server.properties
+      overwrite: always
+
+  podTemplate:
+    spec:
+      containers:
+      - name: papermc
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2000m"
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+---
+# Production BlueMap overrides (higher render distance)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prod-bluemap
+  namespace: default
+data:
+  core.conf: |
+    accept-download: true
+    render-thread-count: 4
+    render-distance: 16
+    metrics: false
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: production-rcon
+  namespace: default
+type: Opaque
+stringData:
+  password: "change-me-in-production"
