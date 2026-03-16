@@ -97,6 +97,7 @@ type PaperMCServerReconciler struct {
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=papermcservers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=mc.k8s.lex.la,resources=plugins,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
@@ -239,7 +240,11 @@ func (r *PaperMCServerReconciler) ensureInfrastructure(
 	server *mcv1beta1.PaperMCServer,
 	matchedPlugins []mcv1beta1.Plugin,
 ) (*appsv1.StatefulSet, error) {
-	statefulSet, err := r.ensureStatefulSet(ctx, server)
+	if err := r.ensureConfigScriptConfigMap(ctx, server, matchedPlugins); err != nil {
+		return nil, errors.Wrap(err, "failed to ensure config script configmap")
+	}
+
+	statefulSet, err := r.ensureStatefulSet(ctx, server, matchedPlugins)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to ensure statefulset")
 	}
@@ -257,6 +262,58 @@ func (r *PaperMCServerReconciler) ensureInfrastructure(
 	}
 
 	return statefulSet, nil
+}
+
+// ensureConfigScriptConfigMap creates or updates the config injection script ConfigMap.
+// If no configs are defined, this is a no-op.
+func (r *PaperMCServerReconciler) ensureConfigScriptConfigMap(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) error {
+	_, _, scriptCM := buildConfigInjection(server, matchedPlugins)
+	if scriptCM == nil {
+		return nil
+	}
+
+	// Set owner reference so the ConfigMap is garbage collected with the server.
+	if err := controllerutil.SetControllerReference(server, scriptCM, r.Scheme); err != nil {
+		return errors.Wrap(err, "failed to set owner reference on config script configmap")
+	}
+
+	// Create or update the ConfigMap.
+	var existing corev1.ConfigMap
+
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      scriptCM.Name,
+		Namespace: scriptCM.Namespace,
+	}, &existing)
+
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to get config script configmap")
+		}
+
+		slog.InfoContext(ctx, "Creating config script ConfigMap", "name", scriptCM.Name)
+
+		if err := r.Create(ctx, scriptCM); err != nil {
+			return errors.Wrap(err, "failed to create config script configmap")
+		}
+
+		return nil
+	}
+
+	// Update if content changed.
+	if existing.Data[configScriptKey] != scriptCM.Data[configScriptKey] {
+		slog.InfoContext(ctx, "Updating config script ConfigMap", "name", scriptCM.Name)
+		existing.Data = scriptCM.Data
+
+		if err := r.Update(ctx, &existing); err != nil {
+			return errors.Wrap(err, "failed to update config script configmap")
+		}
+	}
+
+	return nil
 }
 
 // updateServerStatus updates all status fields for the server.
@@ -339,6 +396,7 @@ func (r *PaperMCServerReconciler) findMatchedPlugins(
 func (r *PaperMCServerReconciler) ensureStatefulSet(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
 ) (*appsv1.StatefulSet, error) {
 	statefulSetName := server.Name
 	var statefulSet appsv1.StatefulSet
@@ -361,7 +419,7 @@ func (r *PaperMCServerReconciler) ensureStatefulSet(
 	// StatefulSet doesn't exist, create it
 	slog.InfoContext(ctx, "Creating new StatefulSet", "name", statefulSetName)
 
-	newStatefulSet, err := r.buildStatefulSet(server)
+	newStatefulSet, err := r.buildStatefulSet(server, matchedPlugins)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build statefulset")
 	}
@@ -382,11 +440,14 @@ func (r *PaperMCServerReconciler) ensureStatefulSet(
 }
 
 // buildStatefulSet constructs a StatefulSet for the PaperMCServer.
-func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1beta1.PaperMCServer) (*appsv1.StatefulSet, error) {
+func (r *PaperMCServerReconciler) buildStatefulSet(
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) (*appsv1.StatefulSet, error) {
 	replicas := int32(1)
 	serviceName := server.Name
 
-	podSpec, err := r.buildPodSpec(server)
+	podSpec, err := r.buildPodSpec(server, matchedPlugins)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build pod spec")
 	}
@@ -417,7 +478,10 @@ func (r *PaperMCServerReconciler) buildStatefulSet(server *mcv1beta1.PaperMCServ
 // buildPodSpec constructs the pod spec with configured container.
 // CRITICAL: This function MUST NEVER generate an image tag with :latest.
 // All images MUST use concrete version-build tags (e.g., docker.io/lexfrei/papermc:1.21.1-91).
-func (r *PaperMCServerReconciler) buildPodSpec(server *mcv1beta1.PaperMCServer) (*corev1.PodSpec, error) {
+func (r *PaperMCServerReconciler) buildPodSpec(
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) (*corev1.PodSpec, error) {
 	podSpec := server.Spec.PodTemplate.Spec.DeepCopy()
 
 	if len(podSpec.Containers) == 0 {
@@ -452,6 +516,13 @@ func (r *PaperMCServerReconciler) buildPodSpec(server *mcv1beta1.PaperMCServer) 
 		terminationGracePeriod = int64(server.Spec.GracefulShutdown.Timeout.Seconds())
 	}
 	podSpec.TerminationGracePeriodSeconds = &terminationGracePeriod
+
+	// Inject config injection init container and volumes if configs are defined.
+	initContainer, configVolumes, _ := buildConfigInjection(server, matchedPlugins)
+	if initContainer != nil {
+		podSpec.InitContainers = append([]corev1.Container{*initContainer}, podSpec.InitContainers...)
+		podSpec.Volumes = append(podSpec.Volumes, configVolumes...)
+	}
 
 	return podSpec, nil
 }

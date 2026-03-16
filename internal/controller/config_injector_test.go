@@ -464,6 +464,22 @@ func TestBuildConfigInjection_ScriptConfigMapOwnership(t *testing.T) {
 	assert.Equal(t, "default", scriptCM.Namespace)
 }
 
+func TestBuildConfigInjection_InitContainerSecurityDefaults(t *testing.T) {
+	server := newConfigTestServer("test")
+	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
+		{
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
+			Path:         "server.properties",
+		},
+	}
+
+	initContainer, _, _ := buildConfigInjection(server, nil)
+
+	require.NotNil(t, initContainer)
+	assert.Equal(t, "config-injector", initContainer.Name)
+	assert.Equal(t, "busybox:1.37", initContainer.Image)
+}
+
 func TestBuildConfigInjection_MultipleConfigMaps(t *testing.T) {
 	server := newConfigTestServer("test")
 	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{

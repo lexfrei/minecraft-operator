@@ -409,7 +409,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				// Status.DesiredVersion and Status.DesiredBuild NOT set
 			}
 
-			podSpec, err := reconciler.buildPodSpec(server)
+			podSpec, err := reconciler.buildPodSpec(server, nil)
 			Expect(err).To(HaveOccurred(), "buildPodSpec should return error when DesiredVersion is not set")
 			Expect(podSpec).To(BeNil())
 			Expect(err.Error()).To(ContainSubstring("DesiredVersion"))
@@ -437,7 +437,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				},
 			}
 
-			podSpec, err := reconciler.buildPodSpec(server)
+			podSpec, err := reconciler.buildPodSpec(server, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podSpec).NotTo(BeNil())
 			Expect(podSpec.Containers[0].Image).To(Equal("docker.io/lexfrei/papermc:1.21.1-100"))
