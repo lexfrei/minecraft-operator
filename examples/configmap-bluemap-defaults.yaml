@@ -1,0 +1,13 @@
+# Default BlueMap configuration
+# Referenced by Plugin CRD: spec.configs[].configMapRef
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bluemap-defaults
+  namespace: default
+data:
+  core.conf: |
+    accept-download: true
+    render-thread-count: 2
+    render-distance: 12
+    metrics: false

@@ -22,6 +22,20 @@ spec:
       port: 8100
       protocol: HTTP
 
+  # Plugin directory name (must match plugin.yml "name" field)
+  # Required when configs are specified
+  pluginDirName: BlueMap
+
+  # Default config files for this plugin
+  # These are copied to plugins/BlueMap/ on all matched servers
+  # Servers can override specific files via spec.pluginConfigs
+  configs:
+    - configMapRef:
+        name: bluemap-defaults
+        key: core.conf
+      path: core.conf
+      overwrite: always
+
   # Apply this plugin to all servers with label "type: vanilla"
   instanceSelector:
     matchLabels:
