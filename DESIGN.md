@@ -149,6 +149,20 @@ spec:
   #   port: 8123
   #   protocol: HTTP  # TCP, UDP, or HTTP
 
+  # Plugin directory name (must match plugin.yml "name" field)
+  # Required when configs are specified. Defaults to source.project.
+  # pluginDirName: EssentialsX
+
+  # Default config files for this plugin (optional)
+  # Copied to plugins/{pluginDirName}/ on matched servers via init container
+  # Servers can override specific files via spec.pluginConfigs
+  # configs:
+  # - configMapRef:
+  #     name: essentials-defaults
+  #     key: config.yml
+  #   path: config.yml
+  #   overwrite: always  # always or ifNotExists
+
   # Selector for choosing servers to apply plugin to
   instanceSelector:
     matchLabels:
@@ -293,6 +307,26 @@ spec:
         - cidr: "203.0.113.0/24"
           port: 8080
           protocol: TCP
+
+  # Plugin config overrides (optional)
+  # Override plugin default configs for this specific server
+  # pluginConfigs:
+  # - pluginName: essentialsx
+  #   configs:
+  #     - configMapRef:
+  #         name: prod-essentials
+  #         key: config.yml
+  #       path: config.yml
+  #       overwrite: always
+
+  # Server-level config files (optional)
+  # Files relative to workdir /data
+  # serverConfigs:
+  # - configMapRef:
+  #     name: mc-server-config
+  #     key: server.properties
+  #   path: server.properties
+  #   overwrite: always
 
   # Pod settings (simplified, can be extended)
   podTemplate:

@@ -1290,6 +1290,24 @@ decisions:
       webhook: "api/v1beta1/papermcserver_webhook.go - validateHTTPRoutes with duplicate hostname+pathPrefix detection"
       api_handlers: "pkg/api/handlers.go - validateEndpointRequest for REST API"
 
+  - id: ADR-037
+    date: 2026-03-16
+    status: accepted
+    decision: "Declarative config management via ConfigMap references with init container injection"
+    reasoning: "Minecraft plugins and the server itself use config files on disk (plugins/BlueMap/core.conf, server.properties, etc.). Users want declarative config management: define default plugin configs in the Plugin CRD, override per-server in PaperMCServer, and also manage server-level configs. Design uses ConfigMap references (no inline data in CRDs), whole-file replacement (no deep merge), per-file overwrite policy (always/ifNotExists), and an init container that copies files from ConfigMap volumes to the data PVC before the PaperMC container starts."
+    alternatives:
+      - "Inline config data in CRD: CRDs have 1.5MB limit, config files can be large, ConfigMaps are the standard K8s pattern"
+      - "Sidecar container: Init container is simpler, config only needs to run once before startup"
+      - "Deep merge of config files: Too complex for MVP, different config formats (YAML, properties, HOCON), whole-file replacement is predictable"
+      - "Projected volumes directly: Cannot handle overwrite=ifNotExists policy, no server-override-plugin-default priority"
+    impact: "New fields in Plugin CRD (pluginDirName, configs) and PaperMCServer CRD (pluginConfigs, serverConfigs), init container added to StatefulSet when configs are defined, script ConfigMap per server, ConfigInjectionReady condition, ConfigMap RBAC for operator"
+    components:
+      plugin_types: "api/v1beta1/plugin_types.go - PluginConfigFile, ConfigMapKeyRef, PluginDirName, Configs fields"
+      server_types: "api/v1beta1/papermcserver_types.go - ServerPluginConfig, ServerConfigFile, PluginConfigs, ServerConfigs fields"
+      config_injector: "internal/controller/config_injector.go - buildConfigScript, buildConfigInjection, collectReferencedConfigMaps"
+      controller: "internal/controller/papermcserver_controller.go - ensureConfigScriptConfigMap, validateReferencedConfigMaps, buildPodSpec config injection"
+      webhook: "api/v1beta1/plugin_webhook.go - validatePluginConfigs, validateSafeName; api/v1beta1/papermcserver_webhook.go - validateServerPluginConfigs, validateServerConfigFiles"
+
 phases:
   phase_1_mvp:
     description: "Minimum viable product"
