@@ -41,6 +41,33 @@ type CompatibilityOverride struct {
 	MinecraftVersions []string `json:"minecraftVersions,omitempty"`
 }
 
+// ConfigMapKeyRef references a key in a ConfigMap.
+type ConfigMapKeyRef struct {
+	// Name is the ConfigMap name (must be in same namespace).
+	Name string `json:"name"`
+
+	// Key is the key within the ConfigMap.
+	Key string `json:"key"`
+}
+
+// PluginConfigFile defines a config file to be injected into the plugin's directory.
+type PluginConfigFile struct {
+	// ConfigMapRef references a ConfigMap key containing the file content.
+	ConfigMapRef ConfigMapKeyRef `json:"configMapRef"`
+
+	// Path is the target file path relative to the plugin's directory
+	// (e.g., "core.conf" or "maps/overworld.conf").
+	// Must not start with "/" or contain "..".
+	Path string `json:"path"`
+
+	// Overwrite determines if existing files are overwritten on pod restart.
+	// "always" replaces the file every time (CRD is source of truth).
+	// "ifNotExists" only writes the file if it doesn't exist (preserves manual edits).
+	// +kubebuilder:validation:Enum=always;ifNotExists
+	// +kubebuilder:default=always
+	Overwrite string `json:"overwrite,omitempty"`
+}
+
 // PluginEndpoint describes a network endpoint exposed by a plugin.
 type PluginEndpoint struct {
 	// Name is a unique identifier for this endpoint within the plugin.
@@ -99,6 +126,19 @@ type PluginSpec struct {
 	// HTTP endpoints additionally enable HTTPRoute creation when servers have gateway.httpRoutes configured.
 	// +optional
 	Endpoints []PluginEndpoint `json:"endpoints,omitempty"`
+
+	// PluginDirName is the plugin's directory name under plugins/.
+	// Must match the "name" field in the plugin's plugin.yml.
+	// Defaults to source.project if not set.
+	// Required when configs are specified.
+	// +optional
+	PluginDirName string `json:"pluginDirName,omitempty"`
+
+	// Configs defines default config files for this plugin.
+	// These files are copied to plugins/{pluginDirName}/ on matched servers.
+	// Servers can override specific files via spec.pluginConfigs.
+	// +optional
+	Configs []PluginConfigFile `json:"configs,omitempty"`
 
 	// CompatibilityOverride allows manual compatibility specification for edge cases.
 	// +optional
