@@ -374,3 +374,111 @@ func TestConfigMapVolumeName_Long(t *testing.T) {
 	assert.LessOrEqual(t, len(name), maxVolumeNameLength)
 	assert.True(t, len(name) > 0)
 }
+
+// --- buildConfigInjection tests ---
+
+func TestBuildConfigInjection_NoConfigs(t *testing.T) {
+	server := newConfigTestServer("test")
+	plugins := []mcv1beta1.Plugin{}
+
+	initContainer, volumes, scriptCM := buildConfigInjection(server, plugins)
+
+	assert.Nil(t, initContainer)
+	assert.Nil(t, volumes)
+	assert.Nil(t, scriptCM)
+}
+
+func TestBuildConfigInjection_WithPluginConfig(t *testing.T) {
+	server := newConfigTestServer("test")
+	plugins := []mcv1beta1.Plugin{
+		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
+			{
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
+				Path:         "core.conf",
+				Overwrite:    "always",
+			},
+		}),
+	}
+
+	initContainer, volumes, scriptCM := buildConfigInjection(server, plugins)
+
+	require.NotNil(t, initContainer)
+	assert.Equal(t, "config-injector", initContainer.Name)
+	assert.Equal(t, "busybox:1.37", initContainer.Image)
+	assert.Equal(t, []string{"sh", "/scripts/inject-configs.sh"}, initContainer.Command)
+
+	// Should have: data volume + config-script volume + 1 ConfigMap volume
+	require.Len(t, volumes, 2) // config-script + 1 configmap
+
+	// Init container should mount data, config-script, and the ConfigMap
+	require.Len(t, initContainer.VolumeMounts, 3) // data + script + configmap
+
+	// Verify data mount
+	foundData := false
+	for _, vm := range initContainer.VolumeMounts {
+		if vm.Name == "data" && vm.MountPath == "/data" {
+			foundData = true
+		}
+	}
+	assert.True(t, foundData, "init container must mount data volume at /data")
+
+	// Verify script ConfigMap
+	require.NotNil(t, scriptCM)
+	assert.Equal(t, "test-config-script", scriptCM.Name)
+	assert.Contains(t, scriptCM.Data, configScriptKey)
+	assert.Contains(t, scriptCM.Data[configScriptKey], "cp /configs/cm-bluemap-defaults/core.conf")
+}
+
+func TestBuildConfigInjection_WithServerConfig(t *testing.T) {
+	server := newConfigTestServer("test")
+	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
+		{
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
+			Path:         "server.properties",
+			Overwrite:    "always",
+		},
+	}
+	plugins := []mcv1beta1.Plugin{}
+
+	initContainer, volumes, scriptCM := buildConfigInjection(server, plugins)
+
+	require.NotNil(t, initContainer)
+	require.Len(t, volumes, 2)             // config-script + 1 configmap
+	require.Len(t, initContainer.VolumeMounts, 3) // data + script + configmap
+	require.NotNil(t, scriptCM)
+}
+
+func TestBuildConfigInjection_ScriptConfigMapOwnership(t *testing.T) {
+	server := newConfigTestServer("my-server")
+	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
+		{
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
+			Path:         "server.properties",
+		},
+	}
+
+	_, _, scriptCM := buildConfigInjection(server, nil)
+
+	require.NotNil(t, scriptCM)
+	assert.Equal(t, "my-server-config-script", scriptCM.Name)
+	assert.Equal(t, "default", scriptCM.Namespace)
+}
+
+func TestBuildConfigInjection_MultipleConfigMaps(t *testing.T) {
+	server := newConfigTestServer("test")
+	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
+		{
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "config-a", Key: "file-a"},
+			Path:         "file-a",
+		},
+		{
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "config-b", Key: "file-b"},
+			Path:         "file-b",
+		},
+	}
+
+	_, volumes, _ := buildConfigInjection(server, nil)
+
+	// config-script + 2 configmap volumes
+	require.Len(t, volumes, 3)
+}

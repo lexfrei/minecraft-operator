@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	mcv1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -258,6 +260,92 @@ func buildConfigScript(
 	})
 
 	return sb.String(), refs, warnings
+}
+
+// buildConfigInjection constructs the init container, volumes, and script ConfigMap
+// needed for config injection. Returns nil for all values if no configs are defined.
+func buildConfigInjection(
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) (*corev1.Container, []corev1.Volume, *corev1.ConfigMap) {
+	script, refs, _ := buildConfigScript(server, matchedPlugins)
+	if script == "" {
+		return nil, nil, nil
+	}
+
+	// Build the script ConfigMap.
+	scriptCMName := server.Name + "-config-script"
+	scriptCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      scriptCMName,
+			Namespace: server.Namespace,
+			Labels:    standardLabels(server.Name, "config"),
+		},
+		Data: map[string]string{
+			configScriptKey: script,
+		},
+	}
+
+	// Build volumes: one for the script ConfigMap + one per referenced ConfigMap.
+	volumes := make([]corev1.Volume, 0, len(refs)+1)
+
+	// Script volume.
+	scriptVolName := "config-script"
+	defaultMode := int32(0o755)
+
+	volumes = append(volumes, corev1.Volume{
+		Name: scriptVolName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: scriptCMName},
+				DefaultMode:          &defaultMode,
+			},
+		},
+	})
+
+	// ConfigMap volumes.
+	for _, ref := range refs {
+		volumes = append(volumes, corev1.Volume{
+			Name: ref.VolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: ref.ConfigMapName},
+				},
+			},
+		})
+	}
+
+	// Build volume mounts for the init container.
+	mounts := make([]corev1.VolumeMount, 0, len(refs)+2)
+
+	// Data PVC mount.
+	mounts = append(mounts, corev1.VolumeMount{
+		Name:      "data",
+		MountPath: dataMountPath,
+	})
+
+	// Script mount.
+	mounts = append(mounts, corev1.VolumeMount{
+		Name:      scriptVolName,
+		MountPath: configScriptPath,
+	})
+
+	// ConfigMap mounts.
+	for _, ref := range refs {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      ref.VolumeName,
+			MountPath: ref.MountPath,
+		})
+	}
+
+	initContainer := &corev1.Container{
+		Name:         "config-injector",
+		Image:        "busybox:1.37",
+		Command:      []string{"sh", configScriptPath + "/" + configScriptKey},
+		VolumeMounts: mounts,
+	}
+
+	return initContainer, volumes, scriptCM
 }
 
 // buildPluginConfigEntry creates a configEntry and configMapVolumeRef for a plugin config file.
