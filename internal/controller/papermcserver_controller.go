@@ -50,8 +50,9 @@ const (
 	conditionTypeStatefulSetReady = "StatefulSetReady"
 	conditionTypeUpdateAvailable  = "UpdateAvailable"
 	conditionTypeUpdateBlocked    = "UpdateBlocked"
-	conditionTypeSolverRunning    = "SolverRunning"
-	reasonServerReconcileSuccess  = "ReconcileSuccess"
+	conditionTypeSolverRunning        = "SolverRunning"
+	conditionTypeConfigInjectionReady = "ConfigInjectionReady"
+	reasonServerReconcileSuccess      = "ReconcileSuccess"
 	reasonServerReconcileError    = "ReconcileError"
 	reasonStatefulSetCreated      = "StatefulSetCreated"
 	reasonStatefulSetNotReady     = "StatefulSetNotReady"
@@ -266,6 +267,7 @@ func (r *PaperMCServerReconciler) ensureInfrastructure(
 
 // ensureConfigScriptConfigMap creates or updates the config injection script ConfigMap.
 // If no configs are defined, this is a no-op.
+// Also validates that all referenced ConfigMaps exist and sets ConfigInjectionReady condition.
 func (r *PaperMCServerReconciler) ensureConfigScriptConfigMap(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
@@ -275,6 +277,9 @@ func (r *PaperMCServerReconciler) ensureConfigScriptConfigMap(
 	if scriptCM == nil {
 		return nil
 	}
+
+	// Validate referenced ConfigMaps exist.
+	r.validateReferencedConfigMaps(ctx, server, matchedPlugins)
 
 	// Set owner reference so the ConfigMap is garbage collected with the server.
 	if err := controllerutil.SetControllerReference(server, scriptCM, r.Scheme); err != nil {
@@ -314,6 +319,56 @@ func (r *PaperMCServerReconciler) ensureConfigScriptConfigMap(
 	}
 
 	return nil
+}
+
+// validateReferencedConfigMaps checks that all ConfigMaps referenced by config
+// injection actually exist in the namespace. Sets ConfigInjectionReady condition.
+func (r *PaperMCServerReconciler) validateReferencedConfigMaps(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) {
+	refs := collectReferencedConfigMaps(server, matchedPlugins)
+	if len(refs) == 0 {
+		return
+	}
+
+	var missing []string
+
+	for _, ref := range refs {
+		var cm corev1.ConfigMap
+
+		err := r.Get(ctx, client.ObjectKey{
+			Name:      ref.Name,
+			Namespace: server.Namespace,
+		}, &cm)
+
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				missing = append(missing, fmt.Sprintf("%s/%s", ref.Name, ref.Key))
+			} else {
+				slog.WarnContext(ctx, "Failed to check ConfigMap existence",
+					"error", err, "configmap", ref.Name)
+				missing = append(missing, fmt.Sprintf("%s/%s (check failed)", ref.Name, ref.Key))
+			}
+
+			continue
+		}
+
+		// Check if the key exists in the ConfigMap.
+		if _, exists := cm.Data[ref.Key]; !exists {
+			missing = append(missing, fmt.Sprintf("%s/%s (key not found)", ref.Name, ref.Key))
+		}
+	}
+
+	if len(missing) > 0 {
+		r.setCondition(server, conditionTypeConfigInjectionReady, metav1.ConditionFalse,
+			"ConfigMapsMissing",
+			fmt.Sprintf("Referenced ConfigMaps not found: %s", strings.Join(missing, ", ")))
+	} else {
+		r.setCondition(server, conditionTypeConfigInjectionReady, metav1.ConditionTrue,
+			"ConfigMapsReady", "All referenced ConfigMaps are available")
+	}
 }
 
 // updateServerStatus updates all status fields for the server.

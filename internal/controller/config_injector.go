@@ -348,6 +348,43 @@ func buildConfigInjection(
 	return initContainer, volumes, scriptCM
 }
 
+// collectReferencedConfigMaps returns all unique ConfigMapKeyRef entries referenced by
+// plugin configs, server plugin config overrides, and server configs.
+// Used for pre-flight validation of ConfigMap existence.
+func collectReferencedConfigMaps(
+	server *mcv1beta1.PaperMCServer,
+	matchedPlugins []mcv1beta1.Plugin,
+) []mcv1beta1.ConfigMapKeyRef {
+	seen := make(map[string]bool)
+	var refs []mcv1beta1.ConfigMapKeyRef
+
+	addRef := func(ref mcv1beta1.ConfigMapKeyRef) {
+		key := ref.Name + "/" + ref.Key
+		if !seen[key] {
+			seen[key] = true
+			refs = append(refs, ref)
+		}
+	}
+
+	for i := range matchedPlugins {
+		for _, cfg := range matchedPlugins[i].Spec.Configs {
+			addRef(cfg.ConfigMapRef)
+		}
+	}
+
+	for _, pc := range server.Spec.PluginConfigs {
+		for _, cfg := range pc.Configs {
+			addRef(cfg.ConfigMapRef)
+		}
+	}
+
+	for _, cfg := range server.Spec.ServerConfigs {
+		addRef(cfg.ConfigMapRef)
+	}
+
+	return refs
+}
+
 // buildPluginConfigEntry creates a configEntry and configMapVolumeRef for a plugin config file.
 func buildPluginConfigEntry(
 	dirName string,

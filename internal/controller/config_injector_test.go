@@ -498,3 +498,62 @@ func TestBuildConfigInjection_MultipleConfigMaps(t *testing.T) {
 	// config-script + 2 configmap volumes
 	require.Len(t, volumes, 3)
 }
+
+// --- collectReferencedConfigMaps tests ---
+
+func TestCollectReferencedConfigMaps_NoConfigs(t *testing.T) {
+	server := newConfigTestServer("test")
+	refs := collectReferencedConfigMaps(server, nil)
+	assert.Empty(t, refs)
+}
+
+func TestCollectReferencedConfigMaps_PluginConfigs(t *testing.T) {
+	server := newConfigTestServer("test")
+	plugins := []mcv1beta1.Plugin{
+		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
+			{
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
+				Path:         "core.conf",
+			},
+		}),
+	}
+
+	refs := collectReferencedConfigMaps(server, plugins)
+	require.Len(t, refs, 1)
+	assert.Equal(t, "bluemap-defaults", refs[0].Name)
+	assert.Equal(t, "core.conf", refs[0].Key)
+}
+
+func TestCollectReferencedConfigMaps_ServerConfigs(t *testing.T) {
+	server := newConfigTestServer("test")
+	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
+		{
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
+			Path:         "server.properties",
+		},
+	}
+
+	refs := collectReferencedConfigMaps(server, nil)
+	require.Len(t, refs, 1)
+	assert.Equal(t, "mc-config", refs[0].Name)
+}
+
+func TestCollectReferencedConfigMaps_Deduplicates(t *testing.T) {
+	server := newConfigTestServer("test")
+	plugins := []mcv1beta1.Plugin{
+		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
+			{
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "shared-config", Key: "core.conf"},
+				Path:         "core.conf",
+			},
+			{
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "shared-config", Key: "render.conf"},
+				Path:         "render.conf",
+			},
+		}),
+	}
+
+	refs := collectReferencedConfigMaps(server, plugins)
+	// Two files from same ConfigMap but different keys => 2 refs (since they're different key refs)
+	require.Len(t, refs, 2)
+}
