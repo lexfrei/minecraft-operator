@@ -474,8 +474,23 @@ func (r *PaperMCServerReconciler) ensureStatefulSet(
 	}, &statefulSet)
 
 	if err == nil {
-		// StatefulSet exists
-		slog.InfoContext(ctx, "StatefulSet already exists", "name", statefulSetName)
+		// StatefulSet exists — check if pod template needs updating.
+		desired, buildErr := r.buildStatefulSet(server, matchedPlugins)
+		if buildErr != nil {
+			return &statefulSet, errors.Wrap(buildErr, "failed to build desired statefulset for comparison")
+		}
+
+		if !reflect.DeepEqual(statefulSet.Spec.Template.Spec.InitContainers, desired.Spec.Template.Spec.InitContainers) ||
+			!reflect.DeepEqual(statefulSet.Spec.Template.Spec.Volumes, desired.Spec.Template.Spec.Volumes) ||
+			statefulSet.Spec.Template.Spec.Containers[0].Image != desired.Spec.Template.Spec.Containers[0].Image {
+			slog.InfoContext(ctx, "Updating StatefulSet pod template", "name", statefulSetName)
+			statefulSet.Spec.Template = desired.Spec.Template
+
+			if updateErr := r.Update(ctx, &statefulSet); updateErr != nil {
+				return nil, errors.Wrap(updateErr, "failed to update statefulset")
+			}
+		}
+
 		return &statefulSet, nil
 	}
 
