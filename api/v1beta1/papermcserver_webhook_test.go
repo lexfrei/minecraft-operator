@@ -790,6 +790,84 @@ func TestServerValidateCreate_ServerConfigsSubdirectoryPath(t *testing.T) {
 	assert.Empty(t, warnings)
 }
 
+// --- ValidateUpdate tests for pluginConfigs and serverConfigs ---
+
+func TestServerValidateUpdate_ValidPluginConfigs(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	oldS := validServer()
+	newS := validServer()
+	newS.Spec.PluginConfigs = []ServerPluginConfig{
+		{
+			PluginName: "bluemap",
+			Configs: []PluginConfigFile{
+				{
+					ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-config", Key: "core.conf"},
+					Path:         "core.conf",
+					Overwrite:    "always",
+				},
+			},
+		},
+	}
+
+	warnings, err := v.ValidateUpdate(context.Background(), oldS, newS)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestServerValidateUpdate_InvalidPluginConfigsPathTraversal(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	oldS := validServer()
+	newS := validServer()
+	newS.Spec.PluginConfigs = []ServerPluginConfig{
+		{
+			PluginName: "bluemap",
+			Configs: []PluginConfigFile{
+				{
+					ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
+					Path:         "../etc/passwd",
+				},
+			},
+		},
+	}
+
+	_, err := v.ValidateUpdate(context.Background(), oldS, newS)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "..")
+}
+
+func TestServerValidateUpdate_ValidServerConfigs(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	oldS := validServer()
+	newS := validServer()
+	newS.Spec.ServerConfigs = []ServerConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
+			Path:         "server.properties",
+			Overwrite:    "always",
+		},
+	}
+
+	warnings, err := v.ValidateUpdate(context.Background(), oldS, newS)
+	require.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestServerValidateUpdate_InvalidServerConfigs(t *testing.T) {
+	v := &PaperMCServerValidator{}
+	oldS := validServer()
+	newS := validServer()
+	newS.Spec.ServerConfigs = []ServerConfigFile{
+		{
+			ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
+			Path:         "/etc/passwd",
+		},
+	}
+
+	_, err := v.ValidateUpdate(context.Background(), oldS, newS)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path")
+}
+
 func TestServerValidateCreate_MixedPluginAndServerConfigs(t *testing.T) {
 	v := &PaperMCServerValidator{}
 	s := validServer()

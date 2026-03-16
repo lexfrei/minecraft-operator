@@ -405,7 +405,7 @@ func TestBuildConfigInjection_WithPluginConfig(t *testing.T) {
 
 	require.NotNil(t, initContainer)
 	assert.Equal(t, "config-injector", initContainer.Name)
-	assert.Equal(t, "busybox:1.37", initContainer.Image)
+	assert.Equal(t, ConfigInjectorImage, initContainer.Image)
 	assert.Equal(t, []string{"sh", "/scripts/inject-configs.sh"}, initContainer.Command)
 
 	// Should have: data volume + config-script volume + 1 ConfigMap volume
@@ -478,7 +478,7 @@ func TestBuildConfigInjection_InitContainerSecurityDefaults(t *testing.T) {
 
 	require.NotNil(t, initContainer)
 	assert.Equal(t, "config-injector", initContainer.Name)
-	assert.Equal(t, "busybox:1.37", initContainer.Image)
+	assert.Equal(t, ConfigInjectorImage, initContainer.Image)
 
 	// SecurityContext hardening: privilege escalation blocked, read-only root, all caps dropped.
 	require.NotNil(t, initContainer.SecurityContext, "init container must have SecurityContext")

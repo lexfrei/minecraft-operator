@@ -289,7 +289,8 @@ func (r *PaperMCServerReconciler) ensureConfigScriptConfigMap(
 	if scriptCM == nil {
 		// Clear stale condition when no configs are configured.
 		meta.RemoveStatusCondition(&server.Status.Conditions, conditionTypeConfigInjectionReady)
-		return nil
+
+		return r.deleteOrphanedConfigScriptConfigMap(ctx, server)
 	}
 
 	// Validate referenced ConfigMaps exist.
@@ -335,6 +336,30 @@ func (r *PaperMCServerReconciler) ensureConfigScriptConfigMap(
 	return nil
 }
 
+// deleteOrphanedConfigScriptConfigMap removes the config script ConfigMap when
+// no configs are defined. This prevents stale ConfigMaps from lingering after
+// all configs are removed from the server spec.
+func (r *PaperMCServerReconciler) deleteOrphanedConfigScriptConfigMap(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+) error {
+	var existing corev1.ConfigMap
+
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      server.Name + "-config-script",
+		Namespace: server.Namespace,
+	}, &existing)
+	if err == nil {
+		if delErr := r.Delete(ctx, &existing); delErr != nil && !apierrors.IsNotFound(delErr) {
+			return errors.Wrap(delErr, "failed to delete orphaned config script configmap")
+		}
+	} else if !apierrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to check for orphaned config script configmap")
+	}
+
+	return nil
+}
+
 // validateReferencedConfigMaps checks that all ConfigMaps referenced by config
 // injection actually exist in the namespace. Sets ConfigInjectionReady condition.
 func (r *PaperMCServerReconciler) validateReferencedConfigMaps(
@@ -369,9 +394,11 @@ func (r *PaperMCServerReconciler) validateReferencedConfigMaps(
 			continue
 		}
 
-		// Check if the key exists in the ConfigMap.
-		if _, exists := cm.Data[ref.Key]; !exists {
-			missing = append(missing, fmt.Sprintf("%s/%s (key not found)", ref.Name, ref.Key))
+		// Check if the key exists in the ConfigMap (Data or BinaryData).
+		if _, inData := cm.Data[ref.Key]; !inData {
+			if _, inBinary := cm.BinaryData[ref.Key]; !inBinary {
+				missing = append(missing, fmt.Sprintf("%s/%s (key not found)", ref.Name, ref.Key))
+			}
 		}
 	}
 
@@ -483,7 +510,7 @@ func (r *PaperMCServerReconciler) ensureStatefulSet(
 		}
 
 		if !reflect.DeepEqual(statefulSet.Spec.Template.Spec.InitContainers, desired.Spec.Template.Spec.InitContainers) ||
-			!reflect.DeepEqual(statefulSet.Spec.Template.Spec.Volumes, desired.Spec.Template.Spec.Volumes) ||
+			volumesChanged(statefulSet.Spec.Template.Spec.Volumes, desired.Spec.Template.Spec.Volumes) ||
 			statefulSet.Spec.Template.Spec.Containers[0].Image != desired.Spec.Template.Spec.Containers[0].Image {
 			slog.InfoContext(ctx, "Updating StatefulSet pod template", "name", statefulSetName)
 			statefulSet.Spec.Template = desired.Spec.Template

@@ -19,6 +19,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ConfigInjectorImage is the image used for the config injector init container.
+// Pinned to busybox 1.37.0 multi-arch manifest digest for reproducibility.
+// Future: make configurable via Helm values.
+var ConfigInjectorImage = "busybox@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f" //nolint:gochecknoglobals // package-level config
+
 const (
 	// maxVolumeNameLength is the maximum length for Kubernetes volume names (DNS label).
 	maxVolumeNameLength = 63
@@ -350,7 +355,7 @@ func buildConfigInjection(
 
 	initContainer := &corev1.Container{
 		Name:         "config-injector",
-		Image:        "busybox:1.37",
+		Image:        ConfigInjectorImage,
 		Command:      []string{"sh", configScriptPath + "/" + configScriptKey},
 		VolumeMounts: mounts,
 		SecurityContext: &corev1.SecurityContext{
