@@ -262,19 +262,14 @@ func validatePluginConfigs(p *Plugin, specPath *field.Path) field.ErrorList {
 	return errs
 }
 
-// shellUnsafeChars are characters that can break shell quoting or enable injection.
-// These are rejected in pluginDirName, source.project, config paths, and ConfigMap keys at admission time.
-var shellUnsafeChars = []string{`"`, "'", "`", "$", `\`, "\n", "\r"}
+// safeShellPattern matches strings containing only safe characters for shell interpolation.
+// Allows: alphanumeric, dash, underscore, dot, forward slash (for paths), space is NOT allowed.
+var safeShellPattern = regexp.MustCompile(`^[a-zA-Z0-9._/-]+$`)
 
-// containsShellUnsafeChars returns true if s contains any shell-unsafe characters.
+// containsShellUnsafeChars returns true if s contains characters unsafe for shell interpolation.
+// Uses a whitelist approach: only alphanumeric, dash, underscore, dot, and forward slash are allowed.
 func containsShellUnsafeChars(s string) bool {
-	for _, ch := range shellUnsafeChars {
-		if strings.Contains(s, ch) {
-			return true
-		}
-	}
-
-	return false
+	return !safeShellPattern.MatchString(s)
 }
 
 // validateSafeName checks a name doesn't contain path traversal or shell-unsafe characters.

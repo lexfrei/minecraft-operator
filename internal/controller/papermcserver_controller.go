@@ -287,6 +287,8 @@ func (r *PaperMCServerReconciler) ensureConfigScriptConfigMap(
 ) error {
 	_, _, scriptCM := buildConfigInjection(server, matchedPlugins)
 	if scriptCM == nil {
+		// Clear stale condition when no configs are configured.
+		meta.RemoveStatusCondition(&server.Status.Conditions, conditionTypeConfigInjectionReady)
 		return nil
 	}
 
