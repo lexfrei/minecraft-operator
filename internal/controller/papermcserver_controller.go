@@ -46,26 +46,26 @@ import (
 )
 
 const (
-	conditionTypeServerReady      = "Ready"
-	conditionTypeStatefulSetReady = "StatefulSetReady"
-	conditionTypeUpdateAvailable  = "UpdateAvailable"
-	conditionTypeUpdateBlocked    = "UpdateBlocked"
+	conditionTypeServerReady          = "Ready"
+	conditionTypeStatefulSetReady     = "StatefulSetReady"
+	conditionTypeUpdateAvailable      = "UpdateAvailable"
+	conditionTypeUpdateBlocked        = "UpdateBlocked"
 	conditionTypeSolverRunning        = "SolverRunning"
 	conditionTypeConfigInjectionReady = "ConfigInjectionReady"
 	reasonServerReconcileSuccess      = "ReconcileSuccess"
-	reasonServerReconcileError    = "ReconcileError"
-	reasonStatefulSetCreated      = "StatefulSetCreated"
-	reasonStatefulSetNotReady     = "StatefulSetNotReady"
-	reasonStatefulSetReady        = "StatefulSetReady"
-	reasonUpdateFound             = "UpdateFound"
-	reasonNoUpdate                = "NoUpdate"
-	reasonUpdateBlocked           = "UpdateBlocked"
-	reasonUpdateUnblocked         = "UpdateUnblocked"
-	reasonSolverStarted           = "SolverStarted"
-	reasonSolverCompleted         = "SolverCompleted"
-	reasonSolverFailed            = "SolverFailed"
-	defaultStorageSize            = "10Gi"
-	defaultTerminationGracePeriod = int64(300)
+	reasonServerReconcileError        = "ReconcileError"
+	reasonStatefulSetCreated          = "StatefulSetCreated"
+	reasonStatefulSetNotReady         = "StatefulSetNotReady"
+	reasonStatefulSetReady            = "StatefulSetReady"
+	reasonUpdateFound                 = "UpdateFound"
+	reasonNoUpdate                    = "NoUpdate"
+	reasonUpdateBlocked               = "UpdateBlocked"
+	reasonUpdateUnblocked             = "UpdateUnblocked"
+	reasonSolverStarted               = "SolverStarted"
+	reasonSolverCompleted             = "SolverCompleted"
+	reasonSolverFailed                = "SolverFailed"
+	defaultStorageSize                = "10Gi"
+	defaultTerminationGracePeriod     = int64(300)
 )
 
 // PaperAPI abstracts PaperMC API operations for testability.

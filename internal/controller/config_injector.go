@@ -102,33 +102,63 @@ func buildConfigScript(
 	server *mcv1beta1.PaperMCServer,
 	matchedPlugins []mcv1beta1.Plugin,
 ) (string, []configMapVolumeRef, []string) {
-	var entries []configEntry
-	var warnings []string
+	refMap := make(map[string]configMapVolumeRef)
+	serverOverrides := buildServerOverridesMap(server)
 
-	refMap := make(map[string]configMapVolumeRef) // keyed by ConfigMap name
+	entries, consumedOverrides := collectPluginConfigEntries(matchedPlugins, serverOverrides, refMap)
 
-	// Build a lookup of server plugin config overrides by plugin name.
-	serverOverrides := make(map[string]map[string]mcv1beta1.PluginConfigFile) // pluginName -> path -> config
+	// Process unmatched server plugin overrides.
+	unmatchedEntries, warnings := collectUnmatchedOverrideEntries(serverOverrides, consumedOverrides, refMap)
+	entries = append(entries, unmatchedEntries...)
+
+	// Process server-level configs.
+	entries = append(entries, collectServerConfigEntries(server, refMap)...)
+
+	if len(entries) == 0 {
+		return "", nil, nil
+	}
+
+	script := renderConfigScript(entries)
+	refs := sortedConfigMapRefs(refMap)
+
+	return script, refs, warnings
+}
+
+// buildServerOverridesMap builds a lookup of server plugin config overrides by plugin name.
+func buildServerOverridesMap(
+	server *mcv1beta1.PaperMCServer,
+) map[string]map[string]mcv1beta1.PluginConfigFile {
+	overrides := make(map[string]map[string]mcv1beta1.PluginConfigFile)
+
 	for _, pc := range server.Spec.PluginConfigs {
-		if _, exists := serverOverrides[pc.PluginName]; !exists {
-			serverOverrides[pc.PluginName] = make(map[string]mcv1beta1.PluginConfigFile)
+		if _, exists := overrides[pc.PluginName]; !exists {
+			overrides[pc.PluginName] = make(map[string]mcv1beta1.PluginConfigFile)
 		}
 
 		for _, cfg := range pc.Configs {
-			serverOverrides[pc.PluginName][cfg.Path] = cfg
+			overrides[pc.PluginName][cfg.Path] = cfg
 		}
 	}
 
-	// Track which server overrides were consumed (to detect unmatched ones).
-	consumedOverrides := make(map[string]bool) // pluginName
+	return overrides
+}
 
-	// Process matched plugins.
+// collectPluginConfigEntries processes matched plugins and their config files,
+// applying server overrides where applicable.
+func collectPluginConfigEntries(
+	matchedPlugins []mcv1beta1.Plugin,
+	serverOverrides map[string]map[string]mcv1beta1.PluginConfigFile,
+	refMap map[string]configMapVolumeRef,
+) ([]configEntry, map[string]bool) {
+	var entries []configEntry
+
+	consumedOverrides := make(map[string]bool)
+
 	for i := range matchedPlugins {
 		plugin := &matchedPlugins[i]
 		dirName := resolvePluginDirName(plugin)
 
 		if dirName == "" || len(plugin.Spec.Configs) == 0 {
-			// Check if server has overrides for this plugin even without defaults.
 			if overrides, exists := serverOverrides[plugin.Name]; exists {
 				consumedOverrides[plugin.Name] = true
 
@@ -143,44 +173,70 @@ func buildConfigScript(
 		}
 
 		consumedOverrides[plugin.Name] = true
+		pluginEntries := resolvePluginConfigs(plugin, dirName, serverOverrides, refMap)
+		entries = append(entries, pluginEntries...)
+	}
 
-		for _, pluginCfg := range plugin.Spec.Configs {
-			// Check if server has an override for this path.
-			effectiveCfg := pluginCfg
-			if overrides, exists := serverOverrides[plugin.Name]; exists {
-				if override, found := overrides[pluginCfg.Path]; found {
-					effectiveCfg = override
-				}
+	return entries, consumedOverrides
+}
+
+// resolvePluginConfigs resolves config entries for a single plugin with server overrides.
+func resolvePluginConfigs(
+	plugin *mcv1beta1.Plugin,
+	dirName string,
+	serverOverrides map[string]map[string]mcv1beta1.PluginConfigFile,
+	refMap map[string]configMapVolumeRef,
+) []configEntry {
+	var entries []configEntry
+
+	for _, pluginCfg := range plugin.Spec.Configs {
+		effectiveCfg := pluginCfg
+		if overrides, exists := serverOverrides[plugin.Name]; exists {
+			if override, found := overrides[pluginCfg.Path]; found {
+				effectiveCfg = override
 			}
-
-			entry, ref := buildPluginConfigEntry(dirName, effectiveCfg)
-			entries = append(entries, entry)
-			refMap[ref.ConfigMapName] = ref
 		}
 
-		// Add any server overrides for paths not in plugin defaults.
-		if overrides, exists := serverOverrides[plugin.Name]; exists {
-			for path, cfg := range overrides {
-				found := false
+		entry, ref := buildPluginConfigEntry(dirName, effectiveCfg)
+		entries = append(entries, entry)
+		refMap[ref.ConfigMapName] = ref
+	}
 
-				for _, pluginCfg := range plugin.Spec.Configs {
-					if pluginCfg.Path == path {
-						found = true
-
-						break
-					}
-				}
-
-				if !found {
-					entry, ref := buildPluginConfigEntry(dirName, cfg)
-					entries = append(entries, entry)
-					refMap[ref.ConfigMapName] = ref
-				}
+	// Add server overrides for paths not in plugin defaults.
+	if overrides, exists := serverOverrides[plugin.Name]; exists {
+		for path, cfg := range overrides {
+			if !pluginHasConfigPath(plugin, path) {
+				entry, ref := buildPluginConfigEntry(dirName, cfg)
+				entries = append(entries, entry)
+				refMap[ref.ConfigMapName] = ref
 			}
 		}
 	}
 
-	// Process unmatched server plugin overrides (plugin not in matchedPlugins).
+	return entries
+}
+
+// pluginHasConfigPath checks if a plugin has a config file at the given path.
+func pluginHasConfigPath(plugin *mcv1beta1.Plugin, path string) bool {
+	for _, cfg := range plugin.Spec.Configs {
+		if cfg.Path == path {
+			return true
+		}
+	}
+
+	return false
+}
+
+// collectUnmatchedOverrideEntries processes server plugin config overrides for plugins
+// not in the matched set. Returns entries and warning messages.
+func collectUnmatchedOverrideEntries(
+	serverOverrides map[string]map[string]mcv1beta1.PluginConfigFile,
+	consumedOverrides map[string]bool,
+	refMap map[string]configMapVolumeRef,
+) ([]configEntry, []string) {
+	var entries []configEntry
+	var warnings []string
+
 	for pluginName, overrides := range serverOverrides {
 		if consumedOverrides[pluginName] {
 			continue
@@ -190,14 +246,22 @@ func buildConfigScript(
 			fmt.Sprintf("pluginConfigs references plugin %q which is not matched to this server", pluginName))
 
 		for _, cfg := range overrides {
-			// Use pluginName as dirName since we don't have the plugin's pluginDirName.
 			entry, ref := buildPluginConfigEntry(pluginName, cfg)
 			entries = append(entries, entry)
 			refMap[ref.ConfigMapName] = ref
 		}
 	}
 
-	// Process server-level configs.
+	return entries, warnings
+}
+
+// collectServerConfigEntries processes server-level config files.
+func collectServerConfigEntries(
+	server *mcv1beta1.PaperMCServer,
+	refMap map[string]configMapVolumeRef,
+) []configEntry {
+	entries := make([]configEntry, 0, len(server.Spec.ServerConfigs))
+
 	for _, cfg := range server.Spec.ServerConfigs {
 		volName := configMapVolumeName(cfg.ConfigMapRef.Name)
 		sourcePath := fmt.Sprintf("%s/%s/%s", configMountBase, volName, cfg.ConfigMapRef.Key)
@@ -222,34 +286,37 @@ func buildConfigScript(
 		refMap[ref.ConfigMapName] = ref
 	}
 
-	if len(entries) == 0 {
-		return "", nil, nil
-	}
+	return entries
+}
 
-	// Build the script.
+// renderConfigScript generates the shell script from config entries.
+func renderConfigScript(entries []configEntry) string {
 	var sb strings.Builder
 
 	sb.WriteString("#!/bin/sh\nset -e\n")
 
 	for _, entry := range entries {
-		sb.WriteString(fmt.Sprintf("# %s\n", entry.comment))
+		fmt.Fprintf(&sb, "# %s\n", entry.comment)
 
-		// Ensure parent directory exists.
 		dir := filepath.Dir(entry.targetPath)
 		if dir != "." && dir != "/" {
-			sb.WriteString(fmt.Sprintf("mkdir -p %s\n", dir))
+			fmt.Fprintf(&sb, "mkdir -p %s\n", dir)
 		}
 
 		if entry.overwrite == "ifNotExists" {
-			sb.WriteString(fmt.Sprintf("if [ ! -f %s ]; then\n", entry.targetPath))
-			sb.WriteString(fmt.Sprintf("  cp %s %s\n", entry.sourcePath, entry.targetPath))
+			fmt.Fprintf(&sb, "if [ ! -f %s ]; then\n", entry.targetPath)
+			fmt.Fprintf(&sb, "  cp %s %s\n", entry.sourcePath, entry.targetPath)
 			sb.WriteString("fi\n")
 		} else {
-			sb.WriteString(fmt.Sprintf("cp %s %s\n", entry.sourcePath, entry.targetPath))
+			fmt.Fprintf(&sb, "cp %s %s\n", entry.sourcePath, entry.targetPath)
 		}
 	}
 
-	// Collect and sort refs for deterministic output.
+	return sb.String()
+}
+
+// sortedConfigMapRefs extracts and sorts ConfigMap volume refs from the map.
+func sortedConfigMapRefs(refMap map[string]configMapVolumeRef) []configMapVolumeRef {
 	refs := make([]configMapVolumeRef, 0, len(refMap))
 	for _, ref := range refMap {
 		refs = append(refs, ref)
@@ -259,7 +326,7 @@ func buildConfigScript(
 		return refs[i].ConfigMapName < refs[j].ConfigMapName
 	})
 
-	return sb.String(), refs, warnings
+	return refs
 }
 
 // buildConfigInjection constructs the init container, volumes, and script ConfigMap
@@ -273,28 +340,42 @@ func buildConfigInjection(
 		return nil, nil, nil
 	}
 
-	// Build the script ConfigMap.
 	scriptCMName := server.Name + "-config-script"
-	scriptCM := &corev1.ConfigMap{
+	scriptCM := buildScriptConfigMap(scriptCMName, server.Namespace, server.Name, script)
+	volumes := buildConfigVolumes(scriptCMName, refs)
+	mounts := buildConfigVolumeMounts(refs)
+
+	initContainer := &corev1.Container{
+		Name:         "config-injector",
+		Image:        "busybox:1.37",
+		Command:      []string{"sh", configScriptPath + "/" + configScriptKey},
+		VolumeMounts: mounts,
+	}
+
+	return initContainer, volumes, scriptCM
+}
+
+// buildScriptConfigMap creates the ConfigMap containing the config injection script.
+func buildScriptConfigMap(name, namespace, serverName, script string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scriptCMName,
-			Namespace: server.Namespace,
-			Labels:    standardLabels(server.Name, "config"),
+			Name:      name,
+			Namespace: namespace,
+			Labels:    standardLabels(serverName, "config"),
 		},
 		Data: map[string]string{
 			configScriptKey: script,
 		},
 	}
+}
 
-	// Build volumes: one for the script ConfigMap + one per referenced ConfigMap.
+// buildConfigVolumes creates volumes for the script ConfigMap and referenced ConfigMaps.
+func buildConfigVolumes(scriptCMName string, refs []configMapVolumeRef) []corev1.Volume {
 	volumes := make([]corev1.Volume, 0, len(refs)+1)
-
-	// Script volume.
-	scriptVolName := "config-script"
 	defaultMode := int32(0o755)
 
 	volumes = append(volumes, corev1.Volume{
-		Name: scriptVolName,
+		Name: "config-script",
 		VolumeSource: corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{Name: scriptCMName},
@@ -303,7 +384,6 @@ func buildConfigInjection(
 		},
 	})
 
-	// ConfigMap volumes.
 	for _, ref := range refs {
 		volumes = append(volumes, corev1.Volume{
 			Name: ref.VolumeName,
@@ -315,22 +395,18 @@ func buildConfigInjection(
 		})
 	}
 
-	// Build volume mounts for the init container.
+	return volumes
+}
+
+// buildConfigVolumeMounts creates volume mounts for the config injector init container.
+func buildConfigVolumeMounts(refs []configMapVolumeRef) []corev1.VolumeMount {
 	mounts := make([]corev1.VolumeMount, 0, len(refs)+2)
 
-	// Data PVC mount.
-	mounts = append(mounts, corev1.VolumeMount{
-		Name:      "data",
-		MountPath: dataMountPath,
-	})
+	mounts = append(mounts,
+		corev1.VolumeMount{Name: "data", MountPath: dataMountPath},
+		corev1.VolumeMount{Name: "config-script", MountPath: configScriptPath},
+	)
 
-	// Script mount.
-	mounts = append(mounts, corev1.VolumeMount{
-		Name:      scriptVolName,
-		MountPath: configScriptPath,
-	})
-
-	// ConfigMap mounts.
 	for _, ref := range refs {
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      ref.VolumeName,
@@ -338,14 +414,7 @@ func buildConfigInjection(
 		})
 	}
 
-	initContainer := &corev1.Container{
-		Name:         "config-injector",
-		Image:        "busybox:1.37",
-		Command:      []string{"sh", configScriptPath + "/" + configScriptKey},
-		VolumeMounts: mounts,
-	}
-
-	return initContainer, volumes, scriptCM
+	return mounts
 }
 
 // collectReferencedConfigMaps returns all unique ConfigMapKeyRef entries referenced by

@@ -443,7 +443,7 @@ func TestBuildConfigInjection_WithServerConfig(t *testing.T) {
 	initContainer, volumes, scriptCM := buildConfigInjection(server, plugins)
 
 	require.NotNil(t, initContainer)
-	require.Len(t, volumes, 2)             // config-script + 1 configmap
+	require.Len(t, volumes, 2)                    // config-script + 1 configmap
 	require.Len(t, initContainer.VolumeMounts, 3) // data + script + configmap
 	require.NotNil(t, scriptCM)
 }

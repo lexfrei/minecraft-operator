@@ -24,6 +24,7 @@ const (
 	testPluginVersion   = "2.5.0"
 	testExampleJARURL   = "https://example.com/plugin.jar"
 	testExampleChecksum = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	testPluginDirName   = "BlueMap"
 )
 
 func validPlugin() *Plugin {
@@ -305,7 +306,7 @@ func TestPluginValidateDelete_AlwaysAllowed(t *testing.T) {
 func TestPluginValidateCreate_ConfigsValid(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
-	p.Spec.PluginDirName = "BlueMap"
+	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
 			ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
@@ -337,7 +338,7 @@ func TestPluginValidateCreate_ConfigsWithoutPluginDirName(t *testing.T) {
 func TestPluginValidateCreate_ConfigPathTraversal(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
-	p.Spec.PluginDirName = "BlueMap"
+	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
 			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
@@ -353,7 +354,7 @@ func TestPluginValidateCreate_ConfigPathTraversal(t *testing.T) {
 func TestPluginValidateCreate_ConfigAbsolutePath(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
-	p.Spec.PluginDirName = "BlueMap"
+	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
 			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
@@ -369,7 +370,7 @@ func TestPluginValidateCreate_ConfigAbsolutePath(t *testing.T) {
 func TestPluginValidateCreate_ConfigEmptyPath(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
-	p.Spec.PluginDirName = "BlueMap"
+	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
 			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
@@ -385,7 +386,7 @@ func TestPluginValidateCreate_ConfigEmptyPath(t *testing.T) {
 func TestPluginValidateCreate_ConfigEmptyConfigMapRef(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
-	p.Spec.PluginDirName = "BlueMap"
+	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
 			ConfigMapRef: ConfigMapKeyRef{Name: "", Key: "test"},
@@ -433,7 +434,7 @@ func TestPluginValidateCreate_PluginDirNameWithSlash(t *testing.T) {
 func TestPluginValidateCreate_ConfigDuplicatePaths(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
-	p.Spec.PluginDirName = "BlueMap"
+	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
 			ConfigMapRef: ConfigMapKeyRef{Name: "a", Key: "x"},
@@ -453,7 +454,7 @@ func TestPluginValidateCreate_ConfigDuplicatePaths(t *testing.T) {
 func TestPluginValidateCreate_ConfigNestedPath(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
-	p.Spec.PluginDirName = "BlueMap"
+	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
 			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "overworld"},
