@@ -89,6 +89,41 @@ spec:
                     description: Enabled determines if Gateway API routes are created
                       for this server.
                     type: boolean
+                  httpRoutes:
+                    description: |-
+                      HTTPRoutes configures HTTPRoute resources for plugin HTTP endpoints.
+                      Each entry creates an HTTPRoute resource routing to the plugin's HTTP port on this server.
+                      Requires gateway.enabled=true and at least one parentRef.
+                    items:
+                      description: |-
+                        PluginHTTPRoute configures an HTTPRoute for a plugin's HTTP endpoint.
+                        The plugin must be matched to this server via instanceSelector and must expose
+                        an endpoint with protocol HTTP matching the specified endpointName.
+                      properties:
+                        endpointName:
+                          description: EndpointName is the name of the endpoint within
+                            the plugin's endpoints list.
+                          type: string
+                        hostname:
+                          description: Hostname is the FQDN for this HTTPRoute (e.g.,
+                            "map.minecraft.example.com").
+                          minLength: 1
+                          type: string
+                        pathPrefix:
+                          description: |-
+                            PathPrefix is an optional path prefix for the HTTPRoute (e.g., "/map").
+                            If empty, matches all paths for the hostname.
+                          type: string
+                        pluginName:
+                          description: PluginName is the name of the Plugin resource
+                            (must be in same namespace).
+                          type: string
+                      required:
+                      - endpointName
+                      - hostname
+                      - pluginName
+                      type: object
+                    type: array
                   parentRefs:
                     description: ParentRefs are references to the Gateway(s) that
                       routes should attach to.

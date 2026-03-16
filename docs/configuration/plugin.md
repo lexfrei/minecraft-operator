@@ -160,21 +160,35 @@ spec:
           - staging
 ```
 
-### port
+### endpoints
 
-**Optional** — Network port exposed by the plugin. Added to matched servers' Services.
+**Optional** — Network endpoints exposed by the plugin. Each endpoint creates a port on matched servers' Services.
 
-Useful for plugins with web interfaces (Dynmap, BlueMap, Plan).
+Useful for plugins with web interfaces (Dynmap, BlueMap, Plan) or custom protocols.
+
+| Field | Description |
+|-------|-------------|
+| `name` | Unique endpoint name within the plugin (DNS label format) |
+| `port` | Port number (1-65535) |
+| `protocol` | `TCP`, `UDP`, or `HTTP` (default: `TCP`) |
 
 ```yaml
 spec:
-  port: 8123  # Dynmap web interface
+  endpoints:
+    - name: web-ui
+      port: 8123
+      protocol: HTTP
+    - name: metrics
+      port: 9100
+      protocol: TCP
 ```
 
 !!! info "Port Handling"
 
-    The port is added as both TCP and UDP to the Service.
-    Port name format: `plugin-{port}-tcp` / `plugin-{port}-udp`
+    - **TCP/HTTP** endpoints create a TCP Service port
+    - **UDP** endpoints create a UDP Service port
+    - **HTTP** endpoints additionally enable HTTPRoute creation on servers with `gateway.httpRoutes` configured
+    - Port name format: `ep-{port}-{proto}` (e.g., `ep-8123-tcp`)
 
 ### compatibilityOverride
 
@@ -287,7 +301,10 @@ spec:
       environment: production
 
   # Expose BlueMap web interface
-  port: 8100
+  endpoints:
+    - name: web-ui
+      port: 8100
+      protocol: HTTP
 
 ---
 apiVersion: mc.k8s.lex.la/v1beta1

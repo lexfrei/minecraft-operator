@@ -58,7 +58,27 @@ type RCONConfig struct {
 	Port int32 `json:"port,omitempty"`
 }
 
-// GatewayConfig defines optional Gateway API TCPRoute/UDPRoute for game traffic.
+// PluginHTTPRoute configures an HTTPRoute for a plugin's HTTP endpoint.
+// The plugin must be matched to this server via instanceSelector and must expose
+// an endpoint with protocol HTTP matching the specified endpointName.
+type PluginHTTPRoute struct {
+	// PluginName is the name of the Plugin resource (must be in same namespace).
+	PluginName string `json:"pluginName"`
+
+	// EndpointName is the name of the endpoint within the plugin's endpoints list.
+	EndpointName string `json:"endpointName"`
+
+	// Hostname is the FQDN for this HTTPRoute (e.g., "map.minecraft.example.com").
+	// +kubebuilder:validation:MinLength=1
+	Hostname string `json:"hostname"`
+
+	// PathPrefix is an optional path prefix for the HTTPRoute (e.g., "/map").
+	// If empty, matches all paths for the hostname.
+	// +optional
+	PathPrefix string `json:"pathPrefix,omitempty"`
+}
+
+// GatewayConfig defines optional Gateway API TCPRoute/UDPRoute/HTTPRoute for game and plugin traffic.
 type GatewayConfig struct {
 	// Enabled determines if Gateway API routes are created for this server.
 	Enabled bool `json:"enabled"`
@@ -74,6 +94,12 @@ type GatewayConfig struct {
 	// UDPRoute configures the UDPRoute resource for game traffic.
 	// +optional
 	UDPRoute *RouteConfig `json:"udpRoute,omitempty"`
+
+	// HTTPRoutes configures HTTPRoute resources for plugin HTTP endpoints.
+	// Each entry creates an HTTPRoute resource routing to the plugin's HTTP port on this server.
+	// Requires gateway.enabled=true and at least one parentRef.
+	// +optional
+	HTTPRoutes []PluginHTTPRoute `json:"httpRoutes,omitempty"`
 }
 
 // GatewayParentRef references a Gateway that routes should attach to.

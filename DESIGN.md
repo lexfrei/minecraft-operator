@@ -141,9 +141,13 @@ spec:
   # Allows community to test release before applying
   updateDelay: 168h  # 7 days after release (format: duration string)
 
-  # Optional: network port that this plugin exposes (e.g., 8123 for Dynmap)
-  # If specified, this port will be added to the Service of all matched servers (TCP+UDP)
-  # port: 8123
+  # Optional: network endpoints exposed by this plugin
+  # Each endpoint creates a port on the Service of matched servers
+  # HTTP endpoints enable HTTPRoute creation when servers have gateway.httpRoutes configured
+  # endpoints:
+  # - name: web-ui
+  #   port: 8123
+  #   protocol: HTTP  # TCP, UDP, or HTTP
 
   # Selector for choosing servers to apply plugin to
   instanceSelector:
@@ -444,7 +448,10 @@ spec:
     type: hangar
     project: "Dynmap"
   updateStrategy: latest
-  port: 8123  # Dynmap web interface port
+  endpoints:
+    - name: web-ui
+      port: 8123
+      protocol: HTTP
   instanceSelector:
     matchLabels:
       env: production
@@ -461,7 +468,10 @@ spec:
     project: "Dynmap"
   updateStrategy: pin
   version: "3.6.0"
-  port: 8123
+  endpoints:
+    - name: web-ui
+      port: 8123
+      protocol: HTTP
   instanceSelector:
     matchLabels:
       env: staging

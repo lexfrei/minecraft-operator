@@ -16,6 +16,12 @@ spec:
   # This allows community to report issues with new releases
   updateDelay: 168h
 
+  # BlueMap exposes a web map UI on port 8100
+  endpoints:
+    - name: web-ui
+      port: 8100
+      protocol: HTTP
+
   # Apply this plugin to all servers with label "type: vanilla"
   instanceSelector:
     matchLabels:

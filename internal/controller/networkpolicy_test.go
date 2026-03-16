@@ -428,12 +428,13 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			port8123 := int32(8123)
 			plugins := []mck8slexlav1beta1.Plugin{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "dynmap", Namespace: ns},
 					Spec: mck8slexlav1beta1.PluginSpec{
-						Port: &port8123,
+						Endpoints: []mck8slexlav1beta1.PluginEndpoint{
+							{Name: "web-ui", Port: 8123, Protocol: "HTTP"},
+						},
 						Source: mck8slexlav1beta1.PluginSource{
 							Type:    "hangar",
 							Project: "Dynmap",
@@ -475,12 +476,11 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 			})
 
-			port8123 := int32(8123)
 			dupPlugins := []mck8slexlav1beta1.Plugin{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "dynmap", Namespace: ns},
 					Spec: mck8slexlav1beta1.PluginSpec{
-						Port:             &port8123,
+						Endpoints:        []mck8slexlav1beta1.PluginEndpoint{{Name: "web-ui", Port: 8123, Protocol: "HTTP"}},
 						Source:           mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "Dynmap"},
 						UpdateStrategy:   "latest",
 						InstanceSelector: metav1.LabelSelector{},
@@ -489,7 +489,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "bluemap", Namespace: ns},
 					Spec: mck8slexlav1beta1.PluginSpec{
-						Port:             &port8123,
+						Endpoints:        []mck8slexlav1beta1.PluginEndpoint{{Name: "web-map", Port: 8123, Protocol: "HTTP"}},
 						Source:           mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "BlueMap"},
 						UpdateStrategy:   "latest",
 						InstanceSelector: metav1.LabelSelector{},

@@ -52,7 +52,7 @@ Four main controllers work together:
 - `updateStrategy`: `latest`, `auto`, `pin`, or `build-pin` (defines version management behavior). For URL-source plugins, all strategies behave similarly since only one version exists (the JAR at the URL)
 - `version`: Specific version when using `pin` or `build-pin` strategy (also used as fallback version for URL-source plugins when JAR has no plugin.yml version)
 - `updateDelay`: Grace period before auto-applying new releases (e.g., `168h` for 7 days)
-- `port`: Optional TCP port exposed by the plugin (e.g., 8123 for Dynmap); used for Service ports and NetworkPolicy ingress rules
+- `endpoints`: Optional list of network endpoints (name, port, protocol: TCP/UDP/HTTP) exposed by the plugin; used for Service ports, NetworkPolicy ingress rules, and HTTPRoute creation
 - `instanceSelector`: Label selector to match PaperMCServer instances
 - `compatibilityOverride`: Manual compatibility specification for edge cases
 

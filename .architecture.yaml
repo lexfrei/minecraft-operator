@@ -1273,6 +1273,23 @@ decisions:
       registration: "cmd/main.go - ctrl.NewWebhookManagedBy with WithValidator for both CRDs"
       helm_templates: "charts/minecraft-operator/templates/webhook-*.yaml - Service, ValidatingWebhookConfiguration, Certificate"
 
+  - id: ADR-036
+    date: 2026-03-15
+    status: accepted
+    decision: "Replace Plugin.Spec.Port with Plugin.Spec.Endpoints for multi-port protocol-aware plugin networking and add HTTPRoute support in Gateway config"
+    reasoning: "Plugins like BlueMap expose HTTP endpoints alongside the game server's TCP/UDP traffic. A single Port field cannot express protocol differences or multiple endpoints per plugin. The new Endpoints field is a list of {name, port, protocol} where protocol is TCP/UDP/HTTP. PaperMCServer.Spec.Gateway gains an HTTPRoutes section that maps plugin HTTP endpoints to Gateway API HTTPRoute resources with hostname and pathPrefix routing. This enables exposing plugin web UIs (maps, admin panels) through the same Gateway infrastructure used for game traffic. Breaking change: Plugin.Spec.Port is removed in favor of Plugin.Spec.Endpoints."
+    alternatives:
+      - "Keep single Port field and add Protocol: Cannot represent multiple endpoints per plugin"
+      - "Separate PluginHTTPRoute CRD: Over-engineering for what is a simple mapping in server spec"
+      - "Ingress instead of HTTPRoute: Project already uses Gateway API, mixing abstractions adds confusion"
+    impact: "Breaking API change in Plugin CRD (Port removed, Endpoints added), new PluginHTTPRoute type in PaperMCServer.Spec.Gateway, HTTPRoute reconciliation in gateway_routes.go controller, webhook validation for httpRoutes, API handler endpoint validation"
+    components:
+      plugin_types: "api/v1beta1/plugin_types.go - PluginEndpoint struct with Name/Port/Protocol fields"
+      server_types: "api/v1beta1/papermcserver_types.go - PluginHTTPRoute struct in GatewayConfig"
+      controller: "internal/controller/gateway_routes.go - reconcileHTTPRoutes, buildHTTPRoute"
+      webhook: "api/v1beta1/papermcserver_webhook.go - validateHTTPRoutes with duplicate hostname+pathPrefix detection"
+      api_handlers: "pkg/api/handlers.go - validateEndpointRequest for REST API"
+
 phases:
   phase_1_mvp:
     description: "Minimum viable product"

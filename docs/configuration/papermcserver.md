@@ -201,6 +201,11 @@ Requires Gateway API CRDs (experimental channel) installed in the cluster.
 | `parentRefs` | Gateway(s) that routes should attach to | — |
 | `tcpRoute.enabled` | Create a TCPRoute for game traffic | — |
 | `udpRoute.enabled` | Create a UDPRoute for game traffic | — |
+| `httpRoutes` | HTTPRoute configurations for plugin HTTP endpoints | — |
+| `httpRoutes[].pluginName` | Name of the Plugin resource (same namespace) | — |
+| `httpRoutes[].endpointName` | Name of the HTTP endpoint in the plugin | — |
+| `httpRoutes[].hostname` | FQDN for this HTTPRoute | — |
+| `httpRoutes[].pathPrefix` | Optional path prefix (e.g., `/map`) | — |
 
 ```yaml
 spec:
@@ -214,13 +219,24 @@ spec:
       enabled: true
     udpRoute:
       enabled: true
+    # HTTPRoutes for plugin web interfaces
+    httpRoutes:
+      - pluginName: bluemap
+        endpointName: web-ui
+        hostname: map.minecraft.example.com
+      - pluginName: plan
+        endpointName: web-ui
+        hostname: analytics.minecraft.example.com
+        pathPrefix: /plan
 ```
 
 The operator creates TCPRoute and/or UDPRoute resources that route the Minecraft game
-port (25565) through the specified Gateway. If the Gateway API CRDs are not installed in
-the cluster, the operator gracefully skips route management (logs a debug message, no
-error). When Gateway API CRDs are installed, external modifications to the routes are
-automatically detected and corrected via owner-reference watches.
+port (25565) through the specified Gateway. HTTPRoute resources are created for each
+`httpRoutes` entry that references a matched Plugin with an HTTP-protocol endpoint.
+If the Gateway API CRDs are not installed in the cluster, the operator gracefully skips
+route management (logs a debug message, no error). When Gateway API CRDs are installed,
+external modifications to the routes are automatically detected and corrected via
+owner-reference watches.
 
 ### backup
 

@@ -39,6 +39,7 @@ type PluginData struct {
 	Version           string
 	Build             *int
 	UpdateDelay       *time.Duration
+	Endpoints         []PluginEndpointData
 	ResolvedVersion   string
 	MatchedServers    int
 	RepositoryStatus  string
@@ -71,6 +72,31 @@ type PluginSourceData struct {
 	Checksum string
 }
 
+// PluginEndpointData represents a plugin endpoint for API consumption.
+type PluginEndpointData struct {
+	Name     string
+	Port     int32
+	Protocol string
+}
+
+// convertEndpointsFromCRD converts CRD endpoints to service layer data.
+func convertEndpointsFromCRD(endpoints []mck8slexlav1beta1.PluginEndpoint) []PluginEndpointData {
+	if len(endpoints) == 0 {
+		return nil
+	}
+
+	result := make([]PluginEndpointData, 0, len(endpoints))
+	for _, ep := range endpoints {
+		result = append(result, PluginEndpointData{
+			Name:     ep.Name,
+			Port:     ep.Port,
+			Protocol: ep.Protocol,
+		})
+	}
+
+	return result
+}
+
 // PluginCreateData contains data for creating a plugin.
 type PluginCreateData struct {
 	Name             string
@@ -80,7 +106,7 @@ type PluginCreateData struct {
 	Version          string
 	Build            int
 	UpdateDelay      string
-	Port             int32
+	Endpoints        []PluginEndpointData
 	InstanceSelector metav1.LabelSelector
 }
 
@@ -92,7 +118,7 @@ type PluginUpdateData struct {
 	Version          *string
 	Build            *int
 	UpdateDelay      *string
-	Port             *int32
+	Endpoints        *[]PluginEndpointData
 	InstanceSelector *metav1.LabelSelector
 }
 
@@ -166,8 +192,15 @@ func (s *PluginService) CreatePlugin(ctx context.Context, data PluginCreateData)
 		plugin.Spec.UpdateDelay = &metav1.Duration{Duration: d}
 	}
 
-	if data.Port != 0 {
-		plugin.Spec.Port = &data.Port
+	if len(data.Endpoints) > 0 {
+		plugin.Spec.Endpoints = make([]mck8slexlav1beta1.PluginEndpoint, 0, len(data.Endpoints))
+		for _, ep := range data.Endpoints {
+			plugin.Spec.Endpoints = append(plugin.Spec.Endpoints, mck8slexlav1beta1.PluginEndpoint{
+				Name:     ep.Name,
+				Port:     ep.Port,
+				Protocol: ep.Protocol,
+			})
+		}
 	}
 
 	if err := s.client.Create(ctx, plugin); err != nil {
@@ -241,8 +274,16 @@ func (s *PluginService) UpdatePlugin(ctx context.Context, data PluginUpdateData)
 		plugin.Spec.UpdateDelay = &metav1.Duration{Duration: d}
 	}
 
-	if data.Port != nil {
-		plugin.Spec.Port = data.Port
+	if data.Endpoints != nil {
+		endpoints := make([]mck8slexlav1beta1.PluginEndpoint, 0, len(*data.Endpoints))
+		for _, ep := range *data.Endpoints {
+			endpoints = append(endpoints, mck8slexlav1beta1.PluginEndpoint{
+				Name:     ep.Name,
+				Port:     ep.Port,
+				Protocol: ep.Protocol,
+			})
+		}
+		plugin.Spec.Endpoints = endpoints
 	}
 
 	if data.InstanceSelector != nil {
@@ -270,6 +311,8 @@ func (s *PluginService) pluginToData(plugin *mck8slexlav1beta1.Plugin) PluginDat
 		MatchedServers:   len(plugin.Status.MatchedInstances),
 		RepositoryStatus: plugin.Status.RepositoryStatus,
 	}
+
+	data.Endpoints = convertEndpointsFromCRD(plugin.Spec.Endpoints)
 
 	if plugin.Spec.UpdateDelay != nil {
 		duration := plugin.Spec.UpdateDelay.Duration

@@ -616,6 +616,53 @@ func TestGetPlugin_Found(t *testing.T) {
 	assert.Equal(t, "my-plugin", getResp.Name)
 }
 
+func TestGetPlugin_ReturnsEndpoints(t *testing.T) {
+	plugin := &mcv1beta1.Plugin{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "plugin-with-endpoints",
+			Namespace: "default",
+		},
+		Spec: mcv1beta1.PluginSpec{
+			Source: mcv1beta1.PluginSource{
+				Type:    "hangar",
+				Project: testProject,
+			},
+			UpdateStrategy: "latest",
+			Endpoints: []mcv1beta1.PluginEndpoint{
+				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+				{Name: "metrics", Port: 9100, Protocol: "TCP"},
+			},
+			InstanceSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "papermc"},
+			},
+		},
+	}
+
+	scheme := newTestScheme()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(plugin).
+		Build()
+
+	srv := NewServer(c, VersionInfo{Version: "test"})
+	ctx := context.Background()
+
+	resp, err := srv.GetPlugin(ctx, generated.GetPluginRequestObject{
+		Namespace: "default",
+		Name:      "plugin-with-endpoints",
+	})
+	require.NoError(t, err)
+
+	getResp, ok := resp.(generated.GetPlugin200JSONResponse)
+	require.True(t, ok, "Expected 200 response, got %T", resp)
+	require.NotNil(t, getResp.Endpoints, "Endpoints should not be nil")
+	require.Len(t, *getResp.Endpoints, 2)
+	assert.Equal(t, "web-ui", (*getResp.Endpoints)[0].Name)
+	assert.Equal(t, 8100, (*getResp.Endpoints)[0].Port)
+	assert.Equal(t, "metrics", (*getResp.Endpoints)[1].Name)
+	assert.Equal(t, 9100, (*getResp.Endpoints)[1].Port)
+}
+
 func TestGetPlugin_NotFound(t *testing.T) {
 	srv := newTestServer()
 	ctx := context.Background()
@@ -914,22 +961,18 @@ func TestLabelSelectorToK8s(t *testing.T) {
 	assert.Equal(t, "game", result.MatchLabels["tier"])
 }
 
-func TestCreatePlugin_NegativePort_ShouldReturn400(t *testing.T) {
-	// BUG: pluginCreateRequestToData converts port int to int32 without
-	// validating range (1-65535). Negative or out-of-range port values
-	// pass through to the service layer. With a real API server, the CRD
-	// validation catches it and returns 500 instead of 400.
-	// The API handler should validate port range before submission.
+func TestCreatePlugin_EndpointInvalidPort_ShouldReturn400(t *testing.T) {
 	srv := newTestServer()
 	ctx := context.Background()
 
-	port := -1
 	project := testProject
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
-			Name:      "bad-port-plugin",
+			Name:      "bad-endpoint-plugin",
 			Namespace: "default",
-			Port:      &port,
+			Endpoints: &[]generated.PluginEndpoint{
+				{Name: "web-ui", Port: -1},
+			},
 			Source: generated.PluginSource{
 				Type:    "hangar",
 				Project: &project,
@@ -942,22 +985,21 @@ func TestCreatePlugin_NegativePort_ShouldReturn400(t *testing.T) {
 	require.NoError(t, err)
 
 	_, ok := resp.(generated.CreatePlugin400JSONResponse)
-	assert.True(t, ok, "Expected 400 response for negative port, got %T", resp)
+	assert.True(t, ok, "Expected 400 response for negative endpoint port, got %T", resp)
 }
 
-func TestCreatePlugin_OverflowPort_ShouldReturn400(t *testing.T) {
-	// BUG: Port value 100000 exceeds valid TCP port range (1-65535).
-	// API handler should reject it with 400, not pass through.
+func TestCreatePlugin_EndpointOverflowPort_ShouldReturn400(t *testing.T) {
 	srv := newTestServer()
 	ctx := context.Background()
 
-	port := 100000
 	project := testProject
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
-			Name:      "overflow-port-plugin",
+			Name:      "overflow-endpoint-plugin",
 			Namespace: "default",
-			Port:      &port,
+			Endpoints: &[]generated.PluginEndpoint{
+				{Name: "web-ui", Port: 100000},
+			},
 			Source: generated.PluginSource{
 				Type:    "hangar",
 				Project: &project,
@@ -970,14 +1012,13 @@ func TestCreatePlugin_OverflowPort_ShouldReturn400(t *testing.T) {
 	require.NoError(t, err)
 
 	_, ok := resp.(generated.CreatePlugin400JSONResponse)
-	assert.True(t, ok, "Expected 400 response for port > 65535, got %T", resp)
+	assert.True(t, ok, "Expected 400 response for endpoint port > 65535, got %T", resp)
 }
 
-func TestUpdatePlugin_NegativePort_ShouldReturn400(t *testing.T) {
-	// BUG: Same port validation gap in UpdatePlugin handler.
+func TestUpdatePlugin_EndpointInvalidPort_ShouldReturn400(t *testing.T) {
 	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "port-test-plugin",
+			Name:      "endpoint-test-plugin",
 			Namespace: "default",
 		},
 		Spec: mcv1beta1.PluginSpec{
@@ -1001,18 +1042,136 @@ func TestUpdatePlugin_NegativePort_ShouldReturn400(t *testing.T) {
 	srv := NewServer(c, VersionInfo{Version: "test"})
 	ctx := context.Background()
 
-	port := -1
 	resp, err := srv.UpdatePlugin(ctx, generated.UpdatePluginRequestObject{
 		Namespace: "default",
-		Name:      "port-test-plugin",
+		Name:      "endpoint-test-plugin",
 		Body: &generated.PluginUpdateRequest{
-			Port: &port,
+			Endpoints: &[]generated.PluginEndpoint{
+				{Name: "web-ui", Port: -1},
+			},
 		},
 	})
 	require.NoError(t, err)
 
 	_, ok := resp.(generated.UpdatePlugin400JSONResponse)
-	assert.True(t, ok, "Expected 400 response for negative port, got %T", resp)
+	assert.True(t, ok, "Expected 400 response for negative endpoint port, got %T", resp)
+}
+
+func TestCreatePlugin_DuplicateEndpointNames_ShouldReturn400(t *testing.T) {
+	srv := newTestServer()
+	ctx := context.Background()
+
+	project := testProject
+	proto := generated.TCP
+	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
+		Body: &generated.CreatePluginJSONRequestBody{
+			Name:      "dup-name-plugin",
+			Namespace: "default",
+			Endpoints: &[]generated.PluginEndpoint{
+				{Name: "web-ui", Port: 8100, Protocol: &proto},
+				{Name: "web-ui", Port: 9100, Protocol: &proto},
+			},
+			Source: generated.PluginSource{
+				Type:    "hangar",
+				Project: &project,
+			},
+			InstanceSelector: generated.LabelSelector{
+				MatchLabels: &map[string]string{"app": "papermc"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	badResp, ok := resp.(generated.CreatePlugin400JSONResponse)
+	require.True(t, ok, "Expected 400 response for duplicate endpoint names, got %T", resp)
+	assert.Contains(t, badResp.Error, "Duplicate endpoint name")
+}
+
+func TestCreatePlugin_DuplicatePortProtocol_ShouldReturn400(t *testing.T) {
+	srv := newTestServer()
+	ctx := context.Background()
+
+	project := testProject
+	proto := generated.TCP
+	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
+		Body: &generated.CreatePluginJSONRequestBody{
+			Name:      "dup-port-plugin",
+			Namespace: "default",
+			Endpoints: &[]generated.PluginEndpoint{
+				{Name: "endpoint-a", Port: 8100, Protocol: &proto},
+				{Name: "endpoint-b", Port: 8100, Protocol: &proto},
+			},
+			Source: generated.PluginSource{
+				Type:    "hangar",
+				Project: &project,
+			},
+			InstanceSelector: generated.LabelSelector{
+				MatchLabels: &map[string]string{"app": "papermc"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	badResp, ok := resp.(generated.CreatePlugin400JSONResponse)
+	require.True(t, ok, "Expected 400 response for duplicate port+protocol, got %T", resp)
+	assert.Contains(t, badResp.Error, "Duplicate port+protocol")
+}
+
+func TestCreatePlugin_InvalidProtocol_ShouldReturn400(t *testing.T) {
+	srv := newTestServer()
+	ctx := context.Background()
+
+	project := testProject
+	badProto := generated.PluginEndpointProtocol("INVALID")
+	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
+		Body: &generated.CreatePluginJSONRequestBody{
+			Name:      "bad-proto-plugin",
+			Namespace: "default",
+			Endpoints: &[]generated.PluginEndpoint{
+				{Name: "web-ui", Port: 8100, Protocol: &badProto},
+			},
+			Source: generated.PluginSource{
+				Type:    "hangar",
+				Project: &project,
+			},
+			InstanceSelector: generated.LabelSelector{
+				MatchLabels: &map[string]string{"app": "papermc"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	badResp, ok := resp.(generated.CreatePlugin400JSONResponse)
+	require.True(t, ok, "Expected 400 response for invalid protocol, got %T", resp)
+	assert.Contains(t, badResp.Error, "Invalid protocol")
+}
+
+func TestCreatePlugin_InvalidEndpointName_ShouldReturn400(t *testing.T) {
+	srv := newTestServer()
+	ctx := context.Background()
+
+	project := testProject
+	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
+		Body: &generated.CreatePluginJSONRequestBody{
+			Name:      "bad-name-plugin",
+			Namespace: "default",
+			Endpoints: &[]generated.PluginEndpoint{
+				{Name: "INVALID_NAME", Port: 8100},
+			},
+			Source: generated.PluginSource{
+				Type:    "hangar",
+				Project: &project,
+			},
+			InstanceSelector: generated.LabelSelector{
+				MatchLabels: &map[string]string{"app": "papermc"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	badResp, ok := resp.(generated.CreatePlugin400JSONResponse)
+	require.True(t, ok, "Expected 400 response for invalid endpoint name, got %T", resp)
+	assert.Contains(t, badResp.Error, "DNS label")
 }
 
 func TestLabelSelectorToK8s_WithExpressions(t *testing.T) {

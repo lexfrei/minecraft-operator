@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"regexp"
 	"runtime"
 	"time"
 
@@ -10,6 +12,9 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/service"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// defaultProtocol is the default network protocol for plugin endpoints.
+const defaultProtocol = "TCP"
 
 // Ensure Server implements StrictServerInterface.
 var _ generated.StrictServerInterface = (*Server)(nil)
@@ -380,10 +385,10 @@ func (s *Server) CreatePlugin(
 		}, nil
 	}
 
-	if req.Body.Port != nil && (*req.Body.Port < 1 || *req.Body.Port > 65535) {
+	if errMsg := validateEndpointRequest(req.Body.Endpoints); errMsg != "" {
 		return generated.CreatePlugin400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{
-				Error: "Port must be between 1 and 65535",
+				Error: errMsg,
 				Code:  ptr(generated.INVALIDREQUEST),
 			},
 		}, nil
@@ -471,10 +476,10 @@ func (s *Server) UpdatePlugin(
 		}, nil
 	}
 
-	if req.Body.Port != nil && (*req.Body.Port < 1 || *req.Body.Port > 65535) {
+	if errMsg := validateEndpointRequest(req.Body.Endpoints); errMsg != "" {
 		return generated.UpdatePlugin400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{
-				Error: "Port must be between 1 and 65535",
+				Error: errMsg,
 				Code:  ptr(generated.INVALIDREQUEST),
 			},
 		}, nil
@@ -812,6 +817,8 @@ func pluginDataToDetail(data service.PluginData) generated.PluginDetail {
 		detail.MatchedInstances = &instances
 	}
 
+	detail.Endpoints = convertEndpointsToAPI(data.Endpoints)
+
 	// Convert available versions
 	if len(data.AvailableVersions) > 0 {
 		versions := make([]generated.PluginVersion, 0, len(data.AvailableVersions))
@@ -931,8 +938,20 @@ func pluginCreateRequestToData(req generated.PluginCreateRequest) service.Plugin
 	if req.UpdateDelay != nil {
 		data.UpdateDelay = *req.UpdateDelay
 	}
-	if req.Port != nil {
-		data.Port = int32(*req.Port)
+	if req.Endpoints != nil {
+		endpoints := make([]service.PluginEndpointData, 0, len(*req.Endpoints))
+		for _, ep := range *req.Endpoints {
+			proto := defaultProtocol
+			if ep.Protocol != nil {
+				proto = string(*ep.Protocol)
+			}
+			endpoints = append(endpoints, service.PluginEndpointData{
+				Name:     ep.Name,
+				Port:     int32(ep.Port),
+				Protocol: proto,
+			})
+		}
+		data.Endpoints = endpoints
 	}
 
 	return data
@@ -957,9 +976,20 @@ func pluginUpdateRequestToData(namespace, name string, req generated.PluginUpdat
 	if req.UpdateDelay != nil {
 		data.UpdateDelay = req.UpdateDelay
 	}
-	if req.Port != nil {
-		port := int32(*req.Port)
-		data.Port = &port
+	if req.Endpoints != nil {
+		endpoints := make([]service.PluginEndpointData, 0, len(*req.Endpoints))
+		for _, ep := range *req.Endpoints {
+			proto := defaultProtocol
+			if ep.Protocol != nil {
+				proto = string(*ep.Protocol)
+			}
+			endpoints = append(endpoints, service.PluginEndpointData{
+				Name:     ep.Name,
+				Port:     int32(ep.Port),
+				Protocol: proto,
+			})
+		}
+		data.Endpoints = &endpoints
 	}
 	if req.InstanceSelector != nil {
 		selector := labelSelectorToK8s(*req.InstanceSelector)
@@ -967,6 +997,88 @@ func pluginUpdateRequestToData(namespace, name string, req generated.PluginUpdat
 	}
 
 	return data
+}
+
+// convertEndpointsToAPI converts service endpoint data to generated API endpoints.
+func convertEndpointsToAPI(endpoints []service.PluginEndpointData) *[]generated.PluginEndpoint {
+	if len(endpoints) == 0 {
+		return nil
+	}
+
+	result := make([]generated.PluginEndpoint, 0, len(endpoints))
+	for _, ep := range endpoints {
+		endpoint := generated.PluginEndpoint{
+			Name: ep.Name,
+			Port: int(ep.Port),
+		}
+
+		if ep.Protocol != "" {
+			proto := generated.PluginEndpointProtocol(ep.Protocol)
+			endpoint.Protocol = &proto
+		}
+
+		result = append(result, endpoint)
+	}
+
+	return &result
+}
+
+// dnsLabelPattern matches valid DNS labels (lowercase alphanumeric with hyphens, 1-63 chars).
+var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+
+const maxEndpointNameLength = 63
+
+// validateEndpointRequest validates plugin endpoints from API request.
+//
+//nolint:cyclop // Validation requires checking multiple conditions
+func validateEndpointRequest(endpoints *[]generated.PluginEndpoint) string {
+	if endpoints == nil {
+		return ""
+	}
+
+	seenNames := make(map[string]bool, len(*endpoints))
+	seenPortProto := make(map[string]bool, len(*endpoints))
+
+	for _, ep := range *endpoints {
+		if ep.Name == "" {
+			return "Endpoint name is required"
+		}
+
+		if len(ep.Name) > maxEndpointNameLength || !dnsLabelPattern.MatchString(ep.Name) {
+			return fmt.Sprintf(
+				"Endpoint name %q must be a valid DNS label (lowercase alphanumeric/hyphens, max 63 chars)",
+				ep.Name,
+			)
+		}
+
+		if ep.Port < 1 || ep.Port > 65535 {
+			return fmt.Sprintf("Endpoint port must be between 1 and 65535, got %d", ep.Port)
+		}
+
+		if ep.Protocol != nil && !ep.Protocol.Valid() {
+			return fmt.Sprintf("Invalid protocol %q, must be TCP, UDP, or HTTP", *ep.Protocol)
+		}
+
+		if seenNames[ep.Name] {
+			return fmt.Sprintf("Duplicate endpoint name %q", ep.Name)
+		}
+
+		seenNames[ep.Name] = true
+
+		proto := defaultProtocol
+		if ep.Protocol != nil {
+			proto = string(*ep.Protocol)
+		}
+
+		portProtoKey := fmt.Sprintf("%d/%s", ep.Port, proto)
+		if seenPortProto[portProtoKey] {
+			return fmt.Sprintf("Duplicate port+protocol combination: %s", portProtoKey)
+		}
+
+		seenPortProto[portProtoKey] = true
+	}
+
+	return ""
 }
 
 // labelSelectorToK8s converts generated.LabelSelector to metav1.LabelSelector.

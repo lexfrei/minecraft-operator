@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -40,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -102,6 +104,7 @@ type PaperMCServerReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=pods/exec,verbs=create
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tcproutes,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=udproutes,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 //nolint:revive // kubebuilder markers require no space after //
 
@@ -653,30 +656,44 @@ func buildServicePorts(server *mcv1beta1.PaperMCServer, matchedPlugins []mcv1bet
 		})
 	}
 
-	// Add plugin ports (TCP+UDP for each)
-	seenPorts := make(map[int32]bool)
-	seenPorts[25565] = true // minecraft
+	// Add plugin endpoint ports, deduplicating by port+protocol.
+	type portProto struct {
+		port  int32
+		proto corev1.Protocol
+	}
+
+	seenPortProto := make(map[portProto]bool)
+	seenPortProto[portProto{25565, corev1.ProtocolTCP}] = true // minecraft
 	if server.Spec.RCON.Enabled {
-		seenPorts[server.Spec.RCON.Port] = true // rcon
+		seenPortProto[portProto{server.Spec.RCON.Port, corev1.ProtocolTCP}] = true // rcon
 	}
 
 	for _, plugin := range matchedPlugins {
-		if plugin.Spec.Port != nil && !seenPorts[*plugin.Spec.Port] {
-			seenPorts[*plugin.Spec.Port] = true
-			portName := fmt.Sprintf("plugin-%d", *plugin.Spec.Port)
-			// Add TCP port
+		for _, ep := range plugin.Spec.Endpoints {
+			var proto corev1.Protocol
+
+			switch ep.Protocol {
+			case "UDP":
+				proto = corev1.ProtocolUDP
+			default: // TCP, HTTP, or empty (defaults to TCP)
+				proto = corev1.ProtocolTCP
+			}
+
+			key := portProto{ep.Port, proto}
+			if seenPortProto[key] {
+				continue
+			}
+
+			seenPortProto[key] = true
+
+			// Port names must be <= 15 chars (IANA service name per RFC 6335).
+			portName := fmt.Sprintf("ep-%d-%s", ep.Port, strings.ToLower(string(proto[:3])))
+
 			ports = append(ports, corev1.ServicePort{
-				Name:       portName + "-tcp",
-				Port:       *plugin.Spec.Port,
-				TargetPort: intstr.FromInt(int(*plugin.Spec.Port)),
-				Protocol:   corev1.ProtocolTCP,
-			})
-			// Add UDP port
-			ports = append(ports, corev1.ServicePort{
-				Name:       portName + "-udp",
-				Port:       *plugin.Spec.Port,
-				TargetPort: intstr.FromInt(int(*plugin.Spec.Port)),
-				Protocol:   corev1.ProtocolUDP,
+				Name:       portName,
+				Port:       ep.Port,
+				TargetPort: intstr.FromInt32(ep.Port),
+				Protocol:   proto,
 			})
 		}
 	}
@@ -1851,6 +1868,10 @@ func (r *PaperMCServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			Owns(&gatewayv1alpha2.UDPRoute{})
 	}
 
+	if httpRouteAvailable(mgr) {
+		builder = builder.Owns(&gatewayv1.HTTPRoute{})
+	}
+
 	return builder.Named("papermcserver").Complete(r)
 }
 
@@ -1860,6 +1881,18 @@ func gatewayAPIsAvailable(mgr ctrl.Manager) bool {
 		Group:   gatewayv1alpha2.GroupVersion.Group,
 		Version: gatewayv1alpha2.GroupVersion.Version,
 		Kind:    "TCPRoute",
+	}
+	_, err := mgr.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
+
+	return err == nil
+}
+
+// httpRouteAvailable checks if Gateway API HTTPRoute CRD is installed.
+func httpRouteAvailable(mgr ctrl.Manager) bool {
+	gvk := schema.GroupVersionKind{
+		Group:   gatewayv1.GroupVersion.Group,
+		Version: gatewayv1.GroupVersion.Version,
+		Kind:    "HTTPRoute",
 	}
 	_, err := mgr.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
 

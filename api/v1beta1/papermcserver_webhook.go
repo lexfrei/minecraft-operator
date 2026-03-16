@@ -9,10 +9,17 @@ package v1beta1
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/robfig/cron/v3"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+)
+
+// hostnamePattern matches valid RFC 1123 hostnames.
+var hostnamePattern = regexp.MustCompile(
+	`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`,
 )
 
 // cronParser is the standard 5-field cron parser (minute hour dom month dow).
@@ -159,15 +166,93 @@ func validateBackup(s *PaperMCServer, specPath *field.Path) field.ErrorList {
 func validateGateway(s *PaperMCServer, specPath *field.Path) field.ErrorList {
 	var errs field.ErrorList
 
-	if s.Spec.Gateway == nil || !s.Spec.Gateway.Enabled {
+	if s.Spec.Gateway == nil {
 		return nil
+	}
+
+	gwPath := specPath.Child("gateway")
+
+	// HTTPRoutes require gateway to be enabled.
+	if !s.Spec.Gateway.Enabled && len(s.Spec.Gateway.HTTPRoutes) > 0 {
+		errs = append(errs, field.Forbidden(
+			gwPath.Child("httpRoutes"),
+			"httpRoutes require gateway.enabled=true",
+		))
+	}
+
+	if !s.Spec.Gateway.Enabled {
+		return errs
 	}
 
 	if len(s.Spec.Gateway.ParentRefs) == 0 {
 		errs = append(errs, field.Required(
-			specPath.Child("gateway", "parentRefs"),
+			gwPath.Child("parentRefs"),
 			"at least one parentRef is required when gateway is enabled",
 		))
+	}
+
+	errs = append(errs, validateHTTPRoutes(s.Spec.Gateway.HTTPRoutes, gwPath)...)
+
+	return errs
+}
+
+func validateHTTPRoutes(routes []PluginHTTPRoute, gwPath *field.Path) field.ErrorList {
+	var errs field.ErrorList
+
+	routesPath := gwPath.Child("httpRoutes")
+	seenPluginEndpoint := make(map[string]bool)
+	seenHostPath := make(map[string]bool)
+
+	for i, route := range routes {
+		routePath := routesPath.Index(i)
+
+		if route.PluginName == "" {
+			errs = append(errs, field.Required(routePath.Child("pluginName"), "pluginName is required"))
+		}
+
+		if route.EndpointName == "" {
+			errs = append(errs, field.Required(routePath.Child("endpointName"), "endpointName is required"))
+		}
+
+		if route.Hostname == "" {
+			errs = append(errs, field.Required(routePath.Child("hostname"), "hostname is required"))
+		} else if !hostnamePattern.MatchString(strings.ToLower(route.Hostname)) {
+			errs = append(errs, field.Invalid(
+				routePath.Child("hostname"), route.Hostname,
+				"must be a valid RFC 1123 hostname",
+			))
+		}
+
+		if route.PathPrefix != "" && !strings.HasPrefix(route.PathPrefix, "/") {
+			errs = append(errs, field.Invalid(
+				routePath.Child("pathPrefix"), route.PathPrefix,
+				"pathPrefix must start with '/'",
+			))
+		}
+
+		if route.PluginName != "" && route.EndpointName != "" {
+			key := route.PluginName + "/" + route.EndpointName
+			if seenPluginEndpoint[key] {
+				errs = append(errs, field.Duplicate(
+					routePath,
+					fmt.Sprintf("%s/%s", route.PluginName, route.EndpointName),
+				))
+			} else {
+				seenPluginEndpoint[key] = true
+			}
+		}
+
+		if route.Hostname != "" {
+			hostPathKey := route.Hostname + "|" + route.PathPrefix
+			if seenHostPath[hostPathKey] {
+				errs = append(errs, field.Duplicate(
+					routePath,
+					fmt.Sprintf("hostname=%s pathPrefix=%s", route.Hostname, route.PathPrefix),
+				))
+			} else {
+				seenHostPath[hostPathKey] = true
+			}
+		}
 	}
 
 	return errs
