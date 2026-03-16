@@ -206,12 +206,23 @@ func validateServerPluginConfigs(s *PaperMCServer, specPath *field.Path) field.E
 	}
 
 	pluginConfigsPath := specPath.Child("pluginConfigs")
+	seenPluginNames := make(map[string]bool)
 
 	for i, pc := range s.Spec.PluginConfigs {
 		pcPath := pluginConfigsPath.Index(i)
 
 		if pc.PluginName == "" {
 			errs = append(errs, field.Required(pcPath.Child("pluginName"), "pluginName is required"))
+		} else {
+			// Validate for path traversal and shell injection.
+			errs = append(errs, validateSafeName(pc.PluginName, pcPath.Child("pluginName"))...)
+
+			// Reject duplicate pluginName entries.
+			if seenPluginNames[pc.PluginName] {
+				errs = append(errs, field.Duplicate(pcPath.Child("pluginName"), pc.PluginName))
+			} else {
+				seenPluginNames[pc.PluginName] = true
+			}
 		}
 
 		seenPaths := make(map[string]bool)
