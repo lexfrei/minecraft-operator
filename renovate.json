@@ -3,37 +3,23 @@
   "extends": [
     "config:recommended",
     ":semanticCommits",
-    ":semanticCommitTypeAll(chore)"
+    ":semanticCommitTypeAll(chore)",
+    ":prHourlyLimitNone",
+    ":prConcurrentLimitNone"
   ],
   "labels": ["dependencies"],
   "platformAutomerge": true,
   "automergeStrategy": "squash",
-  "regexManagers": [
-    {
-      "fileMatch": ["\\.github/workflows/.*\\.ya?ml$"],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*)\\n.*?[\"']?(?<currentValue>v?\\d+\\.\\d+\\.\\d+)[\"']?"
-      ]
-    },
-    {
-      "fileMatch": ["^Makefile$"],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*)\\n.*?[\"']?(?<currentValue>v?\\d+\\.\\d+\\.\\d+)[\"']?"
-      ]
-    },
-    {
-      "fileMatch": ["^build/Containerfile$"],
-      "matchStrings": [
-        "FROM (?<depName>.*?):(?<currentValue>[\\d.]+-[\\w.]+)",
-        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*)\\n.*?=(?<currentValue>.*)"
-      ],
-      "datasourceTemplate": "docker"
-    }
-  ],
+  "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {
-      "matchManagers": ["gomod"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "description": "Automerge minor and patch updates",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Automerge all GitHub Actions updates including major",
+      "matchManagers": ["github-actions"],
       "automerge": true
     },
     {
@@ -44,21 +30,34 @@
       "rangeStrategy": "bump"
     },
     {
-      "matchManagers": ["github-actions"],
-      "automerge": true
-    },
-    {
-      "description": "Allow patch and minor updates for Go base image used in Containerfile",
-      "matchManagers": ["regex", "dockerfile"],
-      "matchDatasources": ["docker"],
-      "matchDepNames": ["docker.io/library/golang", "golang"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "automerge": true
-    },
-    {
+      "description": "Disable updates for own images",
       "matchDepPatterns": ["^ghcr.io/lexfrei/", "^docker.io/lexfrei/"],
-      "enabled": false,
-      "description": "Disable updates for our own images"
+      "enabled": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["\\.github/workflows/.*\\.ya?ml$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*)\\n.*?[\"']?(?<currentValue>v?\\d+\\.\\d+\\.\\d+)[\"']?"
+      ]
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^Makefile$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*)\\n.*?[\"']?(?<currentValue>v?\\d+\\.\\d+\\.\\d+)[\"']?"
+      ]
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^build/Containerfile$"],
+      "matchStrings": [
+        "FROM (?<depName>.*?):(?<currentValue>[\\d.]+-[\\w.]+)",
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*)\\n.*?=(?<currentValue>.*)"
+      ],
+      "datasourceTemplate": "docker"
     }
   ],
   "vulnerabilityAlerts": {
