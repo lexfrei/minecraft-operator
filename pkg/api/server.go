@@ -13,6 +13,7 @@ type Server struct {
 	serverService    *service.ServerService
 	pluginService    *service.PluginService
 	namespaceService *service.NamespaceService
+	configMapService *service.ConfigMapService
 	versionInfo      VersionInfo
 }
 
@@ -30,6 +31,7 @@ func NewServer(c client.Client, versionInfo VersionInfo) *Server {
 		serverService:    service.NewServerService(c),
 		pluginService:    service.NewPluginService(c),
 		namespaceService: service.NewNamespaceService(c),
+		configMapService: service.NewConfigMapService(c),
 		versionInfo:      versionInfo,
 	}
 }

@@ -2,6 +2,7 @@ package webui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -545,4 +546,60 @@ func (s *Server) handlePluginDetailPage(w http.ResponseWriter, r *http.Request, 
 		http.Error(w, fmt.Sprintf("Failed to render plugin detail: %v", err),
 			http.StatusInternalServerError)
 	}
+}
+
+// handleListConfigMaps returns ConfigMaps in a namespace as JSON (for form dropdowns).
+func (s *Server) handleListConfigMaps(w http.ResponseWriter, r *http.Request) {
+	namespace := r.URL.Query().Get("namespace")
+	if namespace == "" {
+		http.Error(w, "Missing namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	cms, err := s.configMapService.ListConfigMaps(r.Context(), namespace)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to list ConfigMaps: %v", err),
+			http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(cms)
+}
+
+// handleCreateConfigMap creates a ConfigMap from JSON body.
+func (s *Server) handleCreateConfigMap(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Name      string            `json:"name"`
+		Namespace string            `json:"namespace"`
+		Data      map[string]string `json:"data"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" || req.Namespace == "" || len(req.Data) == 0 {
+		http.Error(w, "name, namespace, and data are required", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.configMapService.CreateConfigMap(r.Context(), req.Namespace, req.Name, req.Data); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create ConfigMap: %v", err),
+			http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"name":      req.Name,
+		"namespace": req.Namespace,
+	})
 }

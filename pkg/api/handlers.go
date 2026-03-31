@@ -875,6 +875,12 @@ func serverCreateRequestToData(req generated.ServerCreateRequest) service.Server
 	if req.Labels != nil {
 		data.Labels = *req.Labels
 	}
+	if req.PluginConfigs != nil {
+		data.PluginConfigs = apiPluginConfigsToData(*req.PluginConfigs)
+	}
+	if req.ServerConfigs != nil {
+		data.ServerConfigs = apiConfigFilesToData(*req.ServerConfigs)
+	}
 
 	return data
 }
@@ -957,6 +963,12 @@ func pluginCreateRequestToData(req generated.PluginCreateRequest) service.Plugin
 			})
 		}
 		data.Endpoints = endpoints
+	}
+	if req.PluginDirName != nil {
+		data.PluginDirName = *req.PluginDirName
+	}
+	if req.Configs != nil {
+		data.Configs = apiConfigFilesToDataFromPlugin(*req.Configs)
 	}
 
 	return data
@@ -1197,6 +1209,54 @@ func validatePluginSource(source generated.PluginSource) string {
 	return ""
 }
 
+// apiPluginConfigsToData converts generated ServerPluginConfig to service data.
+func apiPluginConfigsToData(configs []generated.ServerPluginConfig) []service.ServerPluginConfigData {
+	result := make([]service.ServerPluginConfigData, 0, len(configs))
+	for _, pc := range configs {
+		result = append(result, service.ServerPluginConfigData{
+			PluginName: pc.PluginName,
+			Configs:    apiConfigFilesToDataFromPlugin(pc.Configs),
+		})
+	}
+	return result
+}
+
+// apiConfigFilesToData converts generated ServerConfigFile to service data.
+func apiConfigFilesToData(configs []generated.ServerConfigFile) []service.ConfigFileData {
+	result := make([]service.ConfigFileData, 0, len(configs))
+	for _, cfg := range configs {
+		overwrite := "always"
+		if cfg.Overwrite != nil {
+			overwrite = string(*cfg.Overwrite)
+		}
+		result = append(result, service.ConfigFileData{
+			ConfigMapName: cfg.ConfigMapRef.Name,
+			ConfigMapKey:  cfg.ConfigMapRef.Key,
+			Path:          cfg.Path,
+			Overwrite:     overwrite,
+		})
+	}
+	return result
+}
+
+// apiConfigFilesToDataFromPlugin converts generated PluginConfigFile to service data.
+func apiConfigFilesToDataFromPlugin(configs []generated.PluginConfigFile) []service.ConfigFileData {
+	result := make([]service.ConfigFileData, 0, len(configs))
+	for _, cfg := range configs {
+		overwrite := "always"
+		if cfg.Overwrite != nil {
+			overwrite = string(*cfg.Overwrite)
+		}
+		result = append(result, service.ConfigFileData{
+			ConfigMapName: cfg.ConfigMapRef.Name,
+			ConfigMapKey:  cfg.ConfigMapRef.Key,
+			Path:          cfg.Path,
+			Overwrite:     overwrite,
+		})
+	}
+	return result
+}
+
 // labelSelectorToK8s converts generated.LabelSelector to metav1.LabelSelector.
 func labelSelectorToK8s(sel generated.LabelSelector) metav1.LabelSelector {
 	result := metav1.LabelSelector{}
@@ -1220,4 +1280,98 @@ func labelSelectorToK8s(sel generated.LabelSelector) metav1.LabelSelector {
 	}
 
 	return result
+}
+
+// ListConfigMaps lists ConfigMaps in a namespace.
+func (s *Server) ListConfigMaps(
+	ctx context.Context,
+	req generated.ListConfigMapsRequestObject,
+) (generated.ListConfigMapsResponseObject, error) {
+	summaries, err := s.configMapService.ListConfigMaps(ctx, req.Namespace)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to list ConfigMaps", "error", err, "namespace", req.Namespace)
+		return generated.ListConfigMaps500JSONResponse{
+			InternalServerErrorJSONResponse: generated.InternalServerErrorJSONResponse{
+				Error: "Failed to list ConfigMaps",
+				Code:  ptr(generated.INTERNALERROR),
+			},
+		}, nil
+	}
+
+	result := make([]generated.ConfigMapSummary, 0, len(summaries))
+	for _, cm := range summaries {
+		summary := generated.ConfigMapSummary{
+			Name:      cm.Name,
+			Namespace: cm.Namespace,
+		}
+		if len(cm.Keys) > 0 {
+			summary.Keys = &cm.Keys
+		}
+		result = append(result, summary)
+	}
+
+	return generated.ListConfigMaps200JSONResponse{
+		ConfigMaps: result,
+	}, nil
+}
+
+// CreateConfigMap creates a new ConfigMap.
+func (s *Server) CreateConfigMap(
+	ctx context.Context,
+	req generated.CreateConfigMapRequestObject,
+) (generated.CreateConfigMapResponseObject, error) {
+	if req.Body == nil {
+		return generated.CreateConfigMap400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: "Request body is required",
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}, nil
+	}
+
+	if errMsg := validateK8sName(req.Body.Name, "Name"); errMsg != "" {
+		return generated.CreateConfigMap400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}, nil
+	}
+
+	data := make(map[string]string, len(req.Body.Data))
+	for k, v := range req.Body.Data {
+		data[k] = v
+	}
+
+	err := s.configMapService.CreateConfigMap(ctx, req.Body.Namespace, req.Body.Name, data)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to create ConfigMap", "error", err, "name", req.Body.Name)
+
+		if isAlreadyExistsError(err) {
+			return generated.CreateConfigMap409JSONResponse{
+				ConflictJSONResponse: generated.ConflictJSONResponse{
+					Error: err.Error(),
+					Code:  ptr(generated.ALREADYEXISTS),
+				},
+			}, nil
+		}
+
+		return generated.CreateConfigMap500JSONResponse{
+			InternalServerErrorJSONResponse: generated.InternalServerErrorJSONResponse{
+				Error: "Failed to create ConfigMap",
+				Code:  ptr(generated.INTERNALERROR),
+			},
+		}, nil
+	}
+
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+
+	return generated.CreateConfigMap201JSONResponse{
+		Name:      req.Body.Name,
+		Namespace: req.Body.Namespace,
+		Keys:      &keys,
+	}, nil
 }

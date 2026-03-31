@@ -91,6 +91,21 @@ type UpdateHistoryData struct {
 }
 
 // ServerCreateData contains data for creating a new server.
+// ConfigFileData represents a config file reference for API/UI consumption.
+type ConfigFileData struct {
+	ConfigMapName string
+	ConfigMapKey  string
+	Path          string
+	Overwrite     string
+}
+
+// ServerPluginConfigData represents per-server plugin config overrides.
+type ServerPluginConfigData struct {
+	PluginName string
+	Configs    []ConfigFileData
+}
+
+// ServerCreateData contains data for creating a new server.
 type ServerCreateData struct {
 	Name               string
 	Namespace          string
@@ -102,6 +117,8 @@ type ServerCreateData struct {
 	MaintenanceEnabled bool
 	MaintenanceCron    string
 	Labels             map[string]string
+	PluginConfigs      []ServerPluginConfigData
+	ServerConfigs      []ConfigFileData
 }
 
 // ServerUpdateData contains data for updating an existing server.
@@ -268,6 +285,9 @@ func (s *ServerService) CreateServer(ctx context.Context, data ServerCreateData)
 		server.Spec.UpdateSchedule.MaintenanceWindow.Enabled = true
 		server.Spec.UpdateSchedule.MaintenanceWindow.Cron = data.MaintenanceCron
 	}
+
+	server.Spec.PluginConfigs = configDataToPluginConfigs(data.PluginConfigs)
+	server.Spec.ServerConfigs = configDataToServerConfigs(data.ServerConfigs)
 
 	if err := s.client.Create(ctx, server); err != nil {
 		return errors.Wrap(err, "failed to create PaperMCServer")

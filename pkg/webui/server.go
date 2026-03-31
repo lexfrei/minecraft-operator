@@ -23,13 +23,14 @@ import (
 
 // Server represents the Web UI HTTP server.
 type Server struct {
-	client        client.Client
-	namespace     string
-	server        *http.Server
-	sse           *SSEBroker
-	serverService *service.ServerService
-	pluginService *service.PluginService
-	schemaParser  *schema.Parser
+	client           client.Client
+	namespace        string
+	server           *http.Server
+	sse              *SSEBroker
+	serverService    *service.ServerService
+	pluginService    *service.PluginService
+	configMapService *service.ConfigMapService
+	schemaParser     *schema.Parser
 }
 
 // NewServer creates a new Web UI server instance.
@@ -43,12 +44,13 @@ func NewServer(k8sClient client.Client, namespace string, bindAddress string, ap
 	}
 
 	srv := &Server{
-		client:        k8sClient,
-		namespace:     namespace,
-		sse:           sse,
-		serverService: service.NewServerService(k8sClient),
-		pluginService: service.NewPluginService(k8sClient),
-		schemaParser:  parser,
+		client:           k8sClient,
+		namespace:        namespace,
+		sse:              sse,
+		serverService:    service.NewServerService(k8sClient),
+		pluginService:    service.NewPluginService(k8sClient),
+		configMapService: service.NewConfigMapService(k8sClient),
+		schemaParser:     parser,
 	}
 
 	mux := http.NewServeMux()
@@ -65,6 +67,10 @@ func NewServer(k8sClient client.Client, namespace string, bindAddress string, ap
 		w.Header().Set("Content-Type", "application/yaml")
 		_, _ = w.Write(openapi.Spec)
 	})
+
+	// ConfigMap API for form dropdowns
+	mux.HandleFunc("/ui/api/configmaps", srv.handleListConfigMaps)
+	mux.HandleFunc("/ui/api/configmaps/create", srv.handleCreateConfigMap)
 
 	// Register UI routes
 	mux.HandleFunc("/ui", srv.handleDashboard)
