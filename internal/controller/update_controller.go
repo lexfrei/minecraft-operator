@@ -387,6 +387,12 @@ func (r *UpdateReconciler) downloadPluginToServer(
 	namespace := server.Namespace
 	container := containerNamePaperMC
 
+	// Ensure update directory exists
+	if _, mkdirErr := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
+		[]string{"mkdir", "-p", "/data/plugins/update"}); mkdirErr != nil {
+		return errors.Wrap(mkdirErr, "failed to create plugins/update directory")
+	}
+
 	// Download directly to /data/plugins/update/ using curl with separate args to avoid shell injection.
 	outputPath := fmt.Sprintf("/data/plugins/update/%s.jar", pluginName)
 
@@ -497,6 +503,13 @@ func (r *UpdateReconciler) applyPluginUpdates(
 		if pluginStatus.ResolvedVersion == "" {
 			slog.InfoContext(ctx, "No resolved version for plugin, skipping",
 				"plugin", pluginName)
+			continue
+		}
+
+		// Skip already installed plugins at the resolved version
+		if pluginStatus.CurrentVersion == pluginStatus.ResolvedVersion {
+			slog.DebugContext(ctx, "Plugin already at resolved version, skipping",
+				"plugin", pluginName, "version", pluginStatus.CurrentVersion)
 			continue
 		}
 

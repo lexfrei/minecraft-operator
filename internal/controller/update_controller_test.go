@@ -948,10 +948,12 @@ var _ = Describe("UpdateController", func() {
 			_ = reconciler.downloadPluginToServer(ctx, server, "test-plugin",
 				"https://example.com/plugin.jar", "")
 
-			Expect(mockExec.Calls).To(HaveLen(1))
-			Expect(mockExec.Calls[0].Command).To(ContainElement("--connect-timeout"),
+			Expect(mockExec.Calls).To(HaveLen(2))
+			Expect(mockExec.Calls[0].Command).To(Equal([]string{"mkdir", "-p", "/data/plugins/update"}),
+				"first call should create update directory")
+			Expect(mockExec.Calls[1].Command).To(ContainElement("--connect-timeout"),
 				"curl should set connection timeout")
-			Expect(mockExec.Calls[0].Command).To(ContainElement("--max-time"),
+			Expect(mockExec.Calls[1].Command).To(ContainElement("--max-time"),
 				"curl should set maximum transfer time")
 		})
 	})
@@ -977,25 +979,26 @@ var _ = Describe("UpdateController", func() {
 			_ = reconciler.downloadPluginToServer(ctx, server, "test-plugin",
 				"https://example.com/plugin.jar", "")
 
-			Expect(mockExec.Calls).To(HaveLen(1))
-			Expect(mockExec.Calls[0].PodName).To(Equal("test-exec-server-0"))
-			Expect(mockExec.Calls[0].Namespace).To(Equal("default"))
-			Expect(mockExec.Calls[0].Container).To(Equal("papermc"))
-			Expect(mockExec.Calls[0].Command).To(ContainElement("curl"))
-			Expect(mockExec.Calls[0].Command).To(ContainElement("--proto"),
+			Expect(mockExec.Calls).To(HaveLen(2))
+			Expect(mockExec.Calls[0].Command).To(Equal([]string{"mkdir", "-p", "/data/plugins/update"}))
+			Expect(mockExec.Calls[1].PodName).To(Equal("test-exec-server-0"))
+			Expect(mockExec.Calls[1].Namespace).To(Equal("default"))
+			Expect(mockExec.Calls[1].Container).To(Equal("papermc"))
+			Expect(mockExec.Calls[1].Command).To(ContainElement("curl"))
+			Expect(mockExec.Calls[1].Command).To(ContainElement("--proto"),
 				"curl should restrict protocol to HTTPS to prevent redirect-based SSRF")
-			Expect(mockExec.Calls[0].Command).To(ContainElement("=https"),
+			Expect(mockExec.Calls[1].Command).To(ContainElement("=https"),
 				"curl --proto flag should only allow HTTPS")
-			Expect(mockExec.Calls[0].Command).To(ContainElement("--max-filesize"),
+			Expect(mockExec.Calls[1].Command).To(ContainElement("--max-filesize"),
 				"curl should limit download size to prevent PVC exhaustion")
-			Expect(mockExec.Calls[0].Command).To(ContainElement(strconv.Itoa(plugins.MaxJARSize)),
+			Expect(mockExec.Calls[1].Command).To(ContainElement(strconv.Itoa(plugins.MaxJARSize)),
 				"curl --max-filesize should match MaxJARSize constant")
 			// Verify -- separator prevents URL-as-flag injection.
 			// The downloadURL must come AFTER -- to prevent a malicious URL
 			// starting with "-" from being interpreted as a curl flag.
 			dashDashIdx := -1
 			urlIdx := -1
-			for i, arg := range mockExec.Calls[0].Command {
+			for i, arg := range mockExec.Calls[1].Command {
 				if arg == "--" {
 					dashDashIdx = i
 				}
@@ -1008,23 +1011,23 @@ var _ = Describe("UpdateController", func() {
 				"download URL must come after -- to prevent flag injection")
 
 			// Verify User-Agent header is set to identify the operator in server logs.
-			Expect(mockExec.Calls[0].Command).To(ContainElement("--user-agent"),
+			Expect(mockExec.Calls[1].Command).To(ContainElement("--user-agent"),
 				"curl should set User-Agent header with --user-agent flag")
-			Expect(mockExec.Calls[0].Command).To(ContainElement("minecraft-operator"),
+			Expect(mockExec.Calls[1].Command).To(ContainElement("minecraft-operator"),
 				"curl User-Agent should identify as minecraft-operator")
 
 			// Verify all curl flags use full names (project standard: no short flags).
-			Expect(mockExec.Calls[0].Command).To(ContainElement("--fail"),
+			Expect(mockExec.Calls[1].Command).To(ContainElement("--fail"),
 				"curl should use --fail, not -f")
-			Expect(mockExec.Calls[0].Command).To(ContainElement("--silent"),
+			Expect(mockExec.Calls[1].Command).To(ContainElement("--silent"),
 				"curl should use --silent, not -s")
-			Expect(mockExec.Calls[0].Command).To(ContainElement("--show-error"),
+			Expect(mockExec.Calls[1].Command).To(ContainElement("--show-error"),
 				"curl should use --show-error, not -S")
-			Expect(mockExec.Calls[0].Command).To(ContainElement("--location"),
+			Expect(mockExec.Calls[1].Command).To(ContainElement("--location"),
 				"curl should use --location, not -L")
-			Expect(mockExec.Calls[0].Command).To(ContainElement("--output"),
+			Expect(mockExec.Calls[1].Command).To(ContainElement("--output"),
 				"curl should use --output, not -o")
-			for _, arg := range mockExec.Calls[0].Command {
+			for _, arg := range mockExec.Calls[1].Command {
 				Expect(arg).NotTo(Equal("-fsSL"),
 					"curl must not use combined short flags; use full flag names")
 				Expect(arg).NotTo(Equal("-A"),
