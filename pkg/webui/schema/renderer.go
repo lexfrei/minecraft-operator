@@ -1,0 +1,361 @@
+package schema
+
+import (
+	"fmt"
+	"html"
+	"strings"
+)
+
+// FormMode indicates whether the form is for creating or editing.
+type FormMode string
+
+const (
+	// ModeCreate renders a form for creating a new resource.
+	ModeCreate FormMode = "create"
+	// ModeEdit renders a form for editing an existing resource.
+	ModeEdit FormMode = "edit"
+)
+
+// RenderOptions controls form rendering behavior.
+type RenderOptions struct {
+	// Mode is create or edit.
+	Mode FormMode
+	// SubmitURL is the API endpoint the form submits to.
+	SubmitURL string
+	// SuccessRedirect is where to redirect after success.
+	SuccessRedirect string
+}
+
+// RenderForm renders a FormSchema into an HTML form string.
+func RenderForm(schema *FormSchema, values map[string]any, opts RenderOptions) string {
+	var b strings.Builder
+
+	writeFormOpen(&b, opts)
+	b.WriteString(`<div id="form-result"></div>`)
+	b.WriteString(`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;">`)
+
+	for _, field := range schema.Fields {
+		writeField(&b, field, "", values, opts.Mode)
+	}
+
+	b.WriteString(`</div>`)
+	writeSubmitButton(&b, opts.Mode)
+	b.WriteString(`</form>`)
+
+	return b.String()
+}
+
+func writeFormOpen(b *strings.Builder, opts RenderOptions) {
+	method := "hx-post"
+	if opts.Mode == ModeEdit {
+		method = "hx-put"
+	}
+
+	redirect := opts.SuccessRedirect
+	if redirect == "" {
+		redirect = "/ui"
+	}
+
+	fmt.Fprintf(b,
+		`<form id="resource-form" %s="%s" hx-ext="json-enc" `+
+			`hx-target="#form-result" hx-swap="innerHTML" data-success-redirect="%s">`,
+		method, html.EscapeString(opts.SubmitURL), html.EscapeString(redirect))
+}
+
+func writeField(b *strings.Builder, field FormField, prefix string, values map[string]any, mode FormMode) {
+	fullName := field.Name
+	if prefix != "" {
+		fullName = prefix + "." + field.Name
+	}
+
+	// Conditional visibility wrapper
+	if field.Condition != nil {
+		fmt.Fprintf(b, `<div data-depends-on="%s" data-show-when="%s" style="display:none;">`,
+			html.EscapeString(field.Condition.DependsOn),
+			html.EscapeString(strings.Join(field.Condition.Values, ",")))
+	} else {
+		b.WriteString(`<div>`)
+	}
+
+	switch {
+	case field.AdditionalProperties:
+		writeMapField(b, field, fullName, values)
+	case field.Type == typeArray && field.Items != nil:
+		writeArrayField(b, field, fullName, values)
+	case field.Type == typeObject && len(field.Properties) > 0:
+		writeObjectField(b, field, fullName, values, mode)
+	default:
+		writeScalarField(b, field, fullName, values, mode)
+	}
+
+	b.WriteString(`</div>`)
+}
+
+func writeScalarField(b *strings.Builder, field FormField, fullName string, values map[string]any, mode FormMode) {
+	writeLabel(b, field, fullName)
+
+	value := getStringValue(values, fullName)
+	readonly := field.ReadOnlyOnEdit && mode == ModeEdit
+
+	switch {
+	case len(field.Enum) > 0:
+		writeSelect(b, field, fullName, value, readonly)
+	case field.Type == "boolean":
+		writeCheckbox(b, fullName, value, field.Default, readonly)
+	case field.Type == "integer":
+		writeNumberInput(b, field, fullName, value, readonly)
+	default:
+		writeTextInput(b, field, fullName, value, readonly)
+	}
+
+	writeDescription(b, field)
+}
+
+func writeLabel(b *strings.Builder, field FormField, fullName string) {
+	fmt.Fprintf(b, `<label for="%s" style="display:block;font-size:13px;font-weight:600;`+
+		`color:var(--text-secondary);margin-bottom:6px;">`, html.EscapeString(fullName))
+	b.WriteString(html.EscapeString(humanize(field.Name)))
+	if field.Required {
+		b.WriteString(` <span style="color:var(--error);">*</span>`)
+	}
+	b.WriteString(`</label>`)
+}
+
+func writeDescription(b *strings.Builder, field FormField) {
+	if field.Description == "" {
+		return
+	}
+	// Take only first sentence for brevity
+	desc := field.Description
+	if idx := strings.Index(desc, "\n"); idx > 0 {
+		desc = desc[:idx]
+	}
+	desc = strings.TrimSpace(desc)
+	if desc != "" {
+		fmt.Fprintf(b, `<p style="font-size:11px;color:var(--text-muted);margin-top:4px;">%s</p>`,
+			html.EscapeString(desc))
+	}
+}
+
+func writeTextInput(b *strings.Builder, field FormField, fullName, value string, readonly bool) {
+	inputType := "text"
+	if field.Format == "uri" {
+		inputType = "url"
+	}
+
+	fmt.Fprintf(b, `<input type="%s" id="%s" name="%s"`,
+		inputType, html.EscapeString(fullName), html.EscapeString(fullName))
+	writeValueAttr(b, value)
+	writeValidationAttrs(b, field)
+	if readonly {
+		b.WriteString(` readonly`)
+	}
+	writeInputStyle(b, readonly)
+	b.WriteString(`/>`)
+}
+
+func writeNumberInput(b *strings.Builder, field FormField, fullName, value string, readonly bool) {
+	fmt.Fprintf(b, `<input type="number" id="%s" name="%s"`,
+		html.EscapeString(fullName), html.EscapeString(fullName))
+	writeValueAttr(b, value)
+	if field.Minimum != nil {
+		fmt.Fprintf(b, ` min="%d"`, *field.Minimum)
+	}
+	if field.Maximum != nil {
+		fmt.Fprintf(b, ` max="%d"`, *field.Maximum)
+	}
+	if field.Required {
+		b.WriteString(` required`)
+	}
+	if readonly {
+		b.WriteString(` readonly`)
+	}
+	writeInputStyle(b, readonly)
+	b.WriteString(`/>`)
+}
+
+func writeSelect(b *strings.Builder, field FormField, fullName, value string, readonly bool) {
+	fmt.Fprintf(b, `<select id="%s" name="%s"`,
+		html.EscapeString(fullName), html.EscapeString(fullName))
+	if field.Required {
+		b.WriteString(` required`)
+	}
+	if readonly {
+		b.WriteString(` disabled`)
+	}
+	writeInputStyle(b, readonly)
+	b.WriteString(`>`)
+
+	if !field.Required {
+		b.WriteString(`<option value="">— Select —</option>`)
+	}
+
+	for _, opt := range field.Enum {
+		selected := ""
+		if opt == value || (value == "" && opt == field.Default) {
+			selected = " selected"
+		}
+		fmt.Fprintf(b, `<option value="%s"%s>%s</option>`,
+			html.EscapeString(opt), selected, html.EscapeString(opt))
+	}
+
+	b.WriteString(`</select>`)
+}
+
+func writeCheckbox(b *strings.Builder, fullName, value, defaultVal string, readonly bool) {
+	checked := value == "true" || (value == "" && defaultVal == "true")
+
+	fmt.Fprintf(b, `<input type="checkbox" id="%s" name="%s"`,
+		html.EscapeString(fullName), html.EscapeString(fullName))
+	if checked {
+		b.WriteString(` checked`)
+	}
+	if readonly {
+		b.WriteString(` disabled`)
+	}
+	b.WriteString(` style="width:auto;margin-top:8px;"/>`)
+}
+
+func writeObjectField(b *strings.Builder, field FormField, fullName string, values map[string]any, mode FormMode) {
+	writeLabel(b, field, fullName)
+	b.WriteString(`<fieldset style="border:1px solid var(--border);border-radius:6px;padding:15px;margin:0;">`)
+
+	for _, sub := range field.Properties {
+		writeField(b, sub, fullName, values, mode)
+	}
+
+	b.WriteString(`</fieldset>`)
+}
+
+func writeMapField(b *strings.Builder, field FormField, fullName string, _ map[string]any) {
+	writeLabel(b, field, fullName)
+	fmt.Fprintf(b, `<div data-map-field="%s">`, html.EscapeString(fullName))
+	b.WriteString(`<div data-map-entries></div>`)
+	fmt.Fprintf(b,
+		`<button type="button" data-map-add="%s" `+
+			`style="margin-top:8px;padding:4px 12px;font-size:12px;background:var(--bg-tertiary);`+
+			`color:var(--text-secondary);border:1px solid var(--border);border-radius:4px;cursor:pointer;">+ Add</button>`,
+		html.EscapeString(fullName))
+	b.WriteString(`</div>`)
+}
+
+func writeArrayField(b *strings.Builder, field FormField, fullName string, _ map[string]any) {
+	writeLabel(b, field, fullName)
+	fmt.Fprintf(b, `<div data-array-field="%s">`, html.EscapeString(fullName))
+	b.WriteString(`<div data-array-entries></div>`)
+
+	// Template for cloning new items
+	b.WriteString(`<template data-array-template>`)
+	b.WriteString(`<div data-array-item style="border:1px solid var(--border);` +
+		`border-radius:4px;padding:10px;margin-bottom:8px;">`)
+	if field.Items.Type == typeObject {
+		for _, prop := range field.Items.Properties {
+			b.WriteString(`<div style="margin-bottom:8px;">`)
+			writeLabel(b, prop, fullName+".*."+prop.Name)
+			writeTextInput(b, prop, fullName+".*."+prop.Name, "", false)
+			b.WriteString(`</div>`)
+		}
+	}
+	b.WriteString(`<button type="button" data-array-remove ` +
+		`style="font-size:11px;color:var(--error);background:none;border:none;cursor:pointer;">Remove</button>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</template>`)
+
+	fmt.Fprintf(b,
+		`<button type="button" data-array-add="%s" `+
+			`style="margin-top:8px;padding:4px 12px;font-size:12px;background:var(--bg-tertiary);`+
+			`color:var(--text-secondary);border:1px solid var(--border);border-radius:4px;cursor:pointer;">+ Add</button>`,
+		html.EscapeString(fullName))
+	b.WriteString(`</div>`)
+}
+
+func writeSubmitButton(b *strings.Builder, mode FormMode) {
+	label := "Create"
+	if mode == ModeEdit {
+		label = "Update"
+	}
+	fmt.Fprintf(b,
+		`<div style="margin-top:20px;"><button type="submit" `+
+			`style="padding:10px 24px;background:var(--accent);color:white;border:none;`+
+			`border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;">%s</button></div>`, label)
+}
+
+func writeValueAttr(b *strings.Builder, value string) {
+	if value != "" {
+		fmt.Fprintf(b, ` value="%s"`, html.EscapeString(value))
+	}
+}
+
+func writeValidationAttrs(b *strings.Builder, field FormField) {
+	if field.Required {
+		b.WriteString(` required`)
+	}
+	if field.Pattern != "" {
+		fmt.Fprintf(b, ` pattern="%s"`, html.EscapeString(field.Pattern))
+	}
+	if field.MinLength != nil {
+		fmt.Fprintf(b, ` minlength="%d"`, *field.MinLength)
+	}
+	if field.MaxLength != nil {
+		fmt.Fprintf(b, ` maxlength="%d"`, *field.MaxLength)
+	}
+}
+
+func writeInputStyle(b *strings.Builder, readonly bool) {
+	base := `width:100%;padding:8px 10px;background:var(--bg-tertiary);color:var(--text-primary);` +
+		`border:1px solid var(--border);border-radius:4px;font-size:14px;`
+	if readonly {
+		base += `opacity:0.6;cursor:not-allowed;`
+	}
+	fmt.Fprintf(b, ` style="%s"`, base)
+}
+
+// getStringValue retrieves a value by dot-notation key from a flat or nested map.
+func getStringValue(values map[string]any, key string) string {
+	if values == nil {
+		return ""
+	}
+
+	// Try flat key first
+	if v, ok := values[key]; ok {
+		return toString(v)
+	}
+
+	// Try nested navigation
+	parts := strings.Split(key, ".")
+	var current any = values
+	for _, part := range parts {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return ""
+		}
+		current = m[part]
+	}
+
+	return toString(current)
+}
+
+// humanize converts a camelCase or snake_case name to a human-readable label.
+func humanize(name string) string {
+	var b strings.Builder
+	for i, r := range name {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			b.WriteRune(' ')
+		}
+		if i == 0 {
+			b.WriteRune(toUpper(r))
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	result := b.String()
+	result = strings.ReplaceAll(result, "_", " ")
+	return result
+}
+
+func toUpper(r rune) rune {
+	if r >= 'a' && r <= 'z' {
+		return r - 32
+	}
+	return r
+}
