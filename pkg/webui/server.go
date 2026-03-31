@@ -35,7 +35,10 @@ type Server struct {
 func NewServer(k8sClient client.Client, namespace string, bindAddress string, apiHandler http.Handler) *Server {
 	sse := NewSSEBroker()
 
-	parser, _ := schema.NewParser(openapi.Spec)
+	parser, parserErr := schema.NewParser(openapi.Spec)
+	if parserErr != nil {
+		log.Log.Error(parserErr, "failed to initialize OpenAPI schema parser")
+	}
 
 	srv := &Server{
 		client:        k8sClient,
@@ -49,7 +52,10 @@ func NewServer(k8sClient client.Client, namespace string, bindAddress string, ap
 	mux := http.NewServeMux()
 
 	// Static files
-	staticFS, _ := fs.Sub(static.FS, ".")
+	staticFS, fsErr := fs.Sub(static.FS, ".")
+	if fsErr != nil {
+		log.Log.Error(fsErr, "failed to initialize static file system")
+	}
 	mux.Handle("/ui/static/", http.StripPrefix("/ui/static/", http.FileServer(http.FS(staticFS))))
 
 	// OpenAPI spec

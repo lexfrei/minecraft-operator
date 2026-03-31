@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lexfrei/minecraft-operator/api/openapi/generated"
+	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -350,7 +351,7 @@ func (s *Server) ListPlugins(
 		namespace = *req.Params.Namespace
 	}
 
-	plugins, err := s.pluginService.ListPlugins(ctx, namespace)
+	pluginList, err := s.pluginService.ListPlugins(ctx, namespace)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to list plugins", "error", err, "namespace", namespace)
 		return generated.ListPlugins500JSONResponse{
@@ -361,8 +362,8 @@ func (s *Server) ListPlugins(
 		}, nil
 	}
 
-	summaries := make([]generated.PluginSummary, 0, len(plugins))
-	for _, p := range plugins {
+	summaries := make([]generated.PluginSummary, 0, len(pluginList))
+	for _, p := range pluginList {
 		summaries = append(summaries, pluginDataToSummary(p))
 	}
 
@@ -385,13 +386,8 @@ func (s *Server) CreatePlugin(
 		}, nil
 	}
 
-	if errMsg := validateEndpointRequest(req.Body.Endpoints); errMsg != "" {
-		return generated.CreatePlugin400JSONResponse{
-			BadRequestJSONResponse: generated.BadRequestJSONResponse{
-				Error: errMsg,
-				Code:  ptr(generated.INVALIDREQUEST),
-			},
-		}, nil
+	if errResp := validatePluginCreateRequest(req.Body); errResp != nil {
+		return *errResp, nil
 	}
 
 	data := pluginCreateRequestToData(*req.Body)
@@ -693,7 +689,7 @@ func serverDataToDetail(data service.ServerData) generated.ServerDetail {
 
 	// Convert plugins
 	if len(data.Plugins) > 0 {
-		plugins := make([]generated.ServerPlugin, 0, len(data.Plugins))
+		serverPlugins := make([]generated.ServerPlugin, 0, len(data.Plugins))
 		for _, p := range data.Plugins {
 			sp := generated.ServerPlugin{
 				Name:       p.Name,
@@ -711,9 +707,9 @@ func serverDataToDetail(data service.ServerData) generated.ServerDetail {
 			if p.SourceType != "" {
 				sp.Source = &p.SourceType
 			}
-			plugins = append(plugins, sp)
+			serverPlugins = append(serverPlugins, sp)
 		}
-		detail.Plugins = &plugins
+		detail.Plugins = &serverPlugins
 	}
 
 	// Convert maintenance schedule
@@ -1078,6 +1074,49 @@ func validateEndpointRequest(endpoints *[]generated.PluginEndpoint) string {
 		seenPortProto[portProtoKey] = true
 	}
 
+	return ""
+}
+
+// validatePluginCreateRequest validates all fields of a plugin create request.
+func validatePluginCreateRequest(body *generated.PluginCreateRequest) *generated.CreatePlugin400JSONResponse {
+	if errMsg := validateEndpointRequest(body.Endpoints); errMsg != "" {
+		return &generated.CreatePlugin400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}
+	}
+
+	if errMsg := validatePluginSource(body.Source); errMsg != "" {
+		return &generated.CreatePlugin400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}
+	}
+
+	return nil
+}
+
+// validatePluginSource validates plugin source configuration.
+func validatePluginSource(source generated.PluginSource) string {
+	switch source.Type {
+	case generated.Hangar:
+		if source.Project == nil || *source.Project == "" {
+			return "Project is required for hangar source type"
+		}
+	case generated.Url:
+		if source.Url == nil || *source.Url == "" {
+			return "URL is required for url source type"
+		}
+		if err := plugins.ValidateDownloadURL(*source.Url); err != nil {
+			return fmt.Sprintf("Invalid plugin URL: %v", err)
+		}
+	default:
+		return fmt.Sprintf("Unsupported source type: %s", source.Type)
+	}
 	return ""
 }
 

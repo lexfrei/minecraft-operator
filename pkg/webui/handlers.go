@@ -314,7 +314,7 @@ func (s *Server) handlePluginCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.renderSchemaForm(w, r, "PluginCreateRequest", schema.ModeCreate,
-		"/api/v1/plugins", "/ui/plugins", "Create Plugin")
+		"/api/v1/plugins", "/ui/plugins", "Create Plugin", nil)
 }
 
 // handlePluginDelete handles plugin deletion.
@@ -332,7 +332,7 @@ func (s *Server) handleServerCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.renderSchemaForm(w, r, "ServerCreateRequest", schema.ModeCreate,
-		"/api/v1/servers", "/ui", "Create Server")
+		"/api/v1/servers", "/ui", "Create Server", nil)
 }
 
 // renderSchemaForm renders a schema-driven form page.
@@ -342,6 +342,7 @@ func (s *Server) renderSchemaForm(
 	schemaName string,
 	mode schema.FormMode,
 	submitURL, backURL, title string,
+	values map[string]any,
 ) {
 	if s.schemaParser == nil {
 		http.Error(w, "Schema parser not initialized", http.StatusInternalServerError)
@@ -354,7 +355,6 @@ func (s *Server) renderSchemaForm(
 		return
 	}
 
-	var values map[string]any
 	formHTML := schema.RenderForm(formSchema, values, schema.RenderOptions{
 		Mode:            mode,
 		SubmitURL:       submitURL,
@@ -470,9 +470,16 @@ func (s *Server) handleServerEdit(w http.ResponseWriter, r *http.Request, server
 		return
 	}
 
+	serverData, err := s.serverService.GetServer(r.Context(), namespace, serverName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get server: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	values := serverDataToValues(serverData)
 	submitURL := fmt.Sprintf("/api/v1/servers/%s/%s", namespace, serverName)
 	s.renderSchemaForm(w, r, "ServerUpdateRequest", schema.ModeEdit,
-		submitURL, "/ui", fmt.Sprintf("Edit Server: %s", serverName))
+		submitURL, "/ui", fmt.Sprintf("Edit Server: %s", serverName), values)
 }
 
 // handlePluginEdit renders the schema-driven plugin edit form.
@@ -483,9 +490,16 @@ func (s *Server) handlePluginEdit(w http.ResponseWriter, r *http.Request, plugin
 		return
 	}
 
+	pluginData, err := s.pluginService.GetPlugin(r.Context(), namespace, pluginName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get plugin: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	values := pluginDataToValues(pluginData)
 	submitURL := fmt.Sprintf("/api/v1/plugins/%s/%s", namespace, pluginName)
 	s.renderSchemaForm(w, r, "PluginUpdateRequest", schema.ModeEdit,
-		submitURL, "/ui/plugins", fmt.Sprintf("Edit Plugin: %s", pluginName))
+		submitURL, "/ui/plugins", fmt.Sprintf("Edit Plugin: %s", pluginName), values)
 }
 
 // handlePluginDetailPage serves the plugin details page.
@@ -513,17 +527,9 @@ func (s *Server) handlePluginDetailPage(w http.ResponseWriter, r *http.Request, 
 	detail := pluginDataToDetail(data)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := renderPluginDetail(w, detail); err != nil {
+	component := templates.PluginDetail(detail)
+	if err := component.Render(ctx, w); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render plugin detail: %v", err),
 			http.StatusInternalServerError)
 	}
-}
-
-// renderPluginDetail renders the plugin detail template.
-func renderPluginDetail(w io.Writer, data templates.PluginDetailData) error {
-	component := templates.PluginDetail(data)
-	if err := component.Render(context.Background(), w); err != nil {
-		return errors.Wrap(err, "failed to render plugin detail template")
-	}
-	return nil
 }

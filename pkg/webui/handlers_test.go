@@ -527,3 +527,158 @@ func TestHandleServerDeleteRemovesServer(t *testing.T) {
 		t.Error("expected server to be deleted, but it still exists")
 	}
 }
+
+func TestHandleServerEditReturns200(t *testing.T) {
+	t.Parallel()
+
+	server := &mck8slexlav1beta1.PaperMCServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "edit-server",
+			Namespace: "default",
+		},
+		Spec: mck8slexlav1beta1.PaperMCServerSpec{
+			UpdateStrategy: "auto",
+			Version:        "1.21.1",
+		},
+		Status: mck8slexlav1beta1.PaperMCServerStatus{
+			CurrentVersion: "1.21.1",
+			CurrentBuild:   100,
+		},
+	}
+
+	srv := newTestServer(server)
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/server/edit-server/edit?namespace=default", nil)
+	w := httptest.NewRecorder()
+
+	srv.handleServerEdit(w, req, "edit-server")
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "form") {
+		t.Error("expected form in response")
+	}
+	if !strings.Contains(body, "1.21.1") {
+		t.Error("expected current version value pre-filled in edit form")
+	}
+}
+
+func TestHandleServerEditWithoutNamespace(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/server/test/edit", nil)
+	w := httptest.NewRecorder()
+
+	srv.handleServerEdit(w, req, "test")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing namespace, got %d", w.Code)
+	}
+}
+
+func TestHandlePluginEditReturns200(t *testing.T) {
+	t.Parallel()
+
+	plugin := &mck8slexlav1beta1.Plugin{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "edit-plugin",
+			Namespace: "default",
+		},
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
+				Type:    "hangar",
+				Project: "BlueMap",
+			},
+			UpdateStrategy: "latest",
+		},
+	}
+
+	srv := newTestServer(plugin)
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/plugin/edit-plugin/edit?namespace=default", nil)
+	w := httptest.NewRecorder()
+
+	srv.handlePluginEdit(w, req, "edit-plugin")
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "form") {
+		t.Error("expected form in response")
+	}
+}
+
+func TestHandlePluginDetailReturns200(t *testing.T) {
+	t.Parallel()
+
+	plugin := &mck8slexlav1beta1.Plugin{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "detail-plugin",
+			Namespace: "default",
+		},
+		Spec: mck8slexlav1beta1.PluginSpec{
+			Source: mck8slexlav1beta1.PluginSource{
+				Type:    "hangar",
+				Project: "BlueMap",
+			},
+			UpdateStrategy: "latest",
+		},
+	}
+
+	srv := newTestServer(plugin)
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/plugin/detail-plugin?namespace=default", nil)
+	w := httptest.NewRecorder()
+
+	srv.handlePluginDetailPage(w, req, "detail-plugin")
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "detail-plugin") {
+		t.Error("expected plugin name in detail page")
+	}
+	if !strings.Contains(body, "BlueMap") {
+		t.Error("expected project name in detail page")
+	}
+}
+
+func TestHandlePluginDetailWithoutNamespace(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/plugin/test", nil)
+	w := httptest.NewRecorder()
+
+	srv.handlePluginDetailPage(w, req, "test")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing namespace, got %d", w.Code)
+	}
+}
+
+func TestRenderSchemaFormNilParser(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+	srv.schemaParser = nil
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/server/new", nil)
+	w := httptest.NewRecorder()
+
+	srv.handleServerCreate(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 when parser is nil, got %d", w.Code)
+	}
+}

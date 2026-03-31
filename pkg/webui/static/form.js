@@ -116,8 +116,8 @@
       setNestedValue(data, input.name, value);
     });
 
-    // Collect map fields
-    document
+    // Collect map fields (scoped to the form)
+    form
       .querySelectorAll("[data-map-field]")
       .forEach(function (container) {
         var mapName = container.dataset.mapField;

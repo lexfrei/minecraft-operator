@@ -144,6 +144,50 @@ func pluginDataToDetail(data *service.PluginData) templates.PluginDetailData {
 	}
 }
 
+// serverDataToValues converts ServerData to a flat map for form pre-filling.
+func serverDataToValues(data *service.ServerData) map[string]any {
+	version := data.CurrentVersion
+	if version == "" {
+		version = data.DesiredVersion
+	}
+	values := map[string]any{
+		"name":           data.Name,
+		"namespace":      data.Namespace,
+		"updateStrategy": data.UpdateStrategy,
+		"version":        version,
+		"checkCron":      "",
+	}
+	if data.CurrentBuild > 0 {
+		values["build"] = data.CurrentBuild
+	}
+	if data.MaintenanceSchedule != nil {
+		values["maintenanceWindow.enabled"] = data.MaintenanceSchedule.Enabled
+		values["maintenanceWindow.cron"] = data.MaintenanceSchedule.WindowCron
+		values["checkCron"] = data.MaintenanceSchedule.CheckCron
+	}
+	return values
+}
+
+// pluginDataToValues converts PluginData to a flat map for form pre-filling.
+func pluginDataToValues(data *service.PluginData) map[string]any {
+	values := map[string]any{
+		"name":           data.Name,
+		"namespace":      data.Namespace,
+		"source.type":    data.SourceType,
+		"source.project": data.Project,
+		"source.url":     data.URL,
+		"updateStrategy": data.UpdateStrategy,
+		"version":        data.Version,
+	}
+	if data.Build != nil {
+		values["build"] = *data.Build
+	}
+	if data.UpdateDelay != nil {
+		values["updateDelay"] = data.UpdateDelay.String()
+	}
+	return values
+}
+
 // formatVersionWithBuild formats version and build into "version-build" format.
 func formatVersionWithBuild(version string, build int) string {
 	if version == "" {
