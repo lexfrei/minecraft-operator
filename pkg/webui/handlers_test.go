@@ -667,6 +667,51 @@ func TestHandlePluginDetailWithoutNamespace(t *testing.T) {
 	}
 }
 
+func TestHandleServerEditNotFound(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/server/nonexistent/edit?namespace=default", nil)
+	w := httptest.NewRecorder()
+
+	srv.handleServerEdit(w, req, "nonexistent")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for non-existent server, got %d", w.Code)
+	}
+}
+
+func TestHandlePluginEditNotFound(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/plugin/nonexistent/edit?namespace=default", nil)
+	w := httptest.NewRecorder()
+
+	srv.handlePluginEdit(w, req, "nonexistent")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for non-existent plugin, got %d", w.Code)
+	}
+}
+
+func TestHandlePluginDetailNotFound(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/plugin/nonexistent?namespace=default", nil)
+	w := httptest.NewRecorder()
+
+	srv.handlePluginDetailPage(w, req, "nonexistent")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for non-existent plugin detail, got %d", w.Code)
+	}
+}
+
 func TestRenderSchemaFormNilParser(t *testing.T) {
 	t.Parallel()
 

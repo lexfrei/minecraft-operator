@@ -14,6 +14,7 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/service"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/schema"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/templates"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -472,6 +473,10 @@ func (s *Server) handleServerEdit(w http.ResponseWriter, r *http.Request, server
 
 	serverData, err := s.serverService.GetServer(r.Context(), namespace, serverName)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, fmt.Sprintf("Failed to get server: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -492,6 +497,10 @@ func (s *Server) handlePluginEdit(w http.ResponseWriter, r *http.Request, plugin
 
 	pluginData, err := s.pluginService.GetPlugin(r.Context(), namespace, pluginName)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, fmt.Sprintf("Failed to get plugin: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -519,6 +528,10 @@ func (s *Server) handlePluginDetailPage(w http.ResponseWriter, r *http.Request, 
 
 	data, err := s.pluginService.GetPlugin(ctx, namespace, pluginName)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, fmt.Sprintf("Failed to fetch plugin: %v", err),
 			http.StatusInternalServerError)
 		return

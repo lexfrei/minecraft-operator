@@ -1194,3 +1194,49 @@ func TestLabelSelectorToK8s_WithExpressions(t *testing.T) {
 	assert.Equal(t, metav1.LabelSelectorOperator("In"), result.MatchExpressions[0].Operator)
 	assert.Equal(t, []string{"papermc", "vanilla"}, result.MatchExpressions[0].Values)
 }
+
+func TestValidatePluginSource_HangarRequiresProject(t *testing.T) {
+	src := generated.PluginSource{Type: generated.Hangar}
+	msg := validatePluginSource(src)
+	assert.Contains(t, msg, "Project is required")
+}
+
+func TestValidatePluginSource_HangarValid(t *testing.T) {
+	project := "BlueMap"
+	src := generated.PluginSource{Type: generated.Hangar, Project: &project}
+	msg := validatePluginSource(src)
+	assert.Empty(t, msg)
+}
+
+func TestValidatePluginSource_URLRequiresURL(t *testing.T) {
+	src := generated.PluginSource{Type: generated.Url}
+	msg := validatePluginSource(src)
+	assert.Contains(t, msg, "URL is required")
+}
+
+func TestValidatePluginSource_URLRejectsHTTP(t *testing.T) {
+	u := "http://evil.com/plugin.jar"
+	src := generated.PluginSource{Type: generated.Url, Url: &u}
+	msg := validatePluginSource(src)
+	assert.NotEmpty(t, msg, "should reject HTTP URL")
+}
+
+func TestValidatePluginSource_URLRejectsSSRF(t *testing.T) {
+	u := "https://127.0.0.1/plugin.jar"
+	src := generated.PluginSource{Type: generated.Url, Url: &u}
+	msg := validatePluginSource(src)
+	assert.NotEmpty(t, msg, "should reject SSRF address")
+}
+
+func TestValidatePluginSource_URLValid(t *testing.T) {
+	u := "https://example.com/plugin.jar"
+	src := generated.PluginSource{Type: generated.Url, Url: &u}
+	msg := validatePluginSource(src)
+	assert.Empty(t, msg)
+}
+
+func TestValidatePluginSource_UnknownType(t *testing.T) {
+	src := generated.PluginSource{Type: "modrinth"}
+	msg := validatePluginSource(src)
+	assert.Contains(t, msg, "Unsupported source type")
+}
