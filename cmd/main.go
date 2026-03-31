@@ -52,7 +52,7 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/solver"
 	"github.com/lexfrei/minecraft-operator/pkg/webui"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -72,7 +72,7 @@ func init() {
 
 	utilruntime.Must(mck8slexlav1beta1.AddToScheme(scheme))
 	utilruntime.Must(volumesnapshotv1.AddToScheme(scheme))
-	utilruntime.Must(gatewayv1alpha2.Install(scheme))
+	utilruntime.Must(gatewayv1.Install(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
