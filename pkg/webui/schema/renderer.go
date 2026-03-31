@@ -99,6 +99,8 @@ func writeField(b *strings.Builder, field FormField, prefix string, values map[s
 		writeMapField(b, field, fullName, values)
 	case field.Type == typeArray && field.Items != nil:
 		writeArrayField(b, field, fullName, values)
+	case field.Name == "configMapRef" && field.Type == typeObject:
+		writeConfigMapRefField(b, field, fullName, values)
 	case field.Type == typeObject && len(field.Properties) > 0:
 		writeObjectField(b, field, fullName, values, mode)
 	default:
@@ -336,6 +338,55 @@ func writeArrayField(b *strings.Builder, field FormField, fullName string, _ map
 			`color:var(--text-secondary);border:1px solid var(--border);border-radius:4px;cursor:pointer;">+ Add</button>`,
 		html.EscapeString(fullName))
 	b.WriteString(`</div>`)
+}
+
+// writeConfigMapRefField renders a ConfigMap picker with dynamic selects for name and key.
+// The JS in form.js populates the name dropdown via /ui/api/configmaps?namespace=...
+// and the key dropdown from the selected ConfigMap's keys.
+func writeConfigMapRefField(b *strings.Builder, field FormField, fullName string, values map[string]any) {
+	writeLabel(b, field, fullName)
+	nameValue := getStringValue(values, fullName+".name")
+	keyValue := getStringValue(values, fullName+".key")
+
+	fmt.Fprintf(b, `<div data-configmap-ref="%s" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">`,
+		html.EscapeString(fullName))
+
+	// ConfigMap name — select populated by JS
+	b.WriteString(`<div style="flex:1;min-width:180px;">`)
+	b.WriteString(`<label style="font-size:11px;color:var(--text-muted);` +
+		`display:block;margin-bottom:4px;">ConfigMap</label>`)
+	fmt.Fprintf(b, `<select name="%s.name" data-configmap-name`,
+		html.EscapeString(fullName))
+	writeInputStyle(b, false)
+	b.WriteString(`>`)
+	b.WriteString(`<option value="">— Select ConfigMap —</option>`)
+	if nameValue != "" {
+		fmt.Fprintf(b, `<option value="%s" selected>%s</option>`,
+			html.EscapeString(nameValue), html.EscapeString(nameValue))
+	}
+	b.WriteString(`</select></div>`)
+
+	// ConfigMap key — select populated by JS when name changes
+	b.WriteString(`<div style="flex:1;min-width:150px;">`)
+	b.WriteString(`<label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Key</label>`)
+	fmt.Fprintf(b, `<select name="%s.key" data-configmap-key`,
+		html.EscapeString(fullName))
+	writeInputStyle(b, false)
+	b.WriteString(`>`)
+	b.WriteString(`<option value="">— Select Key —</option>`)
+	if keyValue != "" {
+		fmt.Fprintf(b, `<option value="%s" selected>%s</option>`,
+			html.EscapeString(keyValue), html.EscapeString(keyValue))
+	}
+	b.WriteString(`</select></div>`)
+
+	// Create New button
+	b.WriteString(`<button type="button" data-configmap-create ` +
+		`style="padding:6px 12px;font-size:12px;background:var(--accent);color:white;` +
+		`border:none;border-radius:4px;cursor:pointer;white-space:nowrap;">+ New</button>`)
+
+	b.WriteString(`</div>`)
+	writeDescription(b, field)
 }
 
 func writeSubmitButton(b *strings.Builder, mode FormMode) {

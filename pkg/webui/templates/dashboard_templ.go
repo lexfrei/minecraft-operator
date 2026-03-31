@@ -410,7 +410,7 @@ func ServerCard(server ServerSummary) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" style=\"background-color: var(--error); color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;\">Delete</button></div><!-- Stats grid --><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;\">grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;\"><div><p style=\"color: var(--text-secondary); font-size: 12px;\">Current Version</p><p style=\"font-size: 16px; font-weight: 600;\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" style=\"background-color: var(--error); color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;\">Delete</button></div><!-- Stats grid --><div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;\"><div><p style=\"color: var(--text-secondary); font-size: 12px;\">Current Version</p><p style=\"font-size: 16px; font-weight: 600;\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
