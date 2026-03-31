@@ -154,16 +154,24 @@
   }
 
   // --- HTMX Integration ---
-  // Override htmx json-enc to use our serializer
-  document.addEventListener("htmx:configRequest", function (evt) {
-    var form = evt.detail.elt;
-    if (!form || !form.matches || !form.matches("#resource-form")) return;
-
-    var data = serializeForm(form);
-    evt.detail.headers["Content-Type"] = "application/json";
-    // htmx json-enc extension handles the body, but we override for our nested logic
-    evt.detail.unfilteredParameters = data;
-  });
+  // Custom htmx extension that serializes forms as nested JSON.
+  // Replaces htmx-ext-json-enc for forms with dot-notation field names.
+  if (typeof htmx !== "undefined") {
+    htmx.defineExtension("json-enc", {
+      onEvent: function (name, evt) {
+        if (name === "htmx:configRequest") {
+          evt.detail.headers["Content-Type"] = "application/json";
+        }
+      },
+      encodeParameters: function (_xhr, parameters, elt) {
+        var form = elt.closest("#resource-form");
+        if (form) {
+          return JSON.stringify(serializeForm(form));
+        }
+        return JSON.stringify(parameters);
+      },
+    });
+  }
 
   // Handle errors from API
   document.addEventListener("htmx:responseError", function (evt) {

@@ -15,6 +15,7 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/service"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/schema"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/static"
+	"github.com/lexfrei/minecraft-operator/pkg/webui/templates"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -162,10 +163,25 @@ func (s *Server) handleServerDetailPage(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	namespace := r.URL.Query().Get("namespace")
+
 	ctx := r.Context()
-	data, err := s.fetchServerDetailData(ctx, serverName)
+
+	var data templates.ServerDetailData
+	var err error
+
+	if namespace != "" {
+		var serverData *service.ServerData
+		serverData, err = s.serverService.GetServer(ctx, namespace, serverName)
+		if err == nil {
+			data = serverDataToDetail(serverData)
+		}
+	} else {
+		data, err = s.fetchServerDetailData(ctx, serverName)
+	}
+
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to fetch server details: %v", err), http.StatusInternalServerError)
+		http.NotFound(w, r)
 		return
 	}
 

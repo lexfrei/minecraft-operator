@@ -449,17 +449,17 @@ func (s *Server) handleServerRoutes(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case actionDelete:
 			s.handleServerDelete(w, r)
-			return
 		case actionApplyNow:
 			s.handleApplyNow(w, r)
-			return
 		case actionEdit:
 			s.handleServerEdit(w, r, parts[0])
-			return
+		default:
+			http.NotFound(w, r)
 		}
+		return
 	}
 
-	// Default: show server detail
+	// No action — show server detail
 	s.handleServerDetailPage(w, r, parts[0])
 }
 

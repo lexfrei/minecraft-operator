@@ -712,6 +712,46 @@ func TestHandlePluginDetailNotFound(t *testing.T) {
 	}
 }
 
+func TestHandleServerRoutes_UnknownAction_Returns404(t *testing.T) {
+	t.Parallel()
+
+	server := &mck8slexlav1beta1.PaperMCServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-server",
+			Namespace: "default",
+		},
+		Spec: mck8slexlav1beta1.PaperMCServerSpec{
+			UpdateStrategy: "auto",
+		},
+	}
+
+	srv := newTestServer(server)
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/server/test-server/garbage?namespace=default", nil)
+	w := httptest.NewRecorder()
+
+	srv.handleServerRoutes(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for unknown action, got %d", w.Code)
+	}
+}
+
+func TestHandleServerDetailNotFound(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer()
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/server/nonexistent?namespace=default", nil)
+	w := httptest.NewRecorder()
+
+	srv.handleServerDetailPage(w, req, "nonexistent")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for non-existent server detail, got %d", w.Code)
+	}
+}
+
 func TestRenderSchemaFormNilParser(t *testing.T) {
 	t.Parallel()
 
