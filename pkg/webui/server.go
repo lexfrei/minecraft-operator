@@ -4,13 +4,17 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	openapi "github.com/lexfrei/minecraft-operator/api/openapi"
 	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
+	"github.com/lexfrei/minecraft-operator/pkg/webui/schema"
+	"github.com/lexfrei/minecraft-operator/pkg/webui/static"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -23,21 +27,36 @@ type Server struct {
 	sse           *SSEBroker
 	serverService *service.ServerService
 	pluginService *service.PluginService
+	schemaParser  *schema.Parser
 }
 
 // NewServer creates a new Web UI server instance.
 // apiHandler is optional - if provided, it will be mounted at /api/v1/.
 func NewServer(k8sClient client.Client, namespace string, bindAddress string, apiHandler http.Handler) *Server {
 	sse := NewSSEBroker()
+
+	parser, _ := schema.NewParser(openapi.Spec)
+
 	srv := &Server{
 		client:        k8sClient,
 		namespace:     namespace,
 		sse:           sse,
 		serverService: service.NewServerService(k8sClient),
 		pluginService: service.NewPluginService(k8sClient),
+		schemaParser:  parser,
 	}
 
 	mux := http.NewServeMux()
+
+	// Static files
+	staticFS, _ := fs.Sub(static.FS, ".")
+	mux.Handle("/ui/static/", http.StripPrefix("/ui/static/", http.FileServer(http.FS(staticFS))))
+
+	// OpenAPI spec
+	mux.HandleFunc("/api/v1/openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write(openapi.Spec)
+	})
 
 	// Register UI routes
 	mux.HandleFunc("/ui", srv.handleDashboard)

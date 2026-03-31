@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	openapi "github.com/lexfrei/minecraft-operator/api/openapi"
 	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/internal/controller"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
+	"github.com/lexfrei/minecraft-operator/pkg/webui/schema"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -173,12 +175,15 @@ func newTestServer(objs ...client.Object) *Server {
 	scheme := newTestScheme()
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
+	parser, _ := schema.NewParser(openapi.Spec)
+
 	return &Server{
 		client:        fakeClient,
 		namespace:     "default",
 		sse:           NewSSEBroker(),
 		serverService: service.NewServerService(fakeClient),
 		pluginService: service.NewPluginService(fakeClient),
+		schemaParser:  parser,
 	}
 }
 
@@ -299,61 +304,19 @@ func TestHandlePluginCreateGetShowsForm(t *testing.T) {
 	}
 }
 
-func TestHandlePluginCreatePostCreatesPlugin(t *testing.T) {
+func TestHandlePluginCreatePostRejectsNonGet(t *testing.T) {
 	t.Parallel()
 
 	srv := newTestServer()
 
-	form := url.Values{}
-	form.Set("name", "test-plugin")
-	form.Set("namespace", "default")
-	form.Set("sourceType", "hangar")
-	form.Set("project", "TestProject")
-	form.Set("updateStrategy", "latest")
-
-	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/new", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/new", nil)
 	w := httptest.NewRecorder()
 
 	srv.handlePluginCreate(w, req)
 
-	// Should redirect after successful creation
-	if w.Code != http.StatusSeeOther && w.Code != http.StatusFound {
-		t.Errorf("expected redirect status, got %d", w.Code)
-	}
-
-	// Verify plugin was created
-	var plugin mck8slexlav1beta1.Plugin
-	err := srv.client.Get(context.Background(), client.ObjectKey{
-		Name:      "test-plugin",
-		Namespace: "default",
-	}, &plugin)
-	if err != nil {
-		t.Errorf("failed to get created plugin: %v", err)
-	}
-	if plugin.Spec.Source.Project != "TestProject" {
-		t.Errorf("expected project 'TestProject', got %q", plugin.Spec.Source.Project)
-	}
-}
-
-func TestHandlePluginCreateValidatesForm(t *testing.T) {
-	t.Parallel()
-
-	srv := newTestServer()
-
-	// Missing required fields
-	form := url.Values{}
-	form.Set("name", "")
-	form.Set("namespace", "default")
-
-	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/new", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	w := httptest.NewRecorder()
-
-	srv.handlePluginCreate(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected status %d for invalid form, got %d", http.StatusBadRequest, w.Code)
+	// Schema-driven forms only serve GET; POST goes directly to /api/v1/plugins
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d for POST, got %d", http.StatusMethodNotAllowed, w.Code)
 	}
 }
 
@@ -485,153 +448,6 @@ func TestHandleApplyNowFromPluginRouteReturnsError(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404 for apply-now on plugin route, got %d", w.Code)
-	}
-}
-
-func TestParseServerFormRejectsInvalidNamespace(t *testing.T) {
-	t.Parallel()
-
-	srv := newTestServer()
-
-	// Valid name, but invalid namespace (uppercase letters violate RFC 1123)
-	form := url.Values{
-		"name":           {"my-server"},
-		"namespace":      {"INVALID-NS"},
-		"updateStrategy": {"auto"},
-		"version":        {"1.21.1"},
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/ui/server/create", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	_, err := srv.parseServerFormToData(req)
-	if err == nil {
-		t.Error("parseServerFormToData should reject invalid namespace (uppercase not allowed in K8s names)")
-	}
-}
-
-func TestParsePluginFormRejectsInvalidNamespace(t *testing.T) {
-	t.Parallel()
-
-	srv := newTestServer()
-
-	// Valid name, but namespace contains spaces
-	form := url.Values{
-		"name":           {"my-plugin"},
-		"namespace":      {"bad namespace"},
-		"sourceType":     {"hangar"},
-		"project":        {"EssentialsX"},
-		"updateStrategy": {"latest"},
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	_, err := srv.parsePluginFormToData(req)
-	if err == nil {
-		t.Error("parsePluginFormToData should reject invalid namespace (spaces not allowed in K8s names)")
-	}
-}
-
-func TestParsePluginFormRejectsHTTPURL(t *testing.T) {
-	t.Parallel()
-
-	srv := newTestServer()
-
-	form := url.Values{
-		"name":           {"my-plugin"},
-		"namespace":      {"default"},
-		"sourceType":     {"url"},
-		"url":            {"http://evil.com/plugin.jar"},
-		"updateStrategy": {"latest"},
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	_, err := srv.parsePluginFormToData(req)
-	if err == nil {
-		t.Error("parsePluginFormToData should reject HTTP URL (only HTTPS allowed)")
-	}
-}
-
-func TestParsePluginFormRejectsSSRFURL(t *testing.T) {
-	t.Parallel()
-
-	srv := newTestServer()
-
-	form := url.Values{
-		"name":           {"my-plugin"},
-		"namespace":      {"default"},
-		"sourceType":     {"url"},
-		"url":            {"https://127.0.0.1/plugin.jar"},
-		"updateStrategy": {"latest"},
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	_, err := srv.parsePluginFormToData(req)
-	if err == nil {
-		t.Error("parsePluginFormToData should reject SSRF-blocked URL")
-	}
-}
-
-func TestParsePluginFormRejectsUnknownSourceType(t *testing.T) {
-	t.Parallel()
-
-	srv := newTestServer()
-
-	form := url.Values{
-		"name":           {"my-plugin"},
-		"namespace":      {"default"},
-		"sourceType":     {"modrinth"},
-		"project":        {"SomeProject"},
-		"updateStrategy": {"latest"},
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	_, err := srv.parsePluginFormToData(req)
-	if err == nil {
-		t.Fatal("parsePluginFormToData should reject unknown source type")
-	}
-
-	if !strings.Contains(err.Error(), "unsupported") {
-		t.Errorf("error should mention 'unsupported', got: %v", err)
-	}
-}
-
-func TestParsePluginFormPassesBuildForBuildPin(t *testing.T) {
-	t.Parallel()
-
-	srv := newTestServer()
-
-	form := url.Values{
-		"name":           {"my-plugin"},
-		"namespace":      {"default"},
-		"sourceType":     {"hangar"},
-		"project":        {"SomeProject"},
-		"updateStrategy": {"build-pin"},
-		"version":        {"1.0.0"},
-		"build":          {"42"},
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/ui/plugin/create", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	data, err := srv.parsePluginFormToData(req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if data.Build != 42 {
-		t.Errorf("expected build=42, got %d", data.Build)
-	}
-
-	if data.Version != "1.0.0" {
-		t.Errorf("expected version=1.0.0, got %q", data.Version)
 	}
 }
 
