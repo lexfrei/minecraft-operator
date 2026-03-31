@@ -84,6 +84,7 @@ func serverDataToDetail(data *service.ServerData) templates.ServerDetailData {
 		detail.Plugins = append(detail.Plugins, templates.PluginInfo{
 			Name:            p.Name,
 			Project:         p.Project,
+			CurrentVersion:  p.CurrentVersion,
 			ResolvedVersion: p.ResolvedVersion,
 			Status:          status,
 		})

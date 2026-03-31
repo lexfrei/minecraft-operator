@@ -19,6 +19,7 @@ type ServerDetailData struct {
 type PluginInfo struct {
 	Name            string
 	Project         string
+	CurrentVersion  string
 	ResolvedVersion string
 	Status          string
 }
@@ -159,7 +160,14 @@ templ PluginCard(plugin PluginInfo) {
 			<div>
 				<p style="font-size: 16px; font-weight: 600; margin-bottom: 5px;">{ plugin.Name }</p>
 				<p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 5px;">Project: { plugin.Project }</p>
-				<p style="font-size: 14px;">Version: <span style="font-family: monospace; color: var(--accent);">{ plugin.ResolvedVersion }</span></p>
+				if plugin.CurrentVersion != "" {
+					<p style="font-size: 14px;">Installed: <span style="font-family: monospace; color: var(--success);">{ plugin.CurrentVersion }</span></p>
+					if plugin.ResolvedVersion != "" && plugin.ResolvedVersion != plugin.CurrentVersion {
+						<p style="font-size: 13px; color: var(--warning);">Update available: { plugin.ResolvedVersion }</p>
+					}
+				} else if plugin.ResolvedVersion != "" {
+					<p style="font-size: 14px; color: var(--warning);">Pending install: <span style="font-family: monospace;">{ plugin.ResolvedVersion }</span></p>
+				}
 			</div>
 			<div>
 				if plugin.Status == "compatible" {
