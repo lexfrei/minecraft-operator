@@ -253,6 +253,70 @@ func extractBetween(s, start, end string) string {
 	return s[si : si+ei+len(end)]
 }
 
+func TestRenderForm_ConfigMapRefField(t *testing.T) {
+	s := &FormSchema{
+		Title: "TestConfigMapRef",
+		Fields: []FormField{
+			{
+				Name: "configMapRef",
+				Type: typeObject,
+				Properties: []FormField{
+					{Name: fieldName, Type: typeString, Required: true},
+					{Name: "key", Type: typeString, Required: true},
+				},
+			},
+		},
+	}
+
+	h := RenderForm(s, nil, RenderOptions{Mode: ModeCreate, SubmitURL: "/api/v1/test"})
+
+	if !strings.Contains(h, "data-configmap-ref") {
+		t.Error("expected data-configmap-ref attribute for ConfigMap picker")
+	}
+	if !strings.Contains(h, "data-configmap-name") {
+		t.Error("expected data-configmap-name select")
+	}
+	if !strings.Contains(h, "data-configmap-key") {
+		t.Error("expected data-configmap-key select")
+	}
+	if !strings.Contains(h, "data-configmap-create") {
+		t.Error("expected create button")
+	}
+	if strings.Contains(h, "<fieldset") {
+		t.Error("configMapRef should use custom picker, not generic fieldset")
+	}
+}
+
+func TestRenderForm_ConfigMapRefPreFill(t *testing.T) {
+	s := &FormSchema{
+		Title: "TestConfigMapRefEdit",
+		Fields: []FormField{
+			{
+				Name: "configMapRef",
+				Type: typeObject,
+				Properties: []FormField{
+					{Name: fieldName, Type: typeString},
+					{Name: "key", Type: typeString},
+				},
+			},
+		},
+	}
+
+	values := map[string]any{
+		"configMapRef.name": "my-config",
+		"configMapRef.key":  "core.conf",
+	}
+
+	h := RenderForm(s, values, RenderOptions{Mode: ModeEdit, SubmitURL: "/api/v1/test"})
+
+	if !strings.Contains(h, `value="my-config"`) {
+		t.Error("expected ConfigMap name to be pre-filled")
+	}
+	if !strings.Contains(h, `value="core.conf"`) {
+		t.Error("expected ConfigMap key to be pre-filled")
+	}
+}
+
 func TestRenderForm_DisabledSelectPreservesValue(t *testing.T) {
 	schema := &FormSchema{
 		Title: "TestDisabled",

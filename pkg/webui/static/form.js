@@ -233,11 +233,110 @@
     return div.innerHTML;
   }
 
+  // --- ConfigMap Picker ---
+  // Populates configMapRef select dropdowns from /ui/api/configmaps
+  function initConfigMapPickers() {
+    document.querySelectorAll("[data-configmap-ref]").forEach(function (container) {
+      var nameSelect = container.querySelector("[data-configmap-name]");
+      var keySelect = container.querySelector("[data-configmap-key]");
+      var createBtn = container.querySelector("[data-configmap-create]");
+      if (!nameSelect) return;
+
+      // Detect namespace from the form's namespace field
+      var form = container.closest("form");
+      var nsInput = form ? form.querySelector('[name="namespace"]') : null;
+
+      function loadConfigMaps() {
+        var ns = nsInput ? nsInput.value : "";
+        if (!ns) return;
+
+        fetch("/ui/api/configmaps?namespace=" + encodeURIComponent(ns))
+          .then(function (r) { return r.json(); })
+          .then(function (cms) {
+            var current = nameSelect.value;
+            nameSelect.innerHTML = '<option value="">— Select ConfigMap —</option>';
+            (cms || []).forEach(function (cm) {
+              var opt = document.createElement("option");
+              opt.value = cm.Name;
+              opt.textContent = cm.Name;
+              opt.dataset.keys = JSON.stringify(cm.Keys || []);
+              if (cm.Name === current) opt.selected = true;
+              nameSelect.appendChild(opt);
+            });
+            updateKeys();
+          })
+          .catch(function () { /* silent — API may not be available */ });
+      }
+
+      function updateKeys() {
+        if (!keySelect) return;
+        var selected = nameSelect.options[nameSelect.selectedIndex];
+        var keys = [];
+        try { keys = JSON.parse(selected ? selected.dataset.keys || "[]" : "[]"); } catch (_e) { /* noop */ }
+
+        var currentKey = keySelect.value;
+        keySelect.innerHTML = '<option value="">— Select Key —</option>';
+        keys.forEach(function (k) {
+          var opt = document.createElement("option");
+          opt.value = k;
+          opt.textContent = k;
+          if (k === currentKey) opt.selected = true;
+          keySelect.appendChild(opt);
+        });
+      }
+
+      nameSelect.addEventListener("change", updateKeys);
+      if (nsInput) nsInput.addEventListener("change", loadConfigMaps);
+
+      // Initial load
+      loadConfigMaps();
+
+      // Create New ConfigMap inline
+      if (createBtn) {
+        createBtn.addEventListener("click", function () {
+          var ns = nsInput ? nsInput.value : "";
+          if (!ns) { alert("Select a namespace first"); return; }
+
+          var cmName = prompt("ConfigMap name:");
+          if (!cmName) return;
+          var key = prompt("Key (filename):");
+          if (!key) return;
+          var content = prompt("File content:");
+          if (content === null) return;
+
+          var body = { name: cmName, namespace: ns, data: {} };
+          body.data[key] = content;
+
+          fetch("/ui/api/configmaps/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          })
+            .then(function (r) {
+              if (!r.ok) throw new Error("Failed to create ConfigMap");
+              return r.json();
+            })
+            .then(function () {
+              loadConfigMaps();
+              // Auto-select the new ConfigMap after reload
+              setTimeout(function () {
+                nameSelect.value = cmName;
+                updateKeys();
+                if (keySelect) keySelect.value = key;
+              }, 500);
+            })
+            .catch(function (err) { alert(err.message); });
+        });
+      }
+    });
+  }
+
   // --- Init ---
   function init() {
     initConditionalFields();
     initArrayFields();
     initMapFields();
+    initConfigMapPickers();
   }
 
   // Run on DOM ready and after HTMX swaps
