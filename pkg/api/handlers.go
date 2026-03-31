@@ -1031,6 +1031,23 @@ func convertEndpointsToAPI(endpoints []service.PluginEndpointData) *[]generated.
 // dnsLabelPattern matches valid DNS labels (lowercase alphanumeric with hyphens, 1-63 chars).
 var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
+// k8sNamePattern matches valid Kubernetes resource names (RFC 1123 DNS subdomain).
+var k8sNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9.\-]*[a-z0-9])?$`)
+
+// validateK8sName checks that a name is a valid Kubernetes resource name.
+func validateK8sName(name, fieldLabel string) string {
+	if name == "" {
+		return fmt.Sprintf("%s is required", fieldLabel)
+	}
+	if len(name) > 253 {
+		return fmt.Sprintf("%s must be at most 253 characters", fieldLabel)
+	}
+	if !k8sNamePattern.MatchString(name) {
+		return fmt.Sprintf("%s must be a valid DNS subdomain (lowercase alphanumeric, hyphens, dots)", fieldLabel)
+	}
+	return ""
+}
+
 const maxEndpointNameLength = 63
 
 // validateEndpointRequest validates plugin endpoints from API request.
@@ -1096,6 +1113,12 @@ var validUpdateStrategies = map[generated.UpdateStrategy]bool{
 
 // validateServerCreateRequest validates server create request fields.
 func validateServerCreateRequest(body *generated.ServerCreateRequest) string {
+	if errMsg := validateK8sName(body.Name, "Name"); errMsg != "" {
+		return errMsg
+	}
+	if errMsg := validateK8sName(body.Namespace, "Namespace"); errMsg != "" {
+		return errMsg
+	}
 	if !validUpdateStrategies[body.UpdateStrategy] {
 		return fmt.Sprintf("Invalid update strategy %q", body.UpdateStrategy)
 	}
@@ -1117,6 +1140,22 @@ func validateServerCreateRequest(body *generated.ServerCreateRequest) string {
 
 // validatePluginCreateRequest validates all fields of a plugin create request.
 func validatePluginCreateRequest(body *generated.PluginCreateRequest) *generated.CreatePlugin400JSONResponse {
+	if errMsg := validateK8sName(body.Name, "Name"); errMsg != "" {
+		return &generated.CreatePlugin400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}
+	}
+	if errMsg := validateK8sName(body.Namespace, "Namespace"); errMsg != "" {
+		return &generated.CreatePlugin400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}
+	}
 	if errMsg := validateEndpointRequest(body.Endpoints); errMsg != "" {
 		return &generated.CreatePlugin400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{

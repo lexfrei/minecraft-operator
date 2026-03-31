@@ -16,6 +16,7 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/webui/schema"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/static"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/templates"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -174,7 +175,7 @@ func (s *Server) handleServerDetailPage(w http.ResponseWriter, r *http.Request, 
 		var serverData *service.ServerData
 		serverData, err = s.serverService.GetServer(ctx, namespace, serverName)
 		if err != nil {
-			if isResourceNotFound(err) {
+			if apierrors.IsNotFound(err) {
 				http.NotFound(w, r)
 			} else {
 				http.Error(w, fmt.Sprintf("Failed to fetch server details: %v", err),
@@ -184,7 +185,6 @@ func (s *Server) handleServerDetailPage(w http.ResponseWriter, r *http.Request, 
 		}
 		data = serverDataToDetail(serverData)
 	} else {
-		// GetServerByName scans all namespaces; any error means not found
 		data, err = s.fetchServerDetailData(ctx, serverName)
 		if err != nil {
 			http.NotFound(w, r)

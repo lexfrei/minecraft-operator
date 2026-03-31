@@ -1195,6 +1195,30 @@ func TestLabelSelectorToK8s_WithExpressions(t *testing.T) {
 	assert.Equal(t, []string{"papermc", "vanilla"}, result.MatchExpressions[0].Values)
 }
 
+func TestValidateServerCreateRequest_InvalidName(t *testing.T) {
+	body := &generated.ServerCreateRequest{
+		Name:           "INVALID_NAME!!!",
+		Namespace:      "default",
+		UpdateStrategy: "latest",
+	}
+	msg := validateServerCreateRequest(body)
+	assert.Contains(t, msg, "Name")
+	assert.Contains(t, msg, "DNS subdomain")
+}
+
+func TestValidatePluginCreateRequest_InvalidNamespace(t *testing.T) {
+	sel := generated.LabelSelector{}
+	src := generated.PluginSource{Type: generated.Hangar, Project: ptr("BlueMap")}
+	body := &generated.PluginCreateRequest{
+		Name:             "valid",
+		Namespace:        "BAD NAMESPACE",
+		Source:           src,
+		InstanceSelector: sel,
+	}
+	resp := validatePluginCreateRequest(body)
+	assert.NotNil(t, resp, "should reject invalid namespace")
+}
+
 func TestValidateServerCreateRequest_InvalidStrategy(t *testing.T) {
 	body := &generated.ServerCreateRequest{
 		Name:           "test",

@@ -265,6 +265,7 @@ func writeMapField(b *strings.Builder, field FormField, fullName string, values 
 	b.WriteString(`</div>`)
 }
 
+// TODO: Pre-fill existing array items from values (endpoints, matchExpressions).
 func writeArrayField(b *strings.Builder, field FormField, fullName string, _ map[string]any) {
 	writeLabel(b, field, fullName)
 	fmt.Fprintf(b, `<div data-array-field="%s">`, html.EscapeString(fullName))
