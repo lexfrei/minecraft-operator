@@ -73,11 +73,23 @@ func writeField(b *strings.Builder, field FormField, prefix string, values map[s
 		fullName = prefix + "." + field.Name
 	}
 
+	// Wide fields (maps, arrays, objects) span full grid width
+	isWide := field.AdditionalProperties ||
+		(field.Type == typeArray && field.Items != nil) ||
+		(field.Type == typeObject && len(field.Properties) > 0)
+
 	// Conditional visibility wrapper
+	wideStyle := ""
+	if isWide {
+		wideStyle = "grid-column:1/-1;"
+	}
 	if field.Condition != nil {
-		fmt.Fprintf(b, `<div data-depends-on="%s" data-show-when="%s" style="display:none;">`,
+		fmt.Fprintf(b, `<div data-depends-on="%s" data-show-when="%s" style="display:none;%s">`,
 			html.EscapeString(field.Condition.DependsOn),
-			html.EscapeString(strings.Join(field.Condition.Values, ",")))
+			html.EscapeString(strings.Join(field.Condition.Values, ",")),
+			wideStyle)
+	} else if isWide {
+		fmt.Fprintf(b, `<div style="%s">`, wideStyle)
 	} else {
 		b.WriteString(`<div>`)
 	}
@@ -139,6 +151,36 @@ func writeDescription(b *strings.Builder, field FormField) {
 	if desc != "" {
 		fmt.Fprintf(b, `<p style="font-size:11px;color:var(--text-muted);margin-top:4px;">%s</p>`,
 			html.EscapeString(desc))
+	}
+	writeHelpLink(b, field)
+}
+
+// helpLinks maps field patterns to documentation URLs.
+var helpLinks = map[string]struct{ label, url string }{
+	"cron": {
+		"Cron syntax reference",
+		"https://crontab.guru/",
+	},
+	"duration": {
+		"Go duration format reference",
+		"https://pkg.go.dev/time#ParseDuration",
+	},
+}
+
+func writeHelpLink(b *strings.Builder, field FormField) {
+	lowerDesc := strings.ToLower(field.Description)
+	if strings.Contains(field.Name, "Cron") || strings.Contains(field.Name, "cron") ||
+		strings.Contains(lowerDesc, "cron") {
+		h := helpLinks["cron"]
+		fmt.Fprintf(b, `<a href="%s" target="_blank" rel="noopener" `+
+			`style="font-size:11px;color:var(--accent);margin-top:2px;display:inline-block;">%s</a>`,
+			h.url, html.EscapeString(h.label))
+	}
+	if strings.Contains(lowerDesc, "duration") || strings.Contains(lowerDesc, "go duration") {
+		h := helpLinks["duration"]
+		fmt.Fprintf(b, `<a href="%s" target="_blank" rel="noopener" `+
+			`style="font-size:11px;color:var(--accent);margin-top:2px;display:inline-block;">%s</a>`,
+			h.url, html.EscapeString(h.label))
 	}
 }
 
