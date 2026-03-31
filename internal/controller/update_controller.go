@@ -121,8 +121,8 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		return ctrl.Result{}, nil
 	}
 
-	// Check if there's an available update — exit early before any delay/window checks
-	if server.Status.AvailableUpdate == nil {
+	// Check if there's an available update or pending plugin installs
+	if server.Status.AvailableUpdate == nil && !hasPendingPluginUpdates(&server) {
 		slog.DebugContext(ctx, "No available update", "server", server.Name)
 		return ctrl.Result{}, nil
 	}
@@ -927,6 +927,16 @@ func (r *UpdateReconciler) updateServerStatus(
 			}
 		}
 	}
+}
+
+// hasPendingPluginUpdates checks if any plugin needs install or update.
+func hasPendingPluginUpdates(server *mcv1beta1.PaperMCServer) bool {
+	for _, p := range server.Status.Plugins {
+		if p.DesiredVersion != "" && p.DesiredVersion != p.CurrentVersion {
+			return true
+		}
+	}
+	return false
 }
 
 // setUpdatingCondition sets the Updating condition on the server.
