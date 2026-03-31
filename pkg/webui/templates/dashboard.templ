@@ -48,8 +48,9 @@ templ Dashboard(data DashboardData) {
 			<div class="card">
 				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
 					<h2 style="margin: 0;">PaperMC Servers</h2>
-					if len(data.Namespaces) > 0 {
-						<div>
+					<div style="display: flex; gap: 15px; align-items: center;">
+						if len(data.Namespaces) > 0 {
+							<div>
 							<label for="namespace-filter" style="color: var(--text-secondary); font-size: 14px; margin-right: 10px;">Namespace:</label>
 							<select id="namespace-filter"
 									name="namespace"
@@ -68,8 +69,15 @@ templ Dashboard(data DashboardData) {
 									}
 								}
 							</select>
-						</div>
-					}
+							</div>
+						}
+						<a href="/ui/server/new" style="background-color: var(--accent); color: white; padding: 8px 16px; border-radius: 4px; font-size: 14px; text-decoration: none;">
+							+ New Server
+						</a>
+						<a href="/ui/plugins" style="background-color: var(--bg-tertiary); color: var(--text-primary); padding: 8px 16px; border-radius: 4px; font-size: 14px; text-decoration: none; border: 1px solid var(--border);">
+							Plugins
+						</a>
+					</div>
 				</div>
 				if len(data.Servers) == 0 {
 					<p style="color: var(--text-secondary);">No servers found.</p>
