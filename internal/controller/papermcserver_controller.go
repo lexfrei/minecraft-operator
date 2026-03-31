@@ -1504,6 +1504,7 @@ func (r *PaperMCServerReconciler) buildPluginStatus(
 				Namespace: plugin.Namespace,
 			},
 			ResolvedVersion: resolvedVersion,
+			DesiredVersion:  resolvedVersion,
 			Compatible:      resolvedVersion != "",
 			Source:          plugin.Spec.Source.Type,
 		}

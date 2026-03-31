@@ -1157,6 +1157,60 @@ var _ = Describe("PaperMCServer Controller", func() {
 			Expect(result[0].PendingDeletion).To(BeTrue(),
 				"buildPluginStatus must preserve PendingDeletion from previous status")
 		})
+
+		It("should set DesiredVersion from resolved version", func() {
+			// buildPluginStatus resolves a version but never sets DesiredVersion,
+			// causing the web UI dashboard to show "Not configured" instead of
+			// the pending version.
+			reconciler := &PaperMCServerReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Solver: solver.NewSimpleSolver(),
+			}
+
+			server := &mck8slexlav1beta1.PaperMCServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-desired-version",
+					Namespace: "default",
+				},
+				Spec: mck8slexlav1beta1.PaperMCServerSpec{
+					Version: "1.21.4",
+				},
+				Status: mck8slexlav1beta1.PaperMCServerStatus{
+					CurrentVersion: "1.21.4",
+				},
+			}
+
+			matchedPlugins := []mck8slexlav1beta1.Plugin{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-plugin",
+						Namespace: "default",
+					},
+					Spec: mck8slexlav1beta1.PluginSpec{
+						Source: mck8slexlav1beta1.PluginSource{
+							Type: "hangar",
+						},
+					},
+					Status: mck8slexlav1beta1.PluginStatus{
+						AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
+							{
+								Version:           "3.0.0",
+								MinecraftVersions: []string{"1.21.4"},
+							},
+						},
+					},
+				},
+			}
+
+			result := reconciler.buildPluginStatus(context.Background(), server, matchedPlugins)
+
+			Expect(result).To(HaveLen(1))
+			Expect(result[0].ResolvedVersion).To(Equal("3.0.0"),
+				"ResolvedVersion should be set by solver")
+			Expect(result[0].DesiredVersion).To(Equal("3.0.0"),
+				"DesiredVersion must be set to resolved version for UI display")
+		})
 	})
 
 	Context("resolvePluginVersionForServer with empty versions", func() {
