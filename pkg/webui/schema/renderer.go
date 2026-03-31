@@ -14,6 +14,9 @@ const (
 	ModeCreate FormMode = "create"
 	// ModeEdit renders a form for editing an existing resource.
 	ModeEdit FormMode = "edit"
+
+	boolTrue  = "true"
+	boolFalse = "false"
 )
 
 // RenderOptions controls form rendering behavior.
@@ -200,10 +203,15 @@ func writeSelect(b *strings.Builder, field FormField, fullName, value string, re
 	}
 
 	b.WriteString(`</select>`)
+	// Disabled selects are excluded from form submission; add hidden input to preserve value
+	if readonly && value != "" {
+		fmt.Fprintf(b, `<input type="hidden" name="%s" value="%s"/>`,
+			html.EscapeString(fullName), html.EscapeString(value))
+	}
 }
 
 func writeCheckbox(b *strings.Builder, fullName, value, defaultVal string, readonly bool) {
-	checked := value == "true" || (value == "" && defaultVal == "true")
+	checked := value == boolTrue || (value == "" && defaultVal == boolTrue)
 
 	fmt.Fprintf(b, `<input type="checkbox" id="%s" name="%s"`,
 		html.EscapeString(fullName), html.EscapeString(fullName))
@@ -214,6 +222,15 @@ func writeCheckbox(b *strings.Builder, fullName, value, defaultVal string, reado
 		b.WriteString(` disabled`)
 	}
 	b.WriteString(` style="width:auto;margin-top:8px;"/>`)
+	// Disabled checkboxes are excluded from form submission; add hidden input to preserve value
+	if readonly {
+		val := boolFalse
+		if checked {
+			val = boolTrue
+		}
+		fmt.Fprintf(b, `<input type="hidden" name="%s" value="%s"/>`,
+			html.EscapeString(fullName), val)
+	}
 }
 
 func writeObjectField(b *strings.Builder, field FormField, fullName string, values map[string]any, mode FormMode) {

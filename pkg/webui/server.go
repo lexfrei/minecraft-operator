@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -16,6 +17,7 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/webui/schema"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/static"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/templates"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -181,7 +183,12 @@ func (s *Server) handleServerDetailPage(w http.ResponseWriter, r *http.Request, 
 	}
 
 	if err != nil {
-		http.NotFound(w, r)
+		if apierrors.IsNotFound(err) || strings.Contains(err.Error(), "not found") {
+			http.NotFound(w, r)
+		} else {
+			http.Error(w, fmt.Sprintf("Failed to fetch server details: %v", err),
+				http.StatusInternalServerError)
+		}
 		return
 	}
 

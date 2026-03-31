@@ -9,7 +9,7 @@
     document.querySelectorAll("[data-depends-on]").forEach(function (el) {
       var depName = el.dataset.dependsOn;
       var showWhen = (el.dataset.showWhen || "").split(",");
-      var dep = document.querySelector('[name="' + depName + '"]');
+      var dep = document.getElementsByName(depName)[0];
       if (!dep) return;
 
       function update() {

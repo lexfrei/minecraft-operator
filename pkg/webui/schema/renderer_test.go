@@ -253,6 +253,33 @@ func extractBetween(s, start, end string) string {
 	return s[si : si+ei+len(end)]
 }
 
+func TestRenderForm_DisabledSelectPreservesValue(t *testing.T) {
+	schema := &FormSchema{
+		Title: "TestDisabled",
+		Fields: []FormField{
+			{
+				Name:           "strategy",
+				Type:           typeString,
+				Enum:           []string{"latest", "pin"},
+				ReadOnlyOnEdit: true,
+			},
+		},
+	}
+
+	values := map[string]any{"strategy": "pin"}
+
+	html := RenderForm(schema, values, RenderOptions{Mode: ModeEdit, SubmitURL: "/api/v1/test"})
+
+	// Select should be disabled
+	if !strings.Contains(html, "disabled") {
+		t.Error("expected disabled attribute on readonly select in edit mode")
+	}
+	// Hidden input should preserve the value
+	if !strings.Contains(html, `<input type="hidden" name="strategy" value="pin"/>`) {
+		t.Error("expected hidden input to preserve disabled select value")
+	}
+}
+
 func intPtr(v int) *int {
 	return &v
 }
