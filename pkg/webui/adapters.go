@@ -128,6 +128,22 @@ func pluginDataToListItem(data service.PluginData) templates.PluginListItem {
 	}
 }
 
+// pluginDataToDetail converts service.PluginData to templates.PluginDetailData.
+func pluginDataToDetail(data *service.PluginData) templates.PluginDetailData {
+	return templates.PluginDetailData{
+		Name:             data.Name,
+		Namespace:        data.Namespace,
+		SourceType:       data.SourceType,
+		Project:          data.Project,
+		URL:              data.URL,
+		UpdateStrategy:   data.UpdateStrategy,
+		Version:          data.Version,
+		ResolvedVersion:  data.ResolvedVersion,
+		MatchedServers:   data.MatchedServers,
+		RepositoryStatus: data.RepositoryStatus,
+	}
+}
+
 // formatVersionWithBuild formats version and build into "version-build" format.
 func formatVersionWithBuild(version string, build int) string {
 	if version == "" {

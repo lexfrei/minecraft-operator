@@ -21,6 +21,7 @@ const (
 	// URL path actions.
 	actionDelete   = "delete"
 	actionApplyNow = "apply-now"
+	actionEdit     = "edit"
 )
 
 // parseResourcePathAction extracts resource name, action, and namespace from a URL path.
@@ -420,12 +421,16 @@ func (s *Server) handlePluginRoutes(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case actionDelete:
 			s.handlePluginDelete(w, r)
-			return
+		case actionEdit:
+			s.handlePluginEdit(w, r, parts[0])
+		default:
+			http.NotFound(w, r)
 		}
+		return
 	}
 
-	// Default: show plugin detail or 404
-	http.NotFound(w, r)
+	// No action — show plugin detail
+	s.handlePluginDetailPage(w, r, parts[0])
 }
 
 // handleServerRoutes routes server-specific requests based on URL path.
@@ -447,9 +452,78 @@ func (s *Server) handleServerRoutes(w http.ResponseWriter, r *http.Request) {
 		case actionApplyNow:
 			s.handleApplyNow(w, r)
 			return
+		case actionEdit:
+			s.handleServerEdit(w, r, parts[0])
+			return
 		}
 	}
 
 	// Default: show server detail
 	s.handleServerDetailPage(w, r, parts[0])
+}
+
+// handleServerEdit renders the schema-driven server edit form.
+func (s *Server) handleServerEdit(w http.ResponseWriter, r *http.Request, serverName string) {
+	namespace := r.URL.Query().Get("namespace")
+	if namespace == "" {
+		http.Error(w, "Missing namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	submitURL := fmt.Sprintf("/api/v1/servers/%s/%s", namespace, serverName)
+	s.renderSchemaForm(w, r, "ServerUpdateRequest", schema.ModeEdit,
+		submitURL, "/ui", fmt.Sprintf("Edit Server: %s", serverName))
+}
+
+// handlePluginEdit renders the schema-driven plugin edit form.
+func (s *Server) handlePluginEdit(w http.ResponseWriter, r *http.Request, pluginName string) {
+	namespace := r.URL.Query().Get("namespace")
+	if namespace == "" {
+		http.Error(w, "Missing namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	submitURL := fmt.Sprintf("/api/v1/plugins/%s/%s", namespace, pluginName)
+	s.renderSchemaForm(w, r, "PluginUpdateRequest", schema.ModeEdit,
+		submitURL, "/ui/plugins", fmt.Sprintf("Edit Plugin: %s", pluginName))
+}
+
+// handlePluginDetailPage serves the plugin details page.
+func (s *Server) handlePluginDetailPage(w http.ResponseWriter, r *http.Request, pluginName string) {
+	if pluginName == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	ctx := r.Context()
+	namespace := r.URL.Query().Get("namespace")
+
+	if namespace == "" {
+		http.Error(w, "Missing namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	data, err := s.pluginService.GetPlugin(ctx, namespace, pluginName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to fetch plugin: %v", err),
+			http.StatusInternalServerError)
+		return
+	}
+
+	detail := pluginDataToDetail(data)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := renderPluginDetail(w, detail); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render plugin detail: %v", err),
+			http.StatusInternalServerError)
+	}
+}
+
+// renderPluginDetail renders the plugin detail template.
+func renderPluginDetail(w io.Writer, data templates.PluginDetailData) error {
+	component := templates.PluginDetail(data)
+	if err := component.Render(context.Background(), w); err != nil {
+		return errors.Wrap(err, "failed to render plugin detail template")
+	}
+	return nil
 }
