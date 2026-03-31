@@ -30,6 +30,8 @@ type RenderOptions struct {
 }
 
 // RenderForm renders a FormSchema into an HTML form string.
+// SECURITY: This function's output is injected via templ.Raw(), bypassing autoescaping.
+// All dynamic values MUST be passed through html.EscapeString before inclusion.
 func RenderForm(schema *FormSchema, values map[string]any, opts RenderOptions) string {
 	var b strings.Builder
 

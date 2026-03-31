@@ -133,6 +133,15 @@ func (s *Server) CreateServer(
 		}, nil
 	}
 
+	if errMsg := validateServerCreateRequest(req.Body); errMsg != "" {
+		return generated.CreateServer400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}, nil
+	}
+
 	data := serverCreateRequestToData(*req.Body)
 
 	err := s.serverService.CreateServer(ctx, data)
@@ -1072,6 +1081,35 @@ func validateEndpointRequest(endpoints *[]generated.PluginEndpoint) string {
 		}
 
 		seenPortProto[portProtoKey] = true
+	}
+
+	return ""
+}
+
+// validUpdateStrategies is the set of accepted update strategy values.
+var validUpdateStrategies = map[generated.UpdateStrategy]bool{
+	"latest":    true,
+	"auto":      true,
+	"pin":       true,
+	"build-pin": true,
+}
+
+// validateServerCreateRequest validates server create request fields.
+func validateServerCreateRequest(body *generated.ServerCreateRequest) string {
+	if !validUpdateStrategies[body.UpdateStrategy] {
+		return fmt.Sprintf("Invalid update strategy %q", body.UpdateStrategy)
+	}
+
+	if body.UpdateStrategy == "pin" || body.UpdateStrategy == "build-pin" {
+		if body.Version == nil || *body.Version == "" {
+			return "Version is required for pin and build-pin strategies"
+		}
+	}
+
+	if body.UpdateStrategy == "build-pin" {
+		if body.Build == nil {
+			return "Build is required for build-pin strategy"
+		}
 	}
 
 	return ""

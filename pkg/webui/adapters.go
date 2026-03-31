@@ -165,6 +165,9 @@ func serverDataToValues(data *service.ServerData) map[string]any {
 		values["maintenanceWindow.cron"] = data.MaintenanceSchedule.WindowCron
 		values["checkCron"] = data.MaintenanceSchedule.CheckCron
 	}
+	if len(data.Labels) > 0 {
+		values["labels"] = data.Labels
+	}
 	return values
 }
 

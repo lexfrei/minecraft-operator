@@ -1195,6 +1195,48 @@ func TestLabelSelectorToK8s_WithExpressions(t *testing.T) {
 	assert.Equal(t, []string{"papermc", "vanilla"}, result.MatchExpressions[0].Values)
 }
 
+func TestValidateServerCreateRequest_InvalidStrategy(t *testing.T) {
+	body := &generated.ServerCreateRequest{
+		Name:           "test",
+		Namespace:      "default",
+		UpdateStrategy: "garbage",
+	}
+	msg := validateServerCreateRequest(body)
+	assert.Contains(t, msg, "Invalid update strategy")
+}
+
+func TestValidateServerCreateRequest_PinRequiresVersion(t *testing.T) {
+	body := &generated.ServerCreateRequest{
+		Name:           "test",
+		Namespace:      "default",
+		UpdateStrategy: "pin",
+	}
+	msg := validateServerCreateRequest(body)
+	assert.Contains(t, msg, "Version is required")
+}
+
+func TestValidateServerCreateRequest_BuildPinRequiresBuild(t *testing.T) {
+	v := "1.21.1"
+	body := &generated.ServerCreateRequest{
+		Name:           "test",
+		Namespace:      "default",
+		UpdateStrategy: "build-pin",
+		Version:        &v,
+	}
+	msg := validateServerCreateRequest(body)
+	assert.Contains(t, msg, "Build is required")
+}
+
+func TestValidateServerCreateRequest_Valid(t *testing.T) {
+	body := &generated.ServerCreateRequest{
+		Name:           "test",
+		Namespace:      "default",
+		UpdateStrategy: "latest",
+	}
+	msg := validateServerCreateRequest(body)
+	assert.Empty(t, msg)
+}
+
 func TestValidatePluginSource_HangarRequiresProject(t *testing.T) {
 	src := generated.PluginSource{Type: generated.Hangar}
 	msg := validatePluginSource(src)

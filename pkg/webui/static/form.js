@@ -46,11 +46,25 @@
         var removeBtn = clone.querySelector("[data-array-remove]");
         if (removeBtn) {
           removeBtn.addEventListener("click", function () {
-            this.closest("[data-array-item]").remove();
+            var item = this.closest("[data-array-item]");
+            var parent = item.parentNode;
+            item.remove();
+            reindexArrayItems(parent);
           });
         }
 
         entries.appendChild(clone);
+      });
+    });
+  }
+
+  // Re-index array items after removal to avoid sparse arrays.
+  function reindexArrayItems(entries) {
+    var items = entries.querySelectorAll("[data-array-item]");
+    items.forEach(function (item, idx) {
+      item.querySelectorAll("[name]").forEach(function (input) {
+        // Replace the numeric index in dot-notation names (e.g., endpoints.2.name -> endpoints.0.name)
+        input.name = input.name.replace(/\.\d+\./, "." + idx + ".");
       });
     });
   }

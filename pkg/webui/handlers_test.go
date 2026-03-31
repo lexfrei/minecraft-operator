@@ -767,3 +767,34 @@ func TestRenderSchemaFormNilParser(t *testing.T) {
 		t.Errorf("expected 500 when parser is nil, got %d", w.Code)
 	}
 }
+
+func TestServerDataToValues_IncludesLabels(t *testing.T) {
+	t.Parallel()
+
+	data := &service.ServerData{
+		Name:           "test",
+		Namespace:      "default",
+		UpdateStrategy: "auto",
+		CurrentVersion: "1.21.1",
+		Labels: map[string]string{
+			"env":  "prod",
+			"game": "survival",
+		},
+	}
+
+	values := serverDataToValues(data)
+
+	labels, ok := values["labels"]
+	if !ok {
+		t.Fatal("expected labels in values map")
+	}
+
+	labelsMap, ok := labels.(map[string]string)
+	if !ok {
+		t.Fatal("expected labels to be map[string]string")
+	}
+
+	if labelsMap["env"] != "prod" {
+		t.Errorf("expected label env=prod, got %s", labelsMap["env"])
+	}
+}

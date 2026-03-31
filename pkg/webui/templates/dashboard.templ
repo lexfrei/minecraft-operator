@@ -90,7 +90,7 @@ templ ServerCard(server ServerSummary) {
 		<div style="display: flex; justify-content: space-between; align-items: start;">
 			<div style="flex: 1;">
 				<h3 style="font-size: 18px; margin-bottom: 8px;">
-					<a href={ templ.URL(fmt.Sprintf("/ui/server/%s", server.Name)) }>
+					<a href={ templ.URL(fmt.Sprintf("/ui/server/%s?namespace=%s", server.Name, server.Namespace)) }>
 						{ server.Name }
 					</a>
 				</h3>
