@@ -34,6 +34,8 @@ tags:
     description: PaperMC server management operations
   - name: plugins
     description: Plugin management operations
+  - name: configmaps
+    description: ConfigMap management for config file injection
   - name: namespaces
     description: Namespace utility operations
 
@@ -464,6 +466,56 @@ paths:
                 $ref: "#/components/schemas/ActionResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /configmaps/{namespace}:
+    parameters:
+      - $ref: "#/components/parameters/Namespace"
+
+    get:
+      summary: List ConfigMaps in a namespace
+      description: |
+        Returns ConfigMap names and keys for use in config file references.
+        Only lists ConfigMaps in the specified namespace.
+      operationId: listConfigMaps
+      tags:
+        - configmaps
+      responses:
+        "200":
+          description: Successfully retrieved ConfigMap list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigMapListResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    post:
+      summary: Create a ConfigMap
+      description: |
+        Creates a new ConfigMap in the specified namespace.
+        Used to provide config file content for plugins and servers.
+      operationId: createConfigMap
+      tags:
+        - configmaps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigMapCreateRequest"
+      responses:
+        "201":
+          description: ConfigMap created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigMapSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -929,6 +981,16 @@ components:
           $ref: "#/components/schemas/RCONConfig"
         service:
           $ref: "#/components/schemas/ServiceConfig"
+        pluginConfigs:
+          type: array
+          description: Per-server plugin config file overrides
+          items:
+            $ref: "#/components/schemas/ServerPluginConfig"
+        serverConfigs:
+          type: array
+          description: Server-level config files (relative to workdir /data)
+          items:
+            $ref: "#/components/schemas/ServerConfigFile"
         labels:
           type: object
           description: Labels to apply to the server resource
@@ -962,6 +1024,16 @@ components:
           example: "0 3 * * *"
         maintenanceWindow:
           $ref: "#/components/schemas/MaintenanceWindowConfig"
+        pluginConfigs:
+          type: array
+          description: Per-server plugin config file overrides
+          items:
+            $ref: "#/components/schemas/ServerPluginConfig"
+        serverConfigs:
+          type: array
+          description: Server-level config files
+          items:
+            $ref: "#/components/schemas/ServerConfigFile"
         labels:
           type: object
           description: Labels to set on the server resource
@@ -1186,6 +1258,18 @@ components:
           description: Network endpoints exposed by this plugin
           items:
             $ref: "#/components/schemas/PluginEndpoint"
+        pluginDirName:
+          type: string
+          description: |
+            Plugin directory name under plugins/.
+            Defaults to source.project if not set.
+            Required when configs are specified.
+          example: BlueMap
+        configs:
+          type: array
+          description: Default config files for this plugin
+          items:
+            $ref: "#/components/schemas/PluginConfigFile"
         instanceSelector:
           $ref: "#/components/schemas/LabelSelector"
         compatibilityOverride:
@@ -1214,6 +1298,14 @@ components:
           description: Network endpoints exposed by this plugin
           items:
             $ref: "#/components/schemas/PluginEndpoint"
+        pluginDirName:
+          type: string
+          description: Plugin directory name under plugins/
+        configs:
+          type: array
+          description: Default config files for this plugin
+          items:
+            $ref: "#/components/schemas/PluginConfigFile"
         instanceSelector:
           $ref: "#/components/schemas/LabelSelector"
         compatibilityOverride:
@@ -1625,6 +1717,151 @@ components:
           format: date-time
           description: When the action was triggered
           example: "2025-01-15T10:30:00Z"
+
+    ConfigMapKeyRef:
+      type: object
+      description: Reference to a key within a Kubernetes ConfigMap
+      required:
+        - name
+        - key
+      properties:
+        name:
+          type: string
+          description: ConfigMap resource name
+          example: bluemap-config
+        key:
+          type: string
+          description: Key within the ConfigMap
+          example: core.conf
+
+    PluginConfigFile:
+      type: object
+      description: A config file to inject into a plugin's directory
+      required:
+        - configMapRef
+        - path
+      properties:
+        configMapRef:
+          $ref: "#/components/schemas/ConfigMapKeyRef"
+        path:
+          type: string
+          description: |
+            Target file path relative to the plugin's directory.
+            Must not start with "/" or contain "..".
+          example: core.conf
+        overwrite:
+          type: string
+          description: |
+            When to overwrite existing files on pod restart.
+            - always: CRD is source of truth, always replace
+            - ifNotExists: preserve manual edits
+          enum:
+            - always
+            - ifNotExists
+          default: always
+
+    ServerConfigFile:
+      type: object
+      description: A config file to inject into the server workdir (/data)
+      required:
+        - configMapRef
+        - path
+      properties:
+        configMapRef:
+          $ref: "#/components/schemas/ConfigMapKeyRef"
+        path:
+          type: string
+          description: |
+            Target file path relative to /data.
+            E.g., "server.properties", "paper-global.yml".
+            Must not start with "/" or contain "..".
+          example: server.properties
+        overwrite:
+          type: string
+          description: When to overwrite existing files
+          enum:
+            - always
+            - ifNotExists
+          default: always
+
+    ServerPluginConfig:
+      type: object
+      description: Per-server overrides for a plugin's config files
+      required:
+        - pluginName
+        - configs
+      properties:
+        pluginName:
+          type: string
+          description: Plugin CRD name (same namespace)
+          example: bluemap
+        configs:
+          type: array
+          description: Config file overrides for this plugin on this server
+          items:
+            $ref: "#/components/schemas/PluginConfigFile"
+
+    ConfigMapSummary:
+      type: object
+      description: Summary of a Kubernetes ConfigMap
+      required:
+        - name
+        - namespace
+      properties:
+        name:
+          type: string
+          description: ConfigMap name
+          example: bluemap-config
+        namespace:
+          type: string
+          description: ConfigMap namespace
+          example: minecraft
+        keys:
+          type: array
+          description: Keys available in this ConfigMap
+          items:
+            type: string
+          example:
+            - core.conf
+            - render.conf
+
+    ConfigMapListResponse:
+      type: object
+      required:
+        - configMaps
+      properties:
+        configMaps:
+          type: array
+          description: List of ConfigMap summaries
+          items:
+            $ref: "#/components/schemas/ConfigMapSummary"
+
+    ConfigMapCreateRequest:
+      type: object
+      description: Request to create a new ConfigMap
+      required:
+        - name
+        - namespace
+        - data
+      properties:
+        name:
+          type: string
+          description: ConfigMap name
+          minLength: 1
+          maxLength: 253
+          pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+          example: my-config
+        namespace:
+          type: string
+          description: Kubernetes namespace
+          example: minecraft
+        data:
+          type: object
+          description: ConfigMap data (key-value pairs where values are file contents)
+          additionalProperties:
+            type: string
+          example:
+            server.properties: "server-port=25565\ndifficulty=hard"
 
     NamespaceListResponse:
       type: object

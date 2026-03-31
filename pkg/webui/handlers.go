@@ -2,7 +2,9 @@ package webui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"net/http"
 	"strings"
@@ -10,9 +12,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
-	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
+	"github.com/lexfrei/minecraft-operator/pkg/webui/schema"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/templates"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -20,6 +23,7 @@ const (
 	// URL path actions.
 	actionDelete   = "delete"
 	actionApplyNow = "apply-now"
+	actionEdit     = "edit"
 )
 
 // parseResourcePathAction extracts resource name, action, and namespace from a URL path.
@@ -304,136 +308,15 @@ func (s *Server) handlePluginList(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handlePluginCreate handles plugin creation (GET for form, POST for creation).
+// handlePluginCreate renders the schema-driven plugin creation form.
 func (s *Server) handlePluginCreate(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if r.Method == http.MethodGet {
-		s.showPluginCreateForm(w, ctx)
-		return
-	}
-
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	s.processPluginCreateForm(w, r)
-}
-
-// showPluginCreateForm renders the plugin creation form.
-func (s *Server) showPluginCreateForm(w http.ResponseWriter, ctx context.Context) {
-	data := templates.PluginFormData{
-		IsEdit:     false,
-		Namespaces: s.getAvailableNamespaces(ctx),
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	component := templates.PluginForm(data)
-	if err := component.Render(ctx, w); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to render form: %v", err), http.StatusInternalServerError)
-	}
-}
-
-// processPluginCreateForm handles plugin creation form submission.
-func (s *Server) processPluginCreateForm(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Failed to parse form", http.StatusBadRequest)
-		return
-	}
-
-	createData, err := s.parsePluginFormToData(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := s.pluginService.CreatePlugin(ctx, createData); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to create plugin: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	http.Redirect(w, r, "/ui/plugins", http.StatusSeeOther)
-}
-
-// parsePluginFormToData parses and validates the plugin form data into service.PluginCreateData.
-func (s *Server) parsePluginFormToData(r *http.Request) (service.PluginCreateData, error) {
-	name := r.FormValue("name")
-	namespace := r.FormValue("namespace")
-	sourceType := r.FormValue("sourceType")
-	updateStrategy := r.FormValue("updateStrategy")
-
-	if name == "" || namespace == "" || sourceType == "" || updateStrategy == "" {
-		return service.PluginCreateData{}, errors.New("missing required fields")
-	}
-
-	if err := validatePluginSource(sourceType, r.FormValue("project"), r.FormValue("url")); err != nil {
-		return service.PluginCreateData{}, err
-	}
-
-	if !isValidKubernetesName(name) {
-		return service.PluginCreateData{}, errors.New("invalid plugin name format")
-	}
-
-	if !isValidKubernetesName(namespace) {
-		return service.PluginCreateData{}, errors.New("invalid namespace format")
-	}
-
-	data := service.PluginCreateData{
-		Name:      name,
-		Namespace: namespace,
-		Source: service.PluginSourceData{
-			Type:     sourceType,
-			Project:  r.FormValue("project"),
-			URL:      r.FormValue("url"),
-			Checksum: r.FormValue("checksum"),
-		},
-		UpdateStrategy: updateStrategy,
-		UpdateDelay:    r.FormValue("updateDelay"),
-	}
-
-	parsePluginVersionFields(r, updateStrategy, &data)
-
-	return data, nil
-}
-
-// validatePluginSource validates source-type-specific fields.
-func validatePluginSource(sourceType, project, pluginURL string) error {
-	switch sourceType {
-	case "hangar":
-		if project == "" {
-			return errors.New("project is required for hangar source type")
-		}
-	case "url":
-		if pluginURL == "" {
-			return errors.New("URL is required for url source type")
-		}
-
-		if err := plugins.ValidateDownloadURL(pluginURL); err != nil {
-			return errors.Wrap(err, "invalid plugin URL")
-		}
-	default:
-		return errors.Newf("unsupported source type: %s", sourceType)
-	}
-
-	return nil
-}
-
-// parsePluginVersionFields reads version and build fields based on the update strategy.
-func parsePluginVersionFields(r *http.Request, strategy string, data *service.PluginCreateData) {
-	if strategy == "pin" || strategy == "build-pin" {
-		data.Version = r.FormValue("version")
-	}
-
-	if strategy == "build-pin" {
-		if buildStr := r.FormValue("build"); buildStr != "" {
-			var build int
-			if _, err := fmt.Sscanf(buildStr, "%d", &build); err == nil && build > 0 {
-				data.Build = build
-			}
-		}
-	}
+	s.renderSchemaForm(w, r, "PluginCreateRequest", schema.ModeCreate,
+		"/api/v1/plugins", "/ui/plugins", "Create Plugin", nil)
 }
 
 // handlePluginDelete handles plugin deletion.
@@ -443,101 +326,54 @@ func (s *Server) handlePluginDelete(w http.ResponseWriter, r *http.Request) {
 		"/ui/plugins")
 }
 
-// handleServerCreate handles server creation (GET for form, POST for creation).
+// handleServerCreate renders the schema-driven server creation form.
 func (s *Server) handleServerCreate(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if r.Method == http.MethodGet {
-		s.showServerCreateForm(w, ctx)
-		return
-	}
-
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	s.processServerCreateForm(w, r)
+	s.renderSchemaForm(w, r, "ServerCreateRequest", schema.ModeCreate,
+		"/api/v1/servers", "/ui", "Create Server", nil)
 }
 
-// showServerCreateForm renders the server creation form.
-func (s *Server) showServerCreateForm(w http.ResponseWriter, ctx context.Context) {
-	data := templates.ServerFormData{
-		IsEdit:     false,
-		Namespaces: s.getAvailableNamespaces(ctx),
+// renderSchemaForm renders a schema-driven form page.
+func (s *Server) renderSchemaForm(
+	w http.ResponseWriter,
+	r *http.Request,
+	schemaName string,
+	mode schema.FormMode,
+	submitURL, backURL, title string,
+	values map[string]any,
+) {
+	if s.schemaParser == nil {
+		http.Error(w, "Schema parser not initialized", http.StatusInternalServerError)
+		return
 	}
+
+	formSchema, err := s.schemaParser.ParseSchema(schemaName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to parse schema: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	formHTML := schema.RenderForm(formSchema, values, schema.RenderOptions{
+		Mode:            mode,
+		SubmitURL:       submitURL,
+		SuccessRedirect: backURL,
+	})
+
+	data := templates.SchemaFormData{
+		Title:    title,
+		BackURL:  backURL,
+		FormHTML: template.HTML(formHTML), //nolint:gosec // HTML is generated by our renderer, not user input
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	component := templates.ServerForm(data)
-	if err := component.Render(ctx, w); err != nil {
+	component := templates.SchemaFormPage(data)
+	if err := component.Render(r.Context(), w); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render form: %v", err), http.StatusInternalServerError)
 	}
-}
-
-// processServerCreateForm handles server creation form submission.
-func (s *Server) processServerCreateForm(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Failed to parse form", http.StatusBadRequest)
-		return
-	}
-
-	createData, err := s.parseServerFormToData(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := s.serverService.CreateServer(ctx, createData); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to create server: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	http.Redirect(w, r, "/ui", http.StatusSeeOther)
-}
-
-// parseServerFormToData parses and validates the server form data into service.ServerCreateData.
-func (s *Server) parseServerFormToData(r *http.Request) (service.ServerCreateData, error) {
-	name := r.FormValue("name")
-	namespace := r.FormValue("namespace")
-	updateStrategy := r.FormValue("updateStrategy")
-
-	if name == "" || namespace == "" || updateStrategy == "" {
-		return service.ServerCreateData{}, errors.New("missing required fields")
-	}
-
-	if !isValidKubernetesName(name) {
-		return service.ServerCreateData{}, errors.New("invalid server name format")
-	}
-
-	if !isValidKubernetesName(namespace) {
-		return service.ServerCreateData{}, errors.New("invalid namespace format")
-	}
-
-	data := service.ServerCreateData{
-		Name:           name,
-		Namespace:      namespace,
-		UpdateStrategy: updateStrategy,
-		Version:        r.FormValue("version"),
-		UpdateDelay:    r.FormValue("updateDelay"),
-		CheckCron:      r.FormValue("checkCron"),
-	}
-
-	// Parse build number if provided
-	if buildStr := r.FormValue("build"); buildStr != "" {
-		var build int
-		if _, err := fmt.Sscanf(buildStr, "%d", &build); err == nil && build > 0 {
-			data.Build = build
-		}
-	}
-
-	// Parse maintenance window settings
-	if r.FormValue("maintenanceEnabled") == "on" {
-		data.MaintenanceEnabled = true
-		data.MaintenanceCron = r.FormValue("maintenanceCron")
-	}
-
-	return data, nil
 }
 
 // handleApplyNow triggers immediate update application by setting annotation.
@@ -572,61 +408,6 @@ func (s *Server) handleServerDelete(w http.ResponseWriter, r *http.Request) {
 		"/ui")
 }
 
-// getAvailableNamespaces returns list of namespaces that have plugins or servers.
-func (s *Server) getAvailableNamespaces(ctx context.Context) []string {
-	namespaceSet := make(map[string]bool)
-
-	// Get namespaces from plugins
-	if pluginNs, err := s.pluginService.GetPluginNamespaces(ctx); err == nil {
-		for _, ns := range pluginNs {
-			namespaceSet[ns] = true
-		}
-	}
-
-	// Get namespaces from servers
-	if serverNs, err := s.serverService.GetServerNamespaces(ctx); err == nil {
-		for _, ns := range serverNs {
-			namespaceSet[ns] = true
-		}
-	}
-
-	// Always include default namespace
-	namespaceSet["default"] = true
-
-	namespaces := make([]string, 0, len(namespaceSet))
-	for ns := range namespaceSet {
-		namespaces = append(namespaces, ns)
-	}
-
-	return namespaces
-}
-
-// isValidKubernetesName checks if a name is valid for Kubernetes resources.
-func isValidKubernetesName(name string) bool {
-	if name == "" || len(name) > 253 {
-		return false
-	}
-
-	// Must start and end with alphanumeric
-	if !isAlphanumeric(rune(name[0])) || !isAlphanumeric(rune(name[len(name)-1])) {
-		return false
-	}
-
-	// Can only contain alphanumeric, '-', and '.'
-	for _, ch := range name {
-		if !isAlphanumeric(ch) && ch != '-' && ch != '.' {
-			return false
-		}
-	}
-
-	return true
-}
-
-// isAlphanumeric checks if a rune is alphanumeric.
-func isAlphanumeric(ch rune) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
-}
-
 // handlePluginRoutes routes plugin-specific requests based on URL path.
 func (s *Server) handlePluginRoutes(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/ui/plugin/")
@@ -642,12 +423,16 @@ func (s *Server) handlePluginRoutes(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case actionDelete:
 			s.handlePluginDelete(w, r)
-			return
+		case actionEdit:
+			s.handlePluginEdit(w, r, parts[0])
+		default:
+			http.NotFound(w, r)
 		}
+		return
 	}
 
-	// Default: show plugin detail or 404
-	http.NotFound(w, r)
+	// No action — show plugin detail
+	s.handlePluginDetailPage(w, r, parts[0])
 }
 
 // handleServerRoutes routes server-specific requests based on URL path.
@@ -665,13 +450,156 @@ func (s *Server) handleServerRoutes(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case actionDelete:
 			s.handleServerDelete(w, r)
-			return
 		case actionApplyNow:
 			s.handleApplyNow(w, r)
-			return
+		case actionEdit:
+			s.handleServerEdit(w, r, parts[0])
+		default:
+			http.NotFound(w, r)
 		}
+		return
 	}
 
-	// Default: show server detail
+	// No action — show server detail
 	s.handleServerDetailPage(w, r, parts[0])
+}
+
+// handleServerEdit renders the schema-driven server edit form.
+func (s *Server) handleServerEdit(w http.ResponseWriter, r *http.Request, serverName string) {
+	namespace := r.URL.Query().Get("namespace")
+	if namespace == "" {
+		http.Error(w, "Missing namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	serverData, err := s.serverService.GetServer(r.Context(), namespace, serverName)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, fmt.Sprintf("Failed to get server: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	values := serverDataToValues(serverData)
+	submitURL := fmt.Sprintf("/api/v1/servers/%s/%s", namespace, serverName)
+	s.renderSchemaForm(w, r, "ServerUpdateRequest", schema.ModeEdit,
+		submitURL, "/ui", fmt.Sprintf("Edit Server: %s", serverName), values)
+}
+
+// handlePluginEdit renders the schema-driven plugin edit form.
+func (s *Server) handlePluginEdit(w http.ResponseWriter, r *http.Request, pluginName string) {
+	namespace := r.URL.Query().Get("namespace")
+	if namespace == "" {
+		http.Error(w, "Missing namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	pluginData, err := s.pluginService.GetPlugin(r.Context(), namespace, pluginName)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, fmt.Sprintf("Failed to get plugin: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	values := pluginDataToValues(pluginData)
+	submitURL := fmt.Sprintf("/api/v1/plugins/%s/%s", namespace, pluginName)
+	s.renderSchemaForm(w, r, "PluginUpdateRequest", schema.ModeEdit,
+		submitURL, "/ui/plugins", fmt.Sprintf("Edit Plugin: %s", pluginName), values)
+}
+
+// handlePluginDetailPage serves the plugin details page.
+func (s *Server) handlePluginDetailPage(w http.ResponseWriter, r *http.Request, pluginName string) {
+	if pluginName == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	ctx := r.Context()
+	namespace := r.URL.Query().Get("namespace")
+
+	if namespace == "" {
+		http.Error(w, "Missing namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	data, err := s.pluginService.GetPlugin(ctx, namespace, pluginName)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, fmt.Sprintf("Failed to fetch plugin: %v", err),
+			http.StatusInternalServerError)
+		return
+	}
+
+	detail := pluginDataToDetail(data)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	component := templates.PluginDetail(detail)
+	if err := component.Render(ctx, w); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render plugin detail: %v", err),
+			http.StatusInternalServerError)
+	}
+}
+
+// handleListConfigMaps returns ConfigMaps in a namespace as JSON (for form dropdowns).
+func (s *Server) handleListConfigMaps(w http.ResponseWriter, r *http.Request) {
+	namespace := r.URL.Query().Get("namespace")
+	if namespace == "" {
+		http.Error(w, "Missing namespace parameter", http.StatusBadRequest)
+		return
+	}
+
+	cms, err := s.configMapService.ListConfigMaps(r.Context(), namespace)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to list ConfigMaps: %v", err),
+			http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(cms)
+}
+
+// handleCreateConfigMap creates a ConfigMap from JSON body.
+func (s *Server) handleCreateConfigMap(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Name      string            `json:"name"`
+		Namespace string            `json:"namespace"`
+		Data      map[string]string `json:"data"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" || req.Namespace == "" || len(req.Data) == 0 {
+		http.Error(w, "name, namespace, and data are required", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.configMapService.CreateConfigMap(r.Context(), req.Namespace, req.Name, req.Data); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create ConfigMap: %v", err),
+			http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"name":      req.Name,
+		"namespace": req.Namespace,
+	})
 }

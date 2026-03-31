@@ -1194,3 +1194,115 @@ func TestLabelSelectorToK8s_WithExpressions(t *testing.T) {
 	assert.Equal(t, metav1.LabelSelectorOperator("In"), result.MatchExpressions[0].Operator)
 	assert.Equal(t, []string{"papermc", "vanilla"}, result.MatchExpressions[0].Values)
 }
+
+func TestValidateServerCreateRequest_InvalidName(t *testing.T) {
+	body := &generated.ServerCreateRequest{
+		Name:           "INVALID_NAME!!!",
+		Namespace:      "default",
+		UpdateStrategy: "latest",
+	}
+	msg := validateServerCreateRequest(body)
+	assert.Contains(t, msg, "Name")
+	assert.Contains(t, msg, "DNS subdomain")
+}
+
+func TestValidatePluginCreateRequest_InvalidNamespace(t *testing.T) {
+	sel := generated.LabelSelector{}
+	src := generated.PluginSource{Type: generated.Hangar, Project: ptr("BlueMap")}
+	body := &generated.PluginCreateRequest{
+		Name:             "valid",
+		Namespace:        "BAD NAMESPACE",
+		Source:           src,
+		InstanceSelector: sel,
+	}
+	resp := validatePluginCreateRequest(body)
+	assert.NotNil(t, resp, "should reject invalid namespace")
+}
+
+func TestValidateServerCreateRequest_InvalidStrategy(t *testing.T) {
+	body := &generated.ServerCreateRequest{
+		Name:           "test",
+		Namespace:      "default",
+		UpdateStrategy: "garbage",
+	}
+	msg := validateServerCreateRequest(body)
+	assert.Contains(t, msg, "Invalid update strategy")
+}
+
+func TestValidateServerCreateRequest_PinRequiresVersion(t *testing.T) {
+	body := &generated.ServerCreateRequest{
+		Name:           "test",
+		Namespace:      "default",
+		UpdateStrategy: "pin",
+	}
+	msg := validateServerCreateRequest(body)
+	assert.Contains(t, msg, "Version is required")
+}
+
+func TestValidateServerCreateRequest_BuildPinRequiresBuild(t *testing.T) {
+	v := "1.21.1"
+	body := &generated.ServerCreateRequest{
+		Name:           "test",
+		Namespace:      "default",
+		UpdateStrategy: "build-pin",
+		Version:        &v,
+	}
+	msg := validateServerCreateRequest(body)
+	assert.Contains(t, msg, "Build is required")
+}
+
+func TestValidateServerCreateRequest_Valid(t *testing.T) {
+	body := &generated.ServerCreateRequest{
+		Name:           "test",
+		Namespace:      "default",
+		UpdateStrategy: "latest",
+	}
+	msg := validateServerCreateRequest(body)
+	assert.Empty(t, msg)
+}
+
+func TestValidatePluginSource_HangarRequiresProject(t *testing.T) {
+	src := generated.PluginSource{Type: generated.Hangar}
+	msg := validatePluginSource(src)
+	assert.Contains(t, msg, "Project is required")
+}
+
+func TestValidatePluginSource_HangarValid(t *testing.T) {
+	project := "BlueMap"
+	src := generated.PluginSource{Type: generated.Hangar, Project: &project}
+	msg := validatePluginSource(src)
+	assert.Empty(t, msg)
+}
+
+func TestValidatePluginSource_URLRequiresURL(t *testing.T) {
+	src := generated.PluginSource{Type: generated.Url}
+	msg := validatePluginSource(src)
+	assert.Contains(t, msg, "URL is required")
+}
+
+func TestValidatePluginSource_URLRejectsHTTP(t *testing.T) {
+	u := "http://evil.com/plugin.jar"
+	src := generated.PluginSource{Type: generated.Url, Url: &u}
+	msg := validatePluginSource(src)
+	assert.NotEmpty(t, msg, "should reject HTTP URL")
+}
+
+func TestValidatePluginSource_URLRejectsSSRF(t *testing.T) {
+	u := "https://127.0.0.1/plugin.jar"
+	src := generated.PluginSource{Type: generated.Url, Url: &u}
+	msg := validatePluginSource(src)
+	assert.NotEmpty(t, msg, "should reject SSRF address")
+}
+
+func TestValidatePluginSource_URLValid(t *testing.T) {
+	u := "https://example.com/plugin.jar"
+	src := generated.PluginSource{Type: generated.Url, Url: &u}
+	msg := validatePluginSource(src)
+	assert.Empty(t, msg)
+}
+
+func TestValidatePluginSource_UnknownType(t *testing.T) {
+	src := generated.PluginSource{Type: "modrinth"}
+	msg := validatePluginSource(src)
+	assert.Contains(t, msg, "Unsupported source type")
+}

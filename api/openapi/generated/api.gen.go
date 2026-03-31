@@ -109,6 +109,24 @@ func (e LabelSelectorRequirementOperator) Valid() bool {
 	}
 }
 
+// Defines values for PluginConfigFileOverwrite.
+const (
+	PluginConfigFileOverwriteAlways      PluginConfigFileOverwrite = "always"
+	PluginConfigFileOverwriteIfNotExists PluginConfigFileOverwrite = "ifNotExists"
+)
+
+// Valid indicates whether the value is a known member of the PluginConfigFileOverwrite enum.
+func (e PluginConfigFileOverwrite) Valid() bool {
+	switch e {
+	case PluginConfigFileOverwriteAlways:
+		return true
+	case PluginConfigFileOverwriteIfNotExists:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PluginEndpointProtocol.
 const (
 	HTTP PluginEndpointProtocol = "HTTP"
@@ -163,6 +181,24 @@ func (e RepositoryStatus) Valid() bool {
 	case Orphaned:
 		return true
 	case Unavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServerConfigFileOverwrite.
+const (
+	ServerConfigFileOverwriteAlways      ServerConfigFileOverwrite = "always"
+	ServerConfigFileOverwriteIfNotExists ServerConfigFileOverwrite = "ifNotExists"
+)
+
+// Valid indicates whether the value is a known member of the ServerConfigFileOverwrite enum.
+func (e ServerConfigFileOverwrite) Valid() bool {
+	switch e {
+	case ServerConfigFileOverwriteAlways:
+		return true
+	case ServerConfigFileOverwriteIfNotExists:
 		return true
 	default:
 		return false
@@ -307,6 +343,45 @@ type Condition struct {
 // ConditionStatus Status of a condition (True, False, or Unknown)
 type ConditionStatus string
 
+// ConfigMapCreateRequest Request to create a new ConfigMap
+type ConfigMapCreateRequest struct {
+	// Data ConfigMap data (key-value pairs where values are file contents)
+	Data map[string]string `json:"data"`
+
+	// Name ConfigMap name
+	Name string `json:"name"`
+
+	// Namespace Kubernetes namespace
+	Namespace string `json:"namespace"`
+}
+
+// ConfigMapKeyRef Reference to a key within a Kubernetes ConfigMap
+type ConfigMapKeyRef struct {
+	// Key Key within the ConfigMap
+	Key string `json:"key"`
+
+	// Name ConfigMap resource name
+	Name string `json:"name"`
+}
+
+// ConfigMapListResponse defines model for ConfigMapListResponse.
+type ConfigMapListResponse struct {
+	// ConfigMaps List of ConfigMap summaries
+	ConfigMaps []ConfigMapSummary `json:"configMaps"`
+}
+
+// ConfigMapSummary Summary of a Kubernetes ConfigMap
+type ConfigMapSummary struct {
+	// Keys Keys available in this ConfigMap
+	Keys *[]string `json:"keys,omitempty"`
+
+	// Name ConfigMap name
+	Name string `json:"name"`
+
+	// Namespace ConfigMap namespace
+	Namespace string `json:"namespace"`
+}
+
 // DeletionProgressEntry JAR cleanup progress for a server
 type DeletionProgressEntry struct {
 	// DeletedAt When the JAR was deleted
@@ -421,6 +496,26 @@ type NamespaceListResponse struct {
 	Namespaces []string `json:"namespaces"`
 }
 
+// PluginConfigFile A config file to inject into a plugin's directory
+type PluginConfigFile struct {
+	// ConfigMapRef Reference to a key within a Kubernetes ConfigMap
+	ConfigMapRef ConfigMapKeyRef `json:"configMapRef"`
+
+	// Overwrite When to overwrite existing files on pod restart.
+	// - always: CRD is source of truth, always replace
+	// - ifNotExists: preserve manual edits
+	Overwrite *PluginConfigFileOverwrite `json:"overwrite,omitempty"`
+
+	// Path Target file path relative to the plugin's directory.
+	// Must not start with "/" or contain "..".
+	Path string `json:"path"`
+}
+
+// PluginConfigFileOverwrite When to overwrite existing files on pod restart.
+// - always: CRD is source of truth, always replace
+// - ifNotExists: preserve manual edits
+type PluginConfigFileOverwrite string
+
 // PluginCreateRequest Request body for creating a new Plugin
 type PluginCreateRequest struct {
 	// Build Pinned build number (for build-pin strategy)
@@ -428,6 +523,9 @@ type PluginCreateRequest struct {
 
 	// CompatibilityOverride Manual compatibility specification
 	CompatibilityOverride *CompatibilityOverride `json:"compatibilityOverride,omitempty"`
+
+	// Configs Default config files for this plugin
+	Configs *[]PluginConfigFile `json:"configs,omitempty"`
 
 	// Endpoints Network endpoints exposed by this plugin
 	Endpoints *[]PluginEndpoint `json:"endpoints,omitempty"`
@@ -440,6 +538,11 @@ type PluginCreateRequest struct {
 
 	// Namespace Kubernetes namespace
 	Namespace string `json:"namespace"`
+
+	// PluginDirName Plugin directory name under plugins/.
+	// Defaults to source.project if not set.
+	// Required when configs are specified.
+	PluginDirName *string `json:"pluginDirName,omitempty"`
 
 	// Source Plugin source configuration
 	Source PluginSource `json:"source"`
@@ -638,11 +741,17 @@ type PluginUpdateRequest struct {
 	// CompatibilityOverride Manual compatibility specification
 	CompatibilityOverride *CompatibilityOverride `json:"compatibilityOverride,omitempty"`
 
+	// Configs Default config files for this plugin
+	Configs *[]PluginConfigFile `json:"configs,omitempty"`
+
 	// Endpoints Network endpoints exposed by this plugin
 	Endpoints *[]PluginEndpoint `json:"endpoints,omitempty"`
 
 	// InstanceSelector Kubernetes label selector
 	InstanceSelector *LabelSelector `json:"instanceSelector,omitempty"`
+
+	// PluginDirName Plugin directory name under plugins/
+	PluginDirName *string `json:"pluginDirName,omitempty"`
 
 	// Source Plugin source configuration
 	Source *PluginSource `json:"source,omitempty"`
@@ -726,6 +835,23 @@ type RCONStatus struct {
 // - **orphaned**: Plugin source no longer exists in repository
 type RepositoryStatus string
 
+// ServerConfigFile A config file to inject into the server workdir (/data)
+type ServerConfigFile struct {
+	// ConfigMapRef Reference to a key within a Kubernetes ConfigMap
+	ConfigMapRef ConfigMapKeyRef `json:"configMapRef"`
+
+	// Overwrite When to overwrite existing files
+	Overwrite *ServerConfigFileOverwrite `json:"overwrite,omitempty"`
+
+	// Path Target file path relative to /data.
+	// E.g., "server.properties", "paper-global.yml".
+	// Must not start with "/" or contain "..".
+	Path string `json:"path"`
+}
+
+// ServerConfigFileOverwrite When to overwrite existing files
+type ServerConfigFileOverwrite string
+
 // ServerCreateRequest Request body for creating a new PaperMCServer
 type ServerCreateRequest struct {
 	// Build Target Paper build number (required for build-pin strategy).
@@ -752,8 +878,14 @@ type ServerCreateRequest struct {
 	// Namespace Kubernetes namespace to create the server in
 	Namespace string `json:"namespace"`
 
+	// PluginConfigs Per-server plugin config file overrides
+	PluginConfigs *[]ServerPluginConfig `json:"pluginConfigs,omitempty"`
+
 	// Rcon RCON configuration for create/update requests
 	Rcon *RCONConfig `json:"rcon,omitempty"`
+
+	// ServerConfigs Server-level config files (relative to workdir /data)
+	ServerConfigs *[]ServerConfigFile `json:"serverConfigs,omitempty"`
 
 	// Service Kubernetes Service configuration
 	Service *ServiceConfig `json:"service,omitempty"`
@@ -883,6 +1015,15 @@ type ServerPlugin struct {
 	Source *string `json:"source,omitempty"`
 }
 
+// ServerPluginConfig Per-server overrides for a plugin's config files
+type ServerPluginConfig struct {
+	// Configs Config file overrides for this plugin on this server
+	Configs []PluginConfigFile `json:"configs"`
+
+	// PluginName Plugin CRD name (same namespace)
+	PluginName string `json:"pluginName"`
+}
+
 // ServerStatus Current operational status of the server.
 //
 // - **running**: Server is running normally with all replicas ready
@@ -945,6 +1086,12 @@ type ServerUpdateRequest struct {
 
 	// MaintenanceWindow Maintenance window configuration for create/update requests
 	MaintenanceWindow *MaintenanceWindowConfig `json:"maintenanceWindow,omitempty"`
+
+	// PluginConfigs Per-server plugin config file overrides
+	PluginConfigs *[]ServerPluginConfig `json:"pluginConfigs,omitempty"`
+
+	// ServerConfigs Server-level config files
+	ServerConfigs *[]ServerConfigFile `json:"serverConfigs,omitempty"`
 
 	// UpdateDelay Grace period before applying updates
 	UpdateDelay *string `json:"updateDelay,omitempty"`
@@ -1083,6 +1230,9 @@ type ListServersParams struct {
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
 }
 
+// CreateConfigMapJSONRequestBody defines body for CreateConfigMap for application/json ContentType.
+type CreateConfigMapJSONRequestBody = ConfigMapCreateRequest
+
 // CreatePluginJSONRequestBody defines body for CreatePlugin for application/json ContentType.
 type CreatePluginJSONRequestBody = PluginCreateRequest
 
@@ -1097,6 +1247,12 @@ type UpdateServerJSONRequestBody = ServerUpdateRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// List ConfigMaps in a namespace
+	// (GET /configmaps/{namespace})
+	ListConfigMaps(w http.ResponseWriter, r *http.Request, namespace Namespace)
+	// Create a ConfigMap
+	// (POST /configmaps/{namespace})
+	CreateConfigMap(w http.ResponseWriter, r *http.Request, namespace Namespace)
 	// Health check endpoint
 	// (GET /health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
@@ -1155,6 +1311,56 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListConfigMaps operation middleware
+func (siw *ServerInterfaceWrapper) ListConfigMaps(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "namespace" -------------
+	var namespace Namespace
+
+	err = runtime.BindStyledParameterWithOptions("simple", "namespace", r.PathValue("namespace"), &namespace, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "namespace", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListConfigMaps(w, r, namespace)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateConfigMap operation middleware
+func (siw *ServerInterfaceWrapper) CreateConfigMap(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "namespace" -------------
+	var namespace Namespace
+
+	err = runtime.BindStyledParameterWithOptions("simple", "namespace", r.PathValue("namespace"), &namespace, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "namespace", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateConfigMap(w, r, namespace)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetHealth operation middleware
 func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Request) {
@@ -1706,6 +1912,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc("GET "+options.BaseURL+"/configmaps/{namespace}", wrapper.ListConfigMaps)
+	m.HandleFunc("POST "+options.BaseURL+"/configmaps/{namespace}", wrapper.CreateConfigMap)
 	m.HandleFunc("GET "+options.BaseURL+"/health", wrapper.GetHealth)
 	m.HandleFunc("GET "+options.BaseURL+"/namespaces", wrapper.ListNamespaces)
 	m.HandleFunc("GET "+options.BaseURL+"/plugins", wrapper.ListPlugins)
@@ -1733,6 +1941,81 @@ type ConflictJSONResponse ErrorResponse
 type InternalServerErrorJSONResponse ErrorResponse
 
 type NotFoundJSONResponse ErrorResponse
+
+type ListConfigMapsRequestObject struct {
+	Namespace Namespace `json:"namespace"`
+}
+
+type ListConfigMapsResponseObject interface {
+	VisitListConfigMapsResponse(w http.ResponseWriter) error
+}
+
+type ListConfigMaps200JSONResponse ConfigMapListResponse
+
+func (response ListConfigMaps200JSONResponse) VisitListConfigMapsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListConfigMaps500JSONResponse struct {
+	InternalServerErrorJSONResponse
+}
+
+func (response ListConfigMaps500JSONResponse) VisitListConfigMapsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateConfigMapRequestObject struct {
+	Namespace Namespace `json:"namespace"`
+	Body      *CreateConfigMapJSONRequestBody
+}
+
+type CreateConfigMapResponseObject interface {
+	VisitCreateConfigMapResponse(w http.ResponseWriter) error
+}
+
+type CreateConfigMap201JSONResponse ConfigMapSummary
+
+func (response CreateConfigMap201JSONResponse) VisitCreateConfigMapResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateConfigMap400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateConfigMap400JSONResponse) VisitCreateConfigMapResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateConfigMap409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateConfigMap409JSONResponse) VisitCreateConfigMapResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateConfigMap500JSONResponse struct {
+	InternalServerErrorJSONResponse
+}
+
+func (response CreateConfigMap500JSONResponse) VisitCreateConfigMapResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
+}
 
 type GetHealthRequestObject struct {
 }
@@ -2312,6 +2595,12 @@ func (response GetVersion200JSONResponse) VisitGetVersionResponse(w http.Respons
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// List ConfigMaps in a namespace
+	// (GET /configmaps/{namespace})
+	ListConfigMaps(ctx context.Context, request ListConfigMapsRequestObject) (ListConfigMapsResponseObject, error)
+	// Create a ConfigMap
+	// (POST /configmaps/{namespace})
+	CreateConfigMap(ctx context.Context, request CreateConfigMapRequestObject) (CreateConfigMapResponseObject, error)
 	// Health check endpoint
 	// (GET /health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
@@ -2389,6 +2678,65 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// ListConfigMaps operation middleware
+func (sh *strictHandler) ListConfigMaps(w http.ResponseWriter, r *http.Request, namespace Namespace) {
+	var request ListConfigMapsRequestObject
+
+	request.Namespace = namespace
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListConfigMaps(ctx, request.(ListConfigMapsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListConfigMaps")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListConfigMapsResponseObject); ok {
+		if err := validResponse.VisitListConfigMapsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateConfigMap operation middleware
+func (sh *strictHandler) CreateConfigMap(w http.ResponseWriter, r *http.Request, namespace Namespace) {
+	var request CreateConfigMapRequestObject
+
+	request.Namespace = namespace
+
+	var body CreateConfigMapJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateConfigMap(ctx, request.(CreateConfigMapRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateConfigMap")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateConfigMapResponseObject); ok {
+		if err := validResponse.VisitCreateConfigMapResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetHealth operation middleware

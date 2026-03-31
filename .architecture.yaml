@@ -218,7 +218,12 @@ structure:
       - "pkg/webui/templates/layout.templ - Base HTML layout"
       - "pkg/webui/templates/dashboard.templ - Dashboard view"
       - "pkg/webui/templates/server.templ - Server details view"
-      - "pkg/webui/static/ - Static assets (CSS, embedded HTMX)"
+      - "pkg/webui/templates/plugin_detail.templ - Plugin details view"
+      - "pkg/webui/templates/plugin_list.templ - Plugin list view"
+      - "pkg/webui/templates/schema_form.templ - Schema-driven form wrapper"
+      - "pkg/webui/schema/ - OpenAPI schema parser and HTML form renderer"
+      - "pkg/webui/static/ - Static assets (form.js for JSON serialization)"
+      - "api/openapi/embed.go - Embedded OpenAPI spec for schema-driven UI"
 
     crdmanager:
       - "internal/crdmanager/ - CRD lifecycle management"
@@ -426,7 +431,8 @@ webui:
     handlers: "pkg/webui/handlers.go - Request handlers for routes"
     sse: "pkg/webui/sse.go - Server-Sent Events for live updates"
     templates: "pkg/webui/templates/*.templ - Type-safe HTML templates"
-    static: "pkg/webui/static/ - CSS and embedded JavaScript (HTMX)"
+    schema: "pkg/webui/schema/ - OpenAPI schema parser and form renderer (generates forms from spec at runtime)"
+    static: "pkg/webui/static/ - Embedded JS (form.js for JSON serialization, conditional fields, array/map editors)"
 
   routes:
     - path: "/ui"

@@ -1,0 +1,84 @@
+package templates
+
+import "fmt"
+
+// PluginDetailData holds data for the plugin detail page.
+type PluginDetailData struct {
+	Name             string
+	Namespace        string
+	SourceType       string
+	Project          string
+	URL              string
+	UpdateStrategy   string
+	Version          string
+	ResolvedVersion  string
+	MatchedServers   int
+	RepositoryStatus string
+}
+
+templ PluginDetail(data PluginDetailData) {
+	@Layout("Plugin: " + data.Name) {
+		<div class="card">
+			<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+				<h2 style="font-size:20px;">{ data.Name }</h2>
+				<div style="display:flex;gap:8px;">
+					<a href={ templ.URL("/ui/plugin/" + data.Name + "/edit?namespace=" + data.Namespace) }
+						style="padding:6px 14px;background:var(--accent);color:white;border-radius:4px;font-size:13px;text-decoration:none;">Edit</a>
+					<a href={ templ.URL("/ui/plugins") }
+						style="font-size:13px;color:var(--text-secondary);padding:6px 0;">&larr; Back</a>
+				</div>
+			</div>
+
+			<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:20px;">
+				<div>
+					<p style="font-size:12px;color:var(--text-muted);">Namespace</p>
+					<p style="font-size:14px;">{ data.Namespace }</p>
+				</div>
+				<div>
+					<p style="font-size:12px;color:var(--text-muted);">Source</p>
+					<p style="font-size:14px;">{ data.SourceType }</p>
+				</div>
+				if data.Project != "" {
+					<div>
+						<p style="font-size:12px;color:var(--text-muted);">Project</p>
+						<p style="font-size:14px;">{ data.Project }</p>
+					</div>
+				}
+				if data.URL != "" {
+					<div>
+						<p style="font-size:12px;color:var(--text-muted);">URL</p>
+						<p style="font-size:14px;word-break:break-all;">{ data.URL }</p>
+					</div>
+				}
+				<div>
+					<p style="font-size:12px;color:var(--text-muted);">Strategy</p>
+					<p style="font-size:14px;">{ data.UpdateStrategy }</p>
+				</div>
+				if data.Version != "" {
+					<div>
+						<p style="font-size:12px;color:var(--text-muted);">Pinned Version</p>
+						<p style="font-size:14px;">{ data.Version }</p>
+					</div>
+				}
+				if data.ResolvedVersion != "" {
+					<div>
+						<p style="font-size:12px;color:var(--text-muted);">Resolved Version</p>
+						<p style="font-size:14px;color:var(--success);">{ data.ResolvedVersion }</p>
+					</div>
+				}
+				<div>
+					<p style="font-size:12px;color:var(--text-muted);">Matched Servers</p>
+					<p style="font-size:14px;">{ fmt.Sprintf("%d", data.MatchedServers) }</p>
+				</div>
+				<div>
+					<p style="font-size:12px;color:var(--text-muted);">Repository</p>
+					if data.RepositoryStatus == "available" {
+						<span class="badge badge-success">{ data.RepositoryStatus }</span>
+					} else {
+						<span class="badge badge-warning">{ data.RepositoryStatus }</span>
+					}
+				</div>
+			</div>
+		</div>
+	}
+}

@@ -90,7 +90,7 @@ templ ServerCard(server ServerSummary) {
 		<div style="display: flex; justify-content: space-between; align-items: start;">
 			<div style="flex: 1;">
 				<h3 style="font-size: 18px; margin-bottom: 8px;">
-					<a href={ templ.URL(fmt.Sprintf("/ui/server/%s", server.Name)) }>
+					<a href={ templ.URL(fmt.Sprintf("/ui/server/%s?namespace=%s", server.Name, server.Namespace)) }>
 						{ server.Name }
 					</a>
 				</h3>
@@ -119,6 +119,12 @@ templ ServerCard(server ServerSummary) {
 						🔄 Resolve Server
 					</button>
 				</div>
+				<a
+					href={ templ.URL(fmt.Sprintf("/ui/server/%s/edit?namespace=%s", server.Name, server.Namespace)) }
+					style="background-color: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; white-space: nowrap; text-decoration: none;"
+				>
+					Edit
+				</a>
 				<button
 					hx-post={ fmt.Sprintf("/ui/server/%s/delete?namespace=%s", server.Name, server.Namespace) }
 					hx-confirm={ fmt.Sprintf("Are you sure you want to delete server '%s'? This action cannot be undone.", server.Name) }

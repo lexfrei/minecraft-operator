@@ -4,40 +4,73 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	openapi "github.com/lexfrei/minecraft-operator/api/openapi"
 	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
+	"github.com/lexfrei/minecraft-operator/pkg/webui/schema"
+	"github.com/lexfrei/minecraft-operator/pkg/webui/static"
+	"github.com/lexfrei/minecraft-operator/pkg/webui/templates"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // Server represents the Web UI HTTP server.
 type Server struct {
-	client        client.Client
-	namespace     string
-	server        *http.Server
-	sse           *SSEBroker
-	serverService *service.ServerService
-	pluginService *service.PluginService
+	client           client.Client
+	namespace        string
+	server           *http.Server
+	sse              *SSEBroker
+	serverService    *service.ServerService
+	pluginService    *service.PluginService
+	configMapService *service.ConfigMapService
+	schemaParser     *schema.Parser
 }
 
 // NewServer creates a new Web UI server instance.
 // apiHandler is optional - if provided, it will be mounted at /api/v1/.
 func NewServer(k8sClient client.Client, namespace string, bindAddress string, apiHandler http.Handler) *Server {
 	sse := NewSSEBroker()
+
+	parser, parserErr := schema.NewParser(openapi.Spec)
+	if parserErr != nil {
+		log.Log.Error(parserErr, "failed to initialize OpenAPI schema parser")
+	}
+
 	srv := &Server{
-		client:        k8sClient,
-		namespace:     namespace,
-		sse:           sse,
-		serverService: service.NewServerService(k8sClient),
-		pluginService: service.NewPluginService(k8sClient),
+		client:           k8sClient,
+		namespace:        namespace,
+		sse:              sse,
+		serverService:    service.NewServerService(k8sClient),
+		pluginService:    service.NewPluginService(k8sClient),
+		configMapService: service.NewConfigMapService(k8sClient),
+		schemaParser:     parser,
 	}
 
 	mux := http.NewServeMux()
+
+	// Static files
+	staticFS, fsErr := fs.Sub(static.FS, ".")
+	if fsErr != nil {
+		log.Log.Error(fsErr, "failed to initialize static file system")
+	}
+	mux.Handle("/ui/static/", http.StripPrefix("/ui/static/", http.FileServer(http.FS(staticFS))))
+
+	// OpenAPI spec
+	mux.HandleFunc("/api/v1/openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write(openapi.Spec)
+	})
+
+	// ConfigMap API for form dropdowns
+	mux.HandleFunc("/ui/api/configmaps", srv.handleListConfigMaps)
+	mux.HandleFunc("/ui/api/configmaps/create", srv.handleCreateConfigMap)
 
 	// Register UI routes
 	mux.HandleFunc("/ui", srv.handleDashboard)
@@ -137,11 +170,32 @@ func (s *Server) handleServerDetailPage(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	namespace := r.URL.Query().Get("namespace")
+
 	ctx := r.Context()
-	data, err := s.fetchServerDetailData(ctx, serverName)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to fetch server details: %v", err), http.StatusInternalServerError)
-		return
+
+	var data templates.ServerDetailData
+	var err error
+
+	if namespace != "" {
+		var serverData *service.ServerData
+		serverData, err = s.serverService.GetServer(ctx, namespace, serverName)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				http.NotFound(w, r)
+			} else {
+				http.Error(w, fmt.Sprintf("Failed to fetch server details: %v", err),
+					http.StatusInternalServerError)
+			}
+			return
+		}
+		data = serverDataToDetail(serverData)
+	} else {
+		data, err = s.fetchServerDetailData(ctx, serverName)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

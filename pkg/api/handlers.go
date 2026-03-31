@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lexfrei/minecraft-operator/api/openapi/generated"
+	"github.com/lexfrei/minecraft-operator/pkg/plugins"
 	"github.com/lexfrei/minecraft-operator/pkg/service"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -127,6 +128,15 @@ func (s *Server) CreateServer(
 		return generated.CreateServer400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{
 				Error: "Request body is required",
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}, nil
+	}
+
+	if errMsg := validateServerCreateRequest(req.Body); errMsg != "" {
+		return generated.CreateServer400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
 				Code:  ptr(generated.INVALIDREQUEST),
 			},
 		}, nil
@@ -350,7 +360,7 @@ func (s *Server) ListPlugins(
 		namespace = *req.Params.Namespace
 	}
 
-	plugins, err := s.pluginService.ListPlugins(ctx, namespace)
+	pluginList, err := s.pluginService.ListPlugins(ctx, namespace)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to list plugins", "error", err, "namespace", namespace)
 		return generated.ListPlugins500JSONResponse{
@@ -361,8 +371,8 @@ func (s *Server) ListPlugins(
 		}, nil
 	}
 
-	summaries := make([]generated.PluginSummary, 0, len(plugins))
-	for _, p := range plugins {
+	summaries := make([]generated.PluginSummary, 0, len(pluginList))
+	for _, p := range pluginList {
 		summaries = append(summaries, pluginDataToSummary(p))
 	}
 
@@ -385,13 +395,8 @@ func (s *Server) CreatePlugin(
 		}, nil
 	}
 
-	if errMsg := validateEndpointRequest(req.Body.Endpoints); errMsg != "" {
-		return generated.CreatePlugin400JSONResponse{
-			BadRequestJSONResponse: generated.BadRequestJSONResponse{
-				Error: errMsg,
-				Code:  ptr(generated.INVALIDREQUEST),
-			},
-		}, nil
+	if errResp := validatePluginCreateRequest(req.Body); errResp != nil {
+		return *errResp, nil
 	}
 
 	data := pluginCreateRequestToData(*req.Body)
@@ -693,7 +698,7 @@ func serverDataToDetail(data service.ServerData) generated.ServerDetail {
 
 	// Convert plugins
 	if len(data.Plugins) > 0 {
-		plugins := make([]generated.ServerPlugin, 0, len(data.Plugins))
+		serverPlugins := make([]generated.ServerPlugin, 0, len(data.Plugins))
 		for _, p := range data.Plugins {
 			sp := generated.ServerPlugin{
 				Name:       p.Name,
@@ -711,9 +716,9 @@ func serverDataToDetail(data service.ServerData) generated.ServerDetail {
 			if p.SourceType != "" {
 				sp.Source = &p.SourceType
 			}
-			plugins = append(plugins, sp)
+			serverPlugins = append(serverPlugins, sp)
 		}
-		detail.Plugins = &plugins
+		detail.Plugins = &serverPlugins
 	}
 
 	// Convert maintenance schedule
@@ -870,6 +875,12 @@ func serverCreateRequestToData(req generated.ServerCreateRequest) service.Server
 	if req.Labels != nil {
 		data.Labels = *req.Labels
 	}
+	if req.PluginConfigs != nil {
+		data.PluginConfigs = apiPluginConfigsToData(*req.PluginConfigs)
+	}
+	if req.ServerConfigs != nil {
+		data.ServerConfigs = apiConfigFilesToData(*req.ServerConfigs)
+	}
 
 	return data
 }
@@ -953,6 +964,12 @@ func pluginCreateRequestToData(req generated.PluginCreateRequest) service.Plugin
 		}
 		data.Endpoints = endpoints
 	}
+	if req.PluginDirName != nil {
+		data.PluginDirName = *req.PluginDirName
+	}
+	if req.Configs != nil {
+		data.Configs = apiConfigFilesToDataFromPlugin(*req.Configs)
+	}
 
 	return data
 }
@@ -1026,6 +1043,23 @@ func convertEndpointsToAPI(endpoints []service.PluginEndpointData) *[]generated.
 // dnsLabelPattern matches valid DNS labels (lowercase alphanumeric with hyphens, 1-63 chars).
 var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
+// k8sNamePattern matches valid Kubernetes resource names (RFC 1123 DNS subdomain).
+var k8sNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9.\-]*[a-z0-9])?$`)
+
+// validateK8sName checks that a name is a valid Kubernetes resource name.
+func validateK8sName(name, fieldLabel string) string {
+	if name == "" {
+		return fmt.Sprintf("%s is required", fieldLabel)
+	}
+	if len(name) > 253 {
+		return fmt.Sprintf("%s must be at most 253 characters", fieldLabel)
+	}
+	if !k8sNamePattern.MatchString(name) {
+		return fmt.Sprintf("%s must be a valid DNS subdomain (lowercase alphanumeric, hyphens, dots)", fieldLabel)
+	}
+	return ""
+}
+
 const maxEndpointNameLength = 63
 
 // validateEndpointRequest validates plugin endpoints from API request.
@@ -1081,6 +1115,148 @@ func validateEndpointRequest(endpoints *[]generated.PluginEndpoint) string {
 	return ""
 }
 
+// validUpdateStrategies is the set of accepted update strategy values.
+var validUpdateStrategies = map[generated.UpdateStrategy]bool{
+	"latest":    true,
+	"auto":      true,
+	"pin":       true,
+	"build-pin": true,
+}
+
+// validateServerCreateRequest validates server create request fields.
+func validateServerCreateRequest(body *generated.ServerCreateRequest) string {
+	if errMsg := validateK8sName(body.Name, "Name"); errMsg != "" {
+		return errMsg
+	}
+	if errMsg := validateK8sName(body.Namespace, "Namespace"); errMsg != "" {
+		return errMsg
+	}
+	if !validUpdateStrategies[body.UpdateStrategy] {
+		return fmt.Sprintf("Invalid update strategy %q", body.UpdateStrategy)
+	}
+
+	if body.UpdateStrategy == "pin" || body.UpdateStrategy == "build-pin" {
+		if body.Version == nil || *body.Version == "" {
+			return "Version is required for pin and build-pin strategies"
+		}
+	}
+
+	if body.UpdateStrategy == "build-pin" {
+		if body.Build == nil {
+			return "Build is required for build-pin strategy"
+		}
+	}
+
+	return ""
+}
+
+// validatePluginCreateRequest validates all fields of a plugin create request.
+func validatePluginCreateRequest(body *generated.PluginCreateRequest) *generated.CreatePlugin400JSONResponse {
+	if errMsg := validateK8sName(body.Name, "Name"); errMsg != "" {
+		return &generated.CreatePlugin400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}
+	}
+	if errMsg := validateK8sName(body.Namespace, "Namespace"); errMsg != "" {
+		return &generated.CreatePlugin400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}
+	}
+	if errMsg := validateEndpointRequest(body.Endpoints); errMsg != "" {
+		return &generated.CreatePlugin400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}
+	}
+
+	if errMsg := validatePluginSource(body.Source); errMsg != "" {
+		return &generated.CreatePlugin400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}
+	}
+
+	return nil
+}
+
+// validatePluginSource validates plugin source configuration.
+func validatePluginSource(source generated.PluginSource) string {
+	switch source.Type {
+	case generated.Hangar:
+		if source.Project == nil || *source.Project == "" {
+			return "Project is required for hangar source type"
+		}
+	case generated.Url:
+		if source.Url == nil || *source.Url == "" {
+			return "URL is required for url source type"
+		}
+		if err := plugins.ValidateDownloadURL(*source.Url); err != nil {
+			return fmt.Sprintf("Invalid plugin URL: %v", err)
+		}
+	default:
+		return fmt.Sprintf("Unsupported source type: %s", source.Type)
+	}
+	return ""
+}
+
+// apiPluginConfigsToData converts generated ServerPluginConfig to service data.
+func apiPluginConfigsToData(configs []generated.ServerPluginConfig) []service.ServerPluginConfigData {
+	result := make([]service.ServerPluginConfigData, 0, len(configs))
+	for _, pc := range configs {
+		result = append(result, service.ServerPluginConfigData{
+			PluginName: pc.PluginName,
+			Configs:    apiConfigFilesToDataFromPlugin(pc.Configs),
+		})
+	}
+	return result
+}
+
+// apiConfigFilesToData converts generated ServerConfigFile to service data.
+func apiConfigFilesToData(configs []generated.ServerConfigFile) []service.ConfigFileData {
+	result := make([]service.ConfigFileData, 0, len(configs))
+	for _, cfg := range configs {
+		overwrite := "always"
+		if cfg.Overwrite != nil {
+			overwrite = string(*cfg.Overwrite)
+		}
+		result = append(result, service.ConfigFileData{
+			ConfigMapName: cfg.ConfigMapRef.Name,
+			ConfigMapKey:  cfg.ConfigMapRef.Key,
+			Path:          cfg.Path,
+			Overwrite:     overwrite,
+		})
+	}
+	return result
+}
+
+// apiConfigFilesToDataFromPlugin converts generated PluginConfigFile to service data.
+func apiConfigFilesToDataFromPlugin(configs []generated.PluginConfigFile) []service.ConfigFileData {
+	result := make([]service.ConfigFileData, 0, len(configs))
+	for _, cfg := range configs {
+		overwrite := "always"
+		if cfg.Overwrite != nil {
+			overwrite = string(*cfg.Overwrite)
+		}
+		result = append(result, service.ConfigFileData{
+			ConfigMapName: cfg.ConfigMapRef.Name,
+			ConfigMapKey:  cfg.ConfigMapRef.Key,
+			Path:          cfg.Path,
+			Overwrite:     overwrite,
+		})
+	}
+	return result
+}
+
 // labelSelectorToK8s converts generated.LabelSelector to metav1.LabelSelector.
 func labelSelectorToK8s(sel generated.LabelSelector) metav1.LabelSelector {
 	result := metav1.LabelSelector{}
@@ -1104,4 +1280,98 @@ func labelSelectorToK8s(sel generated.LabelSelector) metav1.LabelSelector {
 	}
 
 	return result
+}
+
+// ListConfigMaps lists ConfigMaps in a namespace.
+func (s *Server) ListConfigMaps(
+	ctx context.Context,
+	req generated.ListConfigMapsRequestObject,
+) (generated.ListConfigMapsResponseObject, error) {
+	summaries, err := s.configMapService.ListConfigMaps(ctx, req.Namespace)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to list ConfigMaps", "error", err, "namespace", req.Namespace)
+		return generated.ListConfigMaps500JSONResponse{
+			InternalServerErrorJSONResponse: generated.InternalServerErrorJSONResponse{
+				Error: "Failed to list ConfigMaps",
+				Code:  ptr(generated.INTERNALERROR),
+			},
+		}, nil
+	}
+
+	result := make([]generated.ConfigMapSummary, 0, len(summaries))
+	for _, cm := range summaries {
+		summary := generated.ConfigMapSummary{
+			Name:      cm.Name,
+			Namespace: cm.Namespace,
+		}
+		if len(cm.Keys) > 0 {
+			summary.Keys = &cm.Keys
+		}
+		result = append(result, summary)
+	}
+
+	return generated.ListConfigMaps200JSONResponse{
+		ConfigMaps: result,
+	}, nil
+}
+
+// CreateConfigMap creates a new ConfigMap.
+func (s *Server) CreateConfigMap(
+	ctx context.Context,
+	req generated.CreateConfigMapRequestObject,
+) (generated.CreateConfigMapResponseObject, error) {
+	if req.Body == nil {
+		return generated.CreateConfigMap400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: "Request body is required",
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}, nil
+	}
+
+	if errMsg := validateK8sName(req.Body.Name, "Name"); errMsg != "" {
+		return generated.CreateConfigMap400JSONResponse{
+			BadRequestJSONResponse: generated.BadRequestJSONResponse{
+				Error: errMsg,
+				Code:  ptr(generated.INVALIDREQUEST),
+			},
+		}, nil
+	}
+
+	data := make(map[string]string, len(req.Body.Data))
+	for k, v := range req.Body.Data {
+		data[k] = v
+	}
+
+	err := s.configMapService.CreateConfigMap(ctx, req.Body.Namespace, req.Body.Name, data)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to create ConfigMap", "error", err, "name", req.Body.Name)
+
+		if isAlreadyExistsError(err) {
+			return generated.CreateConfigMap409JSONResponse{
+				ConflictJSONResponse: generated.ConflictJSONResponse{
+					Error: err.Error(),
+					Code:  ptr(generated.ALREADYEXISTS),
+				},
+			}, nil
+		}
+
+		return generated.CreateConfigMap500JSONResponse{
+			InternalServerErrorJSONResponse: generated.InternalServerErrorJSONResponse{
+				Error: "Failed to create ConfigMap",
+				Code:  ptr(generated.INTERNALERROR),
+			},
+		}, nil
+	}
+
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+
+	return generated.CreateConfigMap201JSONResponse{
+		Name:      req.Body.Name,
+		Namespace: req.Body.Namespace,
+		Keys:      &keys,
+	}, nil
 }

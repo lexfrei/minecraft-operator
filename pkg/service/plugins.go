@@ -107,6 +107,8 @@ type PluginCreateData struct {
 	Build            int
 	UpdateDelay      string
 	Endpoints        []PluginEndpointData
+	PluginDirName    string
+	Configs          []ConfigFileData
 	InstanceSelector metav1.LabelSelector
 }
 
@@ -202,6 +204,12 @@ func (s *PluginService) CreatePlugin(ctx context.Context, data PluginCreateData)
 			})
 		}
 	}
+
+	if data.PluginDirName != "" {
+		plugin.Spec.PluginDirName = data.PluginDirName
+	}
+
+	plugin.Spec.Configs = configDataToPluginConfigFiles(data.Configs)
 
 	if err := s.client.Create(ctx, plugin); err != nil {
 		return errors.Wrap(err, "failed to create Plugin")
