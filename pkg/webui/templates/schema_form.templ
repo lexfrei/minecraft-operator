@@ -1,0 +1,31 @@
+package templates
+
+import "html/template"
+
+// SchemaFormData holds data for the schema-driven form page.
+type SchemaFormData struct {
+	// Title is the page title (e.g., "Create Server").
+	Title string
+
+	// BackURL is the URL for the back link.
+	BackURL string
+
+	// FormHTML is the dynamically generated form HTML.
+	FormHTML template.HTML
+
+	// Namespaces is the list of available namespaces for the namespace field.
+	Namespaces []string
+}
+
+templ SchemaFormPage(data SchemaFormData) {
+	@Layout(data.Title) {
+		<div class="card">
+			<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+				<h2 style="font-size:20px;">{ data.Title }</h2>
+				<a href={ templ.URL(data.BackURL) }
+					style="font-size:13px;color:var(--text-secondary);">&larr; Back</a>
+			</div>
+			@templ.Raw(string(data.FormHTML))
+		</div>
+	}
+}
