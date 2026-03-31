@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -17,7 +16,6 @@ import (
 	"github.com/lexfrei/minecraft-operator/pkg/webui/schema"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/static"
 	"github.com/lexfrei/minecraft-operator/pkg/webui/templates"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -175,21 +173,23 @@ func (s *Server) handleServerDetailPage(w http.ResponseWriter, r *http.Request, 
 	if namespace != "" {
 		var serverData *service.ServerData
 		serverData, err = s.serverService.GetServer(ctx, namespace, serverName)
-		if err == nil {
-			data = serverDataToDetail(serverData)
+		if err != nil {
+			if isResourceNotFound(err) {
+				http.NotFound(w, r)
+			} else {
+				http.Error(w, fmt.Sprintf("Failed to fetch server details: %v", err),
+					http.StatusInternalServerError)
+			}
+			return
 		}
+		data = serverDataToDetail(serverData)
 	} else {
+		// GetServerByName scans all namespaces; any error means not found
 		data, err = s.fetchServerDetailData(ctx, serverName)
-	}
-
-	if err != nil {
-		if apierrors.IsNotFound(err) || strings.Contains(err.Error(), "not found") {
+		if err != nil {
 			http.NotFound(w, r)
-		} else {
-			http.Error(w, fmt.Sprintf("Failed to fetch server details: %v", err),
-				http.StatusInternalServerError)
+			return
 		}
-		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

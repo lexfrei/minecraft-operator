@@ -125,7 +125,11 @@
         value = input.value;
       }
 
-      if (value === undefined || value === "") return;
+      // In edit mode (PUT), include empty strings to allow clearing optional fields.
+      // In create mode (POST), skip empty values.
+      var isEdit = form.hasAttribute("hx-put");
+      if (value === undefined) return;
+      if (value === "" && !isEdit) return;
 
       setNestedValue(data, input.name, value);
     });

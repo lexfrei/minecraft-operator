@@ -307,6 +307,13 @@ func (s *Server) handlePluginList(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// isResourceNotFound checks if an error indicates a resource was not found.
+// Handles both Kubernetes API StatusError and service-layer errors from
+// GetServerByName which returns cockroachdb/errors with "not found" text.
+func isResourceNotFound(err error) bool {
+	return apierrors.IsNotFound(err)
+}
+
 // handlePluginCreate renders the schema-driven plugin creation form.
 func (s *Server) handlePluginCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

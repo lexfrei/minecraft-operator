@@ -246,10 +246,17 @@ func writeObjectField(b *strings.Builder, field FormField, fullName string, valu
 	b.WriteString(`</fieldset>`)
 }
 
-func writeMapField(b *strings.Builder, field FormField, fullName string, _ map[string]any) {
+func writeMapField(b *strings.Builder, field FormField, fullName string, values map[string]any) {
 	writeLabel(b, field, fullName)
 	fmt.Fprintf(b, `<div data-map-field="%s">`, html.EscapeString(fullName))
-	b.WriteString(`<div data-map-entries></div>`)
+	b.WriteString(`<div data-map-entries>`)
+	// Pre-fill existing key-value pairs
+	if mapVal := getMapValue(values, fullName); mapVal != nil {
+		for k, v := range mapVal {
+			writeMapEntryRow(b, fullName, k, toString(v))
+		}
+	}
+	b.WriteString(`</div>`)
 	fmt.Fprintf(b,
 		`<button type="button" data-map-add="%s" `+
 			`style="margin-top:8px;padding:4px 12px;font-size:12px;background:var(--bg-tertiary);`+
@@ -327,6 +334,45 @@ func writeInputStyle(b *strings.Builder, readonly bool) {
 		base += `opacity:0.6;cursor:not-allowed;`
 	}
 	fmt.Fprintf(b, ` style="%s"`, base)
+}
+
+// writeMapEntryRow writes a single key-value row for a map field.
+func writeMapEntryRow(b *strings.Builder, fieldName, key, value string) {
+	b.WriteString(`<div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">`)
+	fmt.Fprintf(b,
+		`<input type="text" data-map-key value="%s" placeholder="Key" `+
+			`style="flex:1;padding:6px 8px;background:var(--bg-tertiary);color:var(--text-primary);`+
+			`border:1px solid var(--border);border-radius:4px;font-size:13px;"/>`,
+		html.EscapeString(key))
+	fmt.Fprintf(b,
+		`<input type="text" data-map-value data-map-name="%s" value="%s" placeholder="Value" `+
+			`style="flex:1;padding:6px 8px;background:var(--bg-tertiary);color:var(--text-primary);`+
+			`border:1px solid var(--border);border-radius:4px;font-size:13px;"/>`,
+		html.EscapeString(fieldName), html.EscapeString(value))
+	b.WriteString(`<button type="button" data-map-remove ` +
+		`style="font-size:11px;color:var(--error);background:none;border:none;cursor:pointer;">` +
+		`Remove</button>`)
+	b.WriteString(`</div>`)
+}
+
+// getMapValue retrieves a map[string]any value by key from a values map.
+func getMapValue(values map[string]any, key string) map[string]any {
+	if values == nil {
+		return nil
+	}
+	if v, ok := values[key]; ok {
+		switch m := v.(type) {
+		case map[string]any:
+			return m
+		case map[string]string:
+			result := make(map[string]any, len(m))
+			for k, val := range m {
+				result[k] = val
+			}
+			return result
+		}
+	}
+	return nil
 }
 
 // getStringValue retrieves a value by dot-notation key from a flat or nested map.
