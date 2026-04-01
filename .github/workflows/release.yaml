@@ -233,7 +233,7 @@ jobs:
 
       - name: Install ORAS
         # renovate: datasource=github-releases depName=oras-project/setup-oras
-        uses: oras-project/setup-oras@v1.2.3
+        uses: oras-project/setup-oras@v1.2.4
         env:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
