@@ -195,6 +195,7 @@ func writeTextInput(b *strings.Builder, field FormField, fullName, value string,
 	fmt.Fprintf(b, `<input type="%s" id="%s" name="%s"`,
 		inputType, html.EscapeString(fullName), html.EscapeString(fullName))
 	writeValueAttr(b, value)
+	writePlaceholder(b, field)
 	writeValidationAttrs(b, field)
 	if readonly {
 		b.WriteString(` readonly`)
@@ -321,10 +322,7 @@ func writeArrayField(b *strings.Builder, field FormField, fullName string, _ map
 		`border-radius:4px;padding:10px;margin-bottom:8px;">`)
 	if field.Items.Type == typeObject {
 		for _, prop := range field.Items.Properties {
-			b.WriteString(`<div style="margin-bottom:8px;">`)
-			writeLabel(b, prop, fullName+".*."+prop.Name)
-			writeTextInput(b, prop, fullName+".*."+prop.Name, "", false)
-			b.WriteString(`</div>`)
+			writeField(b, prop, fullName+".*", nil, ModeCreate)
 		}
 	}
 	b.WriteString(`<button type="button" data-array-remove ` +
@@ -398,6 +396,24 @@ func writeSubmitButton(b *strings.Builder, mode FormMode) {
 		`<div style="margin-top:20px;"><button type="submit" `+
 			`style="padding:10px 24px;background:var(--accent);color:white;border:none;`+
 			`border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;">%s</button></div>`, label)
+}
+
+func writePlaceholder(b *strings.Builder, field FormField) {
+	ph := field.Example
+	if ph == "" && field.Description != "" {
+		// Use first line of description, truncated
+		ph = field.Description
+		if idx := strings.Index(ph, "\n"); idx > 0 {
+			ph = ph[:idx]
+		}
+		ph = strings.TrimSpace(ph)
+		if len(ph) > 60 {
+			ph = ph[:57] + "..."
+		}
+	}
+	if ph != "" {
+		fmt.Fprintf(b, ` placeholder="%s"`, html.EscapeString(ph))
+	}
 }
 
 func writeValueAttr(b *strings.Builder, value string) {
