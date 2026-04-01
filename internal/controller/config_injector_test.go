@@ -572,6 +572,10 @@ func TestBuildRCONPropertiesScript_Enabled(t *testing.T) {
 			RCON: mcv1beta1.RCONConfig{
 				Enabled: true,
 				Port:    25575,
+				PasswordSecret: mcv1beta1.SecretKeyRef{
+					Name: "my-rcon-secret",
+					Key:  "rcon-password",
+				},
 			},
 		},
 	}
@@ -583,6 +587,10 @@ func TestBuildRCONPropertiesScript_Enabled(t *testing.T) {
 		"script should set rcon.port")
 	assert.Contains(t, script, "server.properties",
 		"script should target server.properties")
+	assert.Contains(t, script, "/secrets/rcon/rcon-password",
+		"script should read password from mounted Secret")
+	assert.Contains(t, script, "rcon.password=",
+		"script should inject rcon.password")
 }
 
 func TestBuildRCONPropertiesScript_Disabled(t *testing.T) {

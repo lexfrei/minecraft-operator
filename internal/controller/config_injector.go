@@ -148,6 +148,12 @@ func buildRCONPropertiesScript(server *mcv1beta1.PaperMCServer) string {
 		port = 25575
 	}
 
+	passwordKey := server.Spec.RCON.PasswordSecret.Key
+	if passwordKey == "" {
+		passwordKey = "rcon-password"
+	}
+	secretPath := fmt.Sprintf("/secrets/rcon/%s", passwordKey)
+
 	var sb strings.Builder
 	sb.WriteString("# RCON properties injection from CRD spec\n")
 	sb.WriteString("PROPS=/data/server.properties\n")
@@ -162,6 +168,19 @@ func buildRCONPropertiesScript(server *mcv1beta1.PaperMCServer) string {
 		fmt.Fprintf(&sb, "    sed -i 's/^%s=.*/%s=%s/' \"$PROPS\"\n", kv.key, kv.key, kv.value)
 		fmt.Fprintf(&sb, "  else\n")
 		fmt.Fprintf(&sb, "    echo '%s=%s' >> \"$PROPS\"\n", kv.key, kv.value)
+		fmt.Fprintf(&sb, "  fi\n")
+	}
+
+	// Inject password from mounted Secret
+	if server.Spec.RCON.PasswordSecret.Name != "" {
+		fmt.Fprintf(&sb, "  # Inject RCON password from Secret\n")
+		fmt.Fprintf(&sb, "  if [ -f \"%s\" ]; then\n", secretPath)
+		fmt.Fprintf(&sb, "    RCON_PASS=$(cat \"%s\")\n", secretPath)
+		sb.WriteString("    if grep -q '^rcon.password=' \"$PROPS\"; then\n")
+		sb.WriteString("      sed -i \"s/^rcon.password=.*/rcon.password=$RCON_PASS/\" \"$PROPS\"\n")
+		sb.WriteString("    else\n")
+		sb.WriteString("      echo \"rcon.password=$RCON_PASS\" >> \"$PROPS\"\n")
+		sb.WriteString("    fi\n")
 		fmt.Fprintf(&sb, "  fi\n")
 	}
 
@@ -389,6 +408,24 @@ func buildConfigInjection(
 	scriptCM := buildScriptConfigMap(scriptCMName, server.Namespace, server.Name, script)
 	volumes := buildConfigVolumes(scriptCMName, refs)
 	mounts := buildConfigVolumeMounts(refs)
+
+	// Add RCON password Secret mount if RCON is enabled
+	if server.Spec.RCON.Enabled && server.Spec.RCON.PasswordSecret.Name != "" {
+		rconVolName := "rcon-secret"
+		volumes = append(volumes, corev1.Volume{
+			Name: rconVolName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: server.Spec.RCON.PasswordSecret.Name,
+				},
+			},
+		})
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      rconVolName,
+			MountPath: "/secrets/rcon",
+			ReadOnly:  true,
+		})
+	}
 
 	initContainer := &corev1.Container{
 		Name:         "config-injector",
