@@ -547,9 +547,9 @@ func (r *UpdateReconciler) applyPluginUpdates(
 			continue
 		}
 
-		// Track installed JAR name and version
+		// Track JAR name for the download (version will be set after pod restart
+		// when PaperMC moves the JAR from update/ to plugins/)
 		pluginStatus.InstalledJARName = pluginName + ".jar"
-		pluginStatus.CurrentVersion = pluginStatus.ResolvedVersion
 		updatedCount++
 	}
 

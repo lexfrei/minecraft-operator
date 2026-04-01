@@ -1968,8 +1968,10 @@ var _ = Describe("UpdateController", func() {
 			Expect(server.Status.Plugins).To(HaveLen(1))
 			Expect(server.Status.Plugins[0].InstalledJARName).To(Equal("test-download-plugin.jar"),
 				"InstalledJARName should be set after successful download")
-			Expect(server.Status.Plugins[0].CurrentVersion).To(Equal("1.0.0"),
-				"CurrentVersion should be set after successful download")
+			// CurrentVersion is NOT set after download — it's set in updateServerStatus
+			// after pod restart, to ensure the JAR is actually applied by PaperMC
+			Expect(server.Status.Plugins[0].CurrentVersion).To(BeEmpty(),
+				"CurrentVersion should not be set until after pod restart")
 
 			By("cleaning up")
 			_ = k8sClient.Delete(ctx, server)
