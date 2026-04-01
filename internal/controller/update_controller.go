@@ -196,8 +196,9 @@ func (r *UpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	r.updateServerStatus(&server, successful)
 	r.setUpdatingCondition(&server, false, "Update completed")
 
-	// Update the server resource status
-	if err := r.Status().Update(ctx, &server); err != nil {
+	// Update the server resource status with retry on conflict.
+	// PaperMC controller may update status concurrently, causing conflicts.
+	if err := r.updateStatusWithRetry(ctx, &server); err != nil {
 		slog.ErrorContext(ctx, "Failed to update server status", "error", err)
 		return ctrl.Result{}, errors.Wrap(err, "failed to update status")
 	}
@@ -942,6 +943,56 @@ func (r *UpdateReconciler) updateServerStatus(
 			}
 		}
 	}
+}
+
+// updateStatusWithRetry updates server status with retry on conflict.
+// Re-reads the server, re-applies status fields, and retries up to 3 times.
+func (r *UpdateReconciler) updateStatusWithRetry(
+	ctx context.Context,
+	server *mcv1beta1.PaperMCServer,
+) error {
+	const maxRetries = 3
+
+	// Capture the status we want to persist
+	desiredStatus := server.Status
+
+	for attempt := range maxRetries {
+		err := r.Status().Update(ctx, server)
+		if err == nil {
+			return nil
+		}
+
+		if !apierrors.IsConflict(err) {
+			return err
+		}
+
+		slog.InfoContext(ctx, "Status update conflict, retrying",
+			"server", server.Name, "attempt", attempt+1)
+
+		// Re-read the latest version
+		if readErr := r.Get(ctx, client.ObjectKeyFromObject(server), server); readErr != nil {
+			return errors.Wrap(readErr, "failed to re-read server for retry")
+		}
+
+		// Re-apply our status changes onto the fresh object
+		server.Status.LastUpdate = desiredStatus.LastUpdate
+		server.Status.Conditions = desiredStatus.Conditions
+
+		// Merge plugin statuses: preserve our currentVersion/installedJarName
+		for i := range server.Status.Plugins {
+			for _, desired := range desiredStatus.Plugins {
+				if server.Status.Plugins[i].PluginRef == desired.PluginRef {
+					server.Status.Plugins[i].CurrentVersion = desired.CurrentVersion
+					server.Status.Plugins[i].InstalledJARName = desired.InstalledJARName
+					server.Status.Plugins[i].PendingDeletion = desired.PendingDeletion
+
+					break
+				}
+			}
+		}
+	}
+
+	return errors.New("status update failed after max retries")
 }
 
 // hasPendingPluginUpdates checks if any plugin needs install or update.
