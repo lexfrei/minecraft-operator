@@ -122,14 +122,51 @@ func buildConfigScript(
 	// Process server-level configs.
 	entries = append(entries, collectServerConfigEntries(server, refMap)...)
 
-	if len(entries) == 0 {
+	// Generate RCON properties injection commands.
+	rconScript := buildRCONPropertiesScript(server)
+
+	if len(entries) == 0 && rconScript == "" {
 		return "", nil, nil
 	}
 
-	script := renderConfigScript(entries)
+	script := renderConfigScript(entries) + rconScript
 	refs := sortedConfigMapRefs(refMap)
 
 	return script, refs, warnings
+}
+
+// buildRCONPropertiesScript generates shell commands to patch server.properties
+// with RCON settings from the CRD spec. Uses sed to update existing properties
+// or appends them if not present.
+func buildRCONPropertiesScript(server *mcv1beta1.PaperMCServer) string {
+	if !server.Spec.RCON.Enabled {
+		return ""
+	}
+
+	port := server.Spec.RCON.Port
+	if port == 0 {
+		port = 25575
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# RCON properties injection from CRD spec\n")
+	sb.WriteString("PROPS=/data/server.properties\n")
+	sb.WriteString("if [ -f \"$PROPS\" ]; then\n")
+
+	// Patch existing properties with sed
+	for _, kv := range []struct{ key, value string }{
+		{"enable-rcon", "true"},
+		{"rcon.port", fmt.Sprintf("%d", port)},
+	} {
+		fmt.Fprintf(&sb, "  if grep -q '^%s=' \"$PROPS\"; then\n", kv.key)
+		fmt.Fprintf(&sb, "    sed -i 's/^%s=.*/%s=%s/' \"$PROPS\"\n", kv.key, kv.key, kv.value)
+		fmt.Fprintf(&sb, "  else\n")
+		fmt.Fprintf(&sb, "    echo '%s=%s' >> \"$PROPS\"\n", kv.key, kv.value)
+		fmt.Fprintf(&sb, "  fi\n")
+	}
+
+	sb.WriteString("fi\n")
+	return sb.String()
 }
 
 // buildServerOverridesMap builds a lookup of server plugin config overrides by plugin name.

@@ -565,3 +565,64 @@ func TestCollectReferencedConfigMaps_Deduplicates(t *testing.T) {
 	// Two files from same ConfigMap but different keys => 2 refs (since they're different key refs)
 	require.Len(t, refs, 2)
 }
+
+func TestBuildRCONPropertiesScript_Enabled(t *testing.T) {
+	server := &mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
+			RCON: mcv1beta1.RCONConfig{
+				Enabled: true,
+				Port:    25575,
+			},
+		},
+	}
+
+	script := buildRCONPropertiesScript(server)
+	assert.Contains(t, script, "enable-rcon=true",
+		"script should set enable-rcon to true")
+	assert.Contains(t, script, "rcon.port=25575",
+		"script should set rcon.port")
+	assert.Contains(t, script, "server.properties",
+		"script should target server.properties")
+}
+
+func TestBuildRCONPropertiesScript_Disabled(t *testing.T) {
+	server := &mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
+			RCON: mcv1beta1.RCONConfig{
+				Enabled: false,
+			},
+		},
+	}
+
+	script := buildRCONPropertiesScript(server)
+	assert.Empty(t, script, "no RCON script when RCON disabled")
+}
+
+func TestBuildRCONPropertiesScript_DefaultPort(t *testing.T) {
+	server := &mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
+			RCON: mcv1beta1.RCONConfig{
+				Enabled: true,
+				Port:    0, // should default to 25575
+			},
+		},
+	}
+
+	script := buildRCONPropertiesScript(server)
+	assert.Contains(t, script, "rcon.port=25575")
+}
+
+func TestBuildConfigScript_IncludesRCON(t *testing.T) {
+	server := &mcv1beta1.PaperMCServer{
+		Spec: mcv1beta1.PaperMCServerSpec{
+			RCON: mcv1beta1.RCONConfig{
+				Enabled: true,
+				Port:    25575,
+			},
+		},
+	}
+
+	script, _, _ := buildConfigScript(server, nil)
+	assert.Contains(t, script, "enable-rcon=true",
+		"buildConfigScript should include RCON injection even without config entries")
+}
