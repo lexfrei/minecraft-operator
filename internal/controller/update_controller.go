@@ -732,14 +732,16 @@ func (r *UpdateReconciler) performPluginOnlyUpdate(
 	}
 
 	// Step 3: Graceful shutdown via RCON (only if RCON is enabled)
+	// For plugin-only updates, RCON failure is non-fatal — plugins are already
+	// in update/ and will be applied on next restart regardless.
 	if server.Spec.RCON.Enabled {
 		rconClient, rconErr := r.createRCONClient(ctx, server)
 		if rconErr != nil {
-			return errors.Wrap(rconErr, "failed to create RCON client")
-		}
-
-		if shutdownErr := r.executeGracefulShutdownWithClient(ctx, server, rconClient); shutdownErr != nil {
-			return errors.Wrap(shutdownErr, "failed to execute graceful shutdown")
+			slog.WarnContext(ctx, "RCON unavailable, proceeding with pod restart",
+				"server", server.Name, "error", rconErr)
+		} else if shutdownErr := r.executeGracefulShutdownWithClient(ctx, server, rconClient); shutdownErr != nil {
+			slog.WarnContext(ctx, "Graceful shutdown failed, proceeding with pod restart",
+				"server", server.Name, "error", shutdownErr)
 		}
 	} else {
 		slog.InfoContext(ctx, "RCON disabled, skipping graceful shutdown", "server", server.Name)
