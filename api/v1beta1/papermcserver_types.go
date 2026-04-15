@@ -325,6 +325,15 @@ type PaperMCServerSpec struct {
 	// +optional
 	UpdateDelay *metav1.Duration `json:"updateDelay,omitempty"`
 
+	// Channel selects which Paper release channel is eligible for auto-selection.
+	// Only applies to updateStrategy "latest" and "auto"; ignored for "pin" and "build-pin".
+	// - stable: only STABLE builds are considered (default)
+	// - experimental: STABLE, BETA, and ALPHA builds are considered
+	// +kubebuilder:validation:Enum=stable;experimental
+	// +kubebuilder:default=stable
+	// +optional
+	Channel string `json:"channel,omitempty"`
+
 	// UpdateSchedule defines when to check and apply updates.
 	UpdateSchedule UpdateSchedule `json:"updateSchedule"`
 

@@ -80,6 +80,17 @@ spec:
                   If set with pin strategy, it serves as a minimum build; operator will still auto-update to newer builds.
                   If set with build-pin strategy, operator will pin to this exact build.
                 type: integer
+              channel:
+                default: stable
+                description: |-
+                  Channel selects which Paper release channel is eligible for auto-selection.
+                  Only applies to updateStrategy "latest" and "auto"; ignored for "pin" and "build-pin".
+                  - stable: only STABLE builds are considered (default)
+                  - experimental: STABLE, BETA, and ALPHA builds are considered
+                enum:
+                - stable
+                - experimental
+                type: string
               gateway:
                 description: |-
                   Gateway configures optional Gateway API TCPRoute/UDPRoute for game traffic.
