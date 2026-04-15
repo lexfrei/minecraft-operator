@@ -284,6 +284,50 @@ kubectl patch papermcserver certified-server --type=merge \
   -p '{"spec":{"version":"1.21.2","build":115}}'
 ```
 
+## Release Channels
+
+The `PaperMCServer.spec.channel` field constrains which upstream Paper release channels the operator considers for auto-selection.
+
+**Values:**
+
+- `stable` (default): only `STABLE` builds are eligible. Safe for production.
+- `experimental`: `STABLE`, `BETA`, and `ALPHA` builds are eligible. Intended for testing unreleased Minecraft versions (e.g., `26.1.x` ALPHA snapshots).
+
+**Semantics by strategy:**
+
+- `latest` / `auto`: the constraint solver only considers Paper versions that have at least one build in the allowed channel set. `GetPaperBuild` likewise picks the latest build whose channel is allowed.
+- `pin` / `build-pin`: channel is **ignored**. The user has explicitly asked for a specific version or version+build, and the operator honors it verbatim.
+
+**Why this matters:**
+
+Paper's API lists both stable and experimental builds together. Without a channel filter, the semver-sorted "newest" version could be an ALPHA build for an unreleased Minecraft version that plugins happen to declare compatibility with. This can lead to surprising upgrades. The default `stable` channel keeps you on production-ready Paper releases.
+
+**Example: explicitly stable (default):**
+
+```yaml
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: PaperMCServer
+metadata:
+  name: production-server
+spec:
+  updateStrategy: latest
+  channel: stable
+  # ... rest of spec
+```
+
+**Example: experimental testing:**
+
+```yaml
+apiVersion: mc.k8s.lex.la/v1beta1
+kind: PaperMCServer
+metadata:
+  name: canary-server
+spec:
+  updateStrategy: latest
+  channel: experimental
+  # ... rest of spec
+```
+
 ## Plugin Update Strategies
 
 The `Plugin` resource uses the same `updateStrategy` field as `PaperMCServer`, providing a unified approach to version management.
