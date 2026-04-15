@@ -70,8 +70,8 @@ const (
 
 // PaperAPI abstracts PaperMC API operations for testability.
 type PaperAPI interface {
-	GetPaperVersions(ctx context.Context) ([]string, error)
-	GetPaperBuild(ctx context.Context, ver string) (*paper.BuildInfo, error)
+	GetPaperCandidates(ctx context.Context) ([]solver.PaperCandidate, error)
+	GetPaperBuild(ctx context.Context, ver string, allowedChannels []string) (*paper.BuildInfo, error)
 	GetBuilds(ctx context.Context, ver string) ([]int, error)
 }
 
@@ -1553,13 +1553,14 @@ func (r *PaperMCServerReconciler) findVersionUpdate(
 	server *mcv1beta1.PaperMCServer,
 	matchedPlugins []mcv1beta1.Plugin,
 ) (*mcv1beta1.AvailableUpdate, error) {
-	// Fetch available Paper versions
-	paperVersions, err := r.PaperClient.GetPaperVersions(ctx)
+	// Fetch available Paper candidates with channel metadata.
+	candidates, err := r.PaperClient.GetPaperCandidates(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch paper versions")
+		return nil, errors.Wrap(err, "failed to fetch paper candidates")
 	}
 
-	slog.InfoContext(ctx, "Fetched Paper versions", "count", len(paperVersions))
+	slog.InfoContext(ctx, "Fetched Paper candidates",
+		"channel", server.Spec.Channel, "count", len(candidates))
 
 	// Set solver running condition
 	r.setCondition(server, conditionTypeSolverRunning, metav1.ConditionTrue,
@@ -1568,7 +1569,7 @@ func (r *PaperMCServerReconciler) findVersionUpdate(
 	// Run solver
 	solverStart := time.Now()
 
-	bestVersion, err := r.Solver.FindBestPaperVersion(ctx, server, matchedPlugins, paperVersions)
+	bestVersion, err := r.Solver.FindBestPaperVersion(ctx, server, matchedPlugins, candidates)
 
 	if r.Metrics != nil {
 		r.Metrics.RecordSolverRun("paper_version", err, time.Since(solverStart))
@@ -1590,8 +1591,8 @@ func (r *PaperMCServerReconciler) findVersionUpdate(
 		return nil, nil
 	}
 
-	// Get build info for the best version
-	buildInfo, err := r.PaperClient.GetPaperBuild(ctx, bestVersion)
+	// Get build info for the best version, honoring channel constraint.
+	buildInfo, err := r.PaperClient.GetPaperBuild(ctx, bestVersion, solver.AllowedChannels(server.Spec.Channel))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get build info")
 	}
@@ -1614,8 +1615,10 @@ func (r *PaperMCServerReconciler) findBuildUpdate(
 	server *mcv1beta1.PaperMCServer,
 	matchedPlugins []mcv1beta1.Plugin,
 ) (*mcv1beta1.AvailableUpdate, error) {
-	// Get latest build for the specified version
-	buildInfo, err := r.PaperClient.GetPaperBuild(ctx, server.Spec.Version)
+	// Get latest build for the specified version, honoring channel constraint.
+	buildInfo, err := r.PaperClient.GetPaperBuild(
+		ctx, server.Spec.Version, solver.AllowedChannels(server.Spec.Channel),
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get latest build")
 	}

@@ -126,20 +126,47 @@ func (s *SimpleSolver) findCompatiblePluginVersion(
 	return "", errors.New("no plugin version compatible with all matched servers")
 }
 
+// Paper release channel identifiers (upstream).
+const (
+	channelStable = "STABLE"
+	channelBeta   = "BETA"
+	channelAlpha  = "ALPHA"
+)
+
+// Paper release channel spec values for PaperMCServer.Spec.Channel.
+const (
+	channelSpecStable       = "stable"
+	channelSpecExperimental = "experimental"
+)
+
+// AllowedChannels returns upstream Paper channels eligible for a given spec value.
+// An empty or "stable" spec resolves to {STABLE}; "experimental" resolves to {STABLE,BETA,ALPHA}.
+// Unknown values fall back to {STABLE} so the safest outcome is the default.
+func AllowedChannels(spec string) []string {
+	switch spec {
+	case channelSpecExperimental:
+		return []string{channelStable, channelBeta, channelAlpha}
+	case channelSpecStable, "":
+		return []string{channelStable}
+	default:
+		return []string{channelStable}
+	}
+}
+
 // FindBestPaperVersion finds the maximum Paper version compatible with ALL plugins.
 // Algorithm:
 //  1. Handle strategy-specific logic (pin/build-pin return exact version)
-//  2. Filter Paper versions by updateDelay
-//  3. Sort versions in descending order
-//  4. For each Paper version (highest first), check if ALL plugins have a compatible version
-//  5. Return first Paper version that satisfies all constraints
+//  2. Filter candidates by allowed channels (derived from server.Spec.Channel)
+//  3. Sort candidates in descending order by semver
+//  4. For each candidate (highest first), check if ALL plugins have a compatible version
+//  5. Return first candidate version that satisfies all constraints
 func (s *SimpleSolver) FindBestPaperVersion(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
 	matchedPlugins []mcv1beta1.Plugin,
-	paperVersions []string,
+	candidates []PaperCandidate,
 ) (string, error) {
-	if len(paperVersions) == 0 {
+	if len(candidates) == 0 {
 		return "", errors.New("no Paper versions available")
 	}
 
@@ -152,7 +179,9 @@ func (s *SimpleSolver) FindBestPaperVersion(
 
 	switch strategy {
 	case "pin", "build-pin":
-		// For pin/build-pin strategies, return the exact specified version
+		// For pin/build-pin strategies, return the exact specified version.
+		// Channel constraint is intentionally ignored: the user has asked for a
+		// specific version, so we honor it verbatim.
 		if server.Spec.Version == "" {
 			return "", errors.Newf("updateStrategy is '%s' but version is not set", strategy)
 		}
@@ -167,7 +196,13 @@ func (s *SimpleSolver) FindBestPaperVersion(
 		return "", errors.Newf("invalid updateStrategy: %s (expected 'latest', 'auto', 'pin', or 'build-pin')", strategy)
 	}
 
-	sortedVersions := s.filterAndSortPaperVersions(paperVersions)
+	allowed := AllowedChannels(server.Spec.Channel)
+	eligible := filterCandidatesByChannel(candidates, allowed)
+	if len(eligible) == 0 {
+		return "", errors.Newf("no Paper version available for channel '%s'", server.Spec.Channel)
+	}
+
+	sortedVersions := s.filterAndSortPaperVersions(eligible)
 
 	// Linear search: find max Paper version where ALL plugins have compatible version
 	for _, paperVer := range sortedVersions {
@@ -179,11 +214,34 @@ func (s *SimpleSolver) FindBestPaperVersion(
 	return "", errors.New("no Paper version compatible with all matched plugins")
 }
 
-// filterAndSortPaperVersions sorts Paper versions descending.
+// filterCandidatesByChannel keeps only candidates whose channel set intersects allowed.
+func filterCandidatesByChannel(candidates []PaperCandidate, allowed []string) []PaperCandidate {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, c := range allowed {
+		allowedSet[c] = struct{}{}
+	}
+
+	filtered := make([]PaperCandidate, 0, len(candidates))
+	for _, cand := range candidates {
+		for _, ch := range cand.Channels {
+			if _, ok := allowedSet[ch]; ok {
+				filtered = append(filtered, cand)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
+// filterAndSortPaperVersions sorts Paper candidates descending by version and returns version strings.
 // Note: updateDelay is NOT applied to Paper versions because the Paper API does not
 // provide release dates. updateDelay still works correctly for plugin versions.
-func (s *SimpleSolver) filterAndSortPaperVersions(paperVersions []string) []string {
-	return sortPaperVersionsDesc(paperVersions)
+func (s *SimpleSolver) filterAndSortPaperVersions(candidates []PaperCandidate) []string {
+	versions := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		versions = append(versions, c.Version)
+	}
+	return sortPaperVersionsDesc(versions)
 }
 
 // isPaperVersionCompatibleWithAllPlugins checks if a Paper version is compatible with all plugins.

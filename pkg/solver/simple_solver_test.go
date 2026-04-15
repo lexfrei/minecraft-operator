@@ -422,7 +422,7 @@ func TestFindBestPaperVersion_UpdateDelay_ShouldNotFilterAllVersions(t *testing.
 		context.Background(),
 		&server,
 		[]mcv1beta1.Plugin{plugin},
-		paperVersions,
+		stableCandidates(paperVersions),
 	)
 
 	require.NoError(t, err, "FindBestPaperVersion should not error when Paper versions exist")
@@ -465,7 +465,7 @@ func TestFindBestPaperVersion_PinStrategy_ReturnsExactVersion(t *testing.T) {
 	}
 	paperVersions := []string{"1.21.1", "1.21.4", "1.20.4"}
 
-	result, err := solver.FindBestPaperVersion(context.Background(), &server, nil, paperVersions)
+	result, err := solver.FindBestPaperVersion(context.Background(), &server, nil, stableCandidates(paperVersions))
 
 	require.NoError(t, err)
 	assert.Equal(t, "1.20.4", result)
@@ -483,7 +483,7 @@ func TestFindBestPaperVersion_PinStrategy_NoVersion_ReturnsError(t *testing.T) {
 	}
 	paperVersions := []string{"1.21.1"}
 
-	_, err := solver.FindBestPaperVersion(context.Background(), &server, nil, paperVersions)
+	_, err := solver.FindBestPaperVersion(context.Background(), &server, nil, stableCandidates(paperVersions))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "version is not set")
@@ -500,7 +500,7 @@ func TestFindBestPaperVersion_LatestStrategy_ReturnsNewest(t *testing.T) {
 	}
 	paperVersions := []string{"1.20.1", "1.21.4", "1.20.6", "1.21.1"}
 
-	result, err := solver.FindBestPaperVersion(context.Background(), &server, nil, paperVersions)
+	result, err := solver.FindBestPaperVersion(context.Background(), &server, nil, stableCandidates(paperVersions))
 
 	require.NoError(t, err)
 	assert.Equal(t, "1.21.4", result)
@@ -526,7 +526,9 @@ func TestFindBestPaperVersion_AutoStrategy_ChecksPluginCompatibility(t *testing.
 	}
 	paperVersions := []string{"1.21.1", "1.20.6", "1.20.4"}
 
-	result, err := solver.FindBestPaperVersion(context.Background(), &server, matchedPlugins, paperVersions)
+	result, err := solver.FindBestPaperVersion(
+		context.Background(), &server, matchedPlugins, stableCandidates(paperVersions),
+	)
 
 	require.NoError(t, err)
 	assert.Equal(t, "1.20.6", result)
@@ -542,7 +544,7 @@ func TestFindBestPaperVersion_NoVersionsAvailable_ReturnsError(t *testing.T) {
 		},
 	}
 
-	_, err := solver.FindBestPaperVersion(context.Background(), &server, nil, []string{})
+	_, err := solver.FindBestPaperVersion(context.Background(), &server, nil, []PaperCandidate{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no Paper versions available")
@@ -559,7 +561,7 @@ func TestFindBestPaperVersion_InvalidStrategy_ReturnsError(t *testing.T) {
 	}
 	paperVersions := []string{"1.21.1"}
 
-	_, err := solver.FindBestPaperVersion(context.Background(), &server, nil, paperVersions)
+	_, err := solver.FindBestPaperVersion(context.Background(), &server, nil, stableCandidates(paperVersions))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid updateStrategy")
@@ -583,7 +585,9 @@ func TestFindBestPaperVersion_PluginWithoutCachedVersions_AssumesCompatible(t *t
 	}
 	paperVersions := []string{"1.21.4", "1.21.1"}
 
-	result, err := solver.FindBestPaperVersion(context.Background(), &server, matchedPlugins, paperVersions)
+	result, err := solver.FindBestPaperVersion(
+		context.Background(), &server, matchedPlugins, stableCandidates(paperVersions),
+	)
 
 	require.NoError(t, err)
 	assert.Equal(t, "1.21.4", result)
@@ -616,7 +620,9 @@ func TestFindBestPaperVersion_MultiplePlugins_MustSatisfyAll(t *testing.T) {
 	}
 	paperVersions := []string{"1.21.1", "1.20.6", "1.20.4"}
 
-	result, err := solver.FindBestPaperVersion(context.Background(), &server, matchedPlugins, paperVersions)
+	result, err := solver.FindBestPaperVersion(
+		context.Background(), &server, matchedPlugins, stableCandidates(paperVersions),
+	)
 
 	require.NoError(t, err)
 	assert.Equal(t, "1.20.6", result)
@@ -649,7 +655,7 @@ func TestFindBestPaperVersion_ConflictingPlugins_ReturnsError(t *testing.T) {
 	}
 	paperVersions := []string{"1.21.1", "1.20.4"}
 
-	_, err := solver.FindBestPaperVersion(context.Background(), &server, matchedPlugins, paperVersions)
+	_, err := solver.FindBestPaperVersion(context.Background(), &server, matchedPlugins, stableCandidates(paperVersions))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no Paper version compatible")
@@ -666,7 +672,7 @@ func TestFindBestPaperVersion_DefaultStrategy_TreatedAsLatest(t *testing.T) {
 	}
 	paperVersions := []string{"1.20.1", "1.21.4", "1.21.1"}
 
-	result, err := solver.FindBestPaperVersion(context.Background(), &server, nil, paperVersions)
+	result, err := solver.FindBestPaperVersion(context.Background(), &server, nil, stableCandidates(paperVersions))
 
 	require.NoError(t, err)
 	assert.Equal(t, "1.21.4", result)
