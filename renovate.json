@@ -13,8 +13,8 @@
   "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {
-      "description": "Automerge minor and patch updates",
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "description": "Automerge all updates including major",
+      "matchUpdateTypes": ["major", "minor", "patch", "pin", "digest"],
       "automerge": true
     },
     {
