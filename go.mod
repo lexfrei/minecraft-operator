@@ -12,7 +12,7 @@ require (
 	github.com/lexfrei/go-hangar v0.0.0-20260507202729-ab0aa6c8e4bb
 	github.com/lexfrei/goPaperMC v0.0.3
 	github.com/oapi-codegen/runtime v1.4.0
-	github.com/onsi/ginkgo/v2 v2.28.3
+	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.41.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
