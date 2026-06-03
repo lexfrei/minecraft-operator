@@ -281,7 +281,7 @@ func TestServerValidateUpdate_InvalidNewSpec(t *testing.T) {
 	v := &PaperMCServerValidator{}
 	oldS := validServer()
 	newS := validServer()
-	newS.Spec.UpdateSchedule.CheckCron = testNameBad
+	newS.Spec.UpdateSchedule.CheckCron = testCronBad
 
 	_, err := v.ValidateUpdate(context.Background(), oldS, newS)
 	require.Error(t, err)

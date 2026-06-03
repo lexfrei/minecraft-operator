@@ -252,7 +252,7 @@ var _ = Describe("Gateway API Routes", func() {
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
 					{Name: "gw-1", Namespace: "ns-1"},
-					{Name: "gw-2", Namespace: "ns-2", SectionName: gcNamespaceMinecraft},
+					{Name: "gw-2", Namespace: "ns-2", SectionName: gcPortNameMinecraft},
 				},
 				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
 			})
@@ -267,7 +267,7 @@ var _ = Describe("Gateway API Routes", func() {
 
 			Expect(tcpRoute.Spec.ParentRefs).To(HaveLen(2))
 
-			sectionName := gatewayv1alpha2.SectionName(gcNamespaceMinecraft)
+			sectionName := gatewayv1alpha2.SectionName(gcPortNameMinecraft)
 			Expect(tcpRoute.Spec.ParentRefs[1].SectionName).To(Equal(&sectionName))
 		})
 	})

@@ -820,7 +820,7 @@ func (r *PaperMCServerReconciler) ensureService(
 func buildServicePorts(server *mcv1beta1.PaperMCServer, matchedPlugins []mcv1beta1.Plugin) []corev1.ServicePort {
 	ports := []corev1.ServicePort{
 		{
-			Name:       gcNamespaceMinecraft,
+			Name:       gcPortNameMinecraft,
 			Port:       25565,
 			TargetPort: intstr.FromInt(25565),
 			Protocol:   corev1.ProtocolTCP,
@@ -1624,7 +1624,7 @@ func (r *PaperMCServerReconciler) findBuildUpdate(
 
 	// Check if update is needed
 	if buildInfo.Build <= server.Status.CurrentBuild {
-		slog.InfoContext(ctx, "Already on latest build", "current", server.Status.CurrentBuild, updateStrategyLatest, buildInfo.Build)
+		slog.InfoContext(ctx, "Already on latest build", "current", server.Status.CurrentBuild, "latest", buildInfo.Build)
 		return nil, nil
 	}
 
@@ -1638,7 +1638,7 @@ func (r *PaperMCServerReconciler) findBuildUpdate(
 	// Build plugin version pairs using solver to find compatible versions
 	pluginPairs := r.buildPluginVersionPairs(ctx, server.Spec.Version, matchedPlugins)
 
-	slog.InfoContext(ctx, "Build update available", "current", server.Status.CurrentBuild, repositoryStatusAvailable, buildInfo.Build)
+	slog.InfoContext(ctx, "Build update available", "current", server.Status.CurrentBuild, "available", buildInfo.Build)
 
 	return &mcv1beta1.AvailableUpdate{
 		Version:    server.Spec.Version,

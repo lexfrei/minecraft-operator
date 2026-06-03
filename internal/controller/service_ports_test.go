@@ -170,7 +170,7 @@ func TestBuildServicePorts_MinecraftAndRCON(t *testing.T) {
 
 	ports := buildServicePorts(server, nil)
 	require.Len(t, ports, 2)
-	assert.Equal(t, gcNamespaceMinecraft, ports[0].Name)
+	assert.Equal(t, gcPortNameMinecraft, ports[0].Name)
 	assert.Equal(t, int32(25565), ports[0].Port)
 	assert.Equal(t, gcRCON, ports[1].Name)
 	assert.Equal(t, int32(25575), ports[1].Port)

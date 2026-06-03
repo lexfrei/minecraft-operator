@@ -1409,7 +1409,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				Name: serverName, Namespace: namespace,
 			}, &svc)).To(Succeed())
 			Expect(svc.Spec.Ports).To(ContainElement(
-				HaveField("Name", Equal(gcNamespaceMinecraft))))
+				HaveField("Name", Equal(gcPortNameMinecraft))))
 		})
 
 		It("should set Ready condition on successful reconcile", func() {
