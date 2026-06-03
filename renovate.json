@@ -31,8 +31,14 @@
     },
     {
       "description": "Disable updates for own images",
-      "matchDepPatterns": ["^ghcr.io/lexfrei/", "^docker.io/lexfrei/"],
+      "matchPackageNames": ["ghcr.io/lexfrei/**", "docker.io/lexfrei/**"],
       "enabled": false
+    },
+    {
+      "description": "Keep controller-runtime in lockstep with the Kubernetes libraries (a split bump breaks compilation: controller-runtime vX needs a matching client-go)",
+      "groupName": "kubernetes",
+      "matchManagers": ["gomod"],
+      "matchPackageNames": ["sigs.k8s.io/controller-runtime", "k8s.io/**"]
     }
   ],
   "customManagers": [
