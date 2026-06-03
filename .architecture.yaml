@@ -11,37 +11,37 @@ metadata:
       role: "SRE"
   language:
     primary: "go"
-    version: "1.25"  # Go 1.25+ required for controller-runtime v0.22
+    version: "1.26"  # Go 1.26+ required for controller-runtime v0.24
   version: "1.5.0"  # .architecture.yaml version (MINOR: Unified update strategies refactoring)
-  last_updated: "2025-11-02"
+  last_updated: "2026-06-03"
   license: "BSD-3-Clause"
 
 technical_stack:
   language:
     primary: "go"
-    version: "1.25"
+    version: "1.26"
     module_path: "github.com/lexfrei/minecraft-operator"
 
   kubernetes:
     api_group: "mc.k8s.lex.la"
     api_version: "v1beta1"
     min_k8s_version: "1.27"
-    target_k8s_version: "1.34"
+    target_k8s_version: "1.36"
     scope: "namespace"  # All CRDs are namespace-scoped
 
   frameworks:
     operator: "sigs.k8s.io/controller-runtime"
-    operator_version: "v0.22.3"  # Latest stable (Oct 2025)
+    operator_version: "v0.24.1"  # Tracks the k8s.io/* v0.36 line
     kubebuilder: "kubebuilder.io/v4"
     kubebuilder_version: "4.9.0"
 
   core_dependencies:
     client_go: "k8s.io/client-go"
-    client_go_version: "v0.34.0"  # Matches controller-runtime v0.22
+    client_go_version: "v0.36.1"  # Matches controller-runtime v0.24
     apimachinery: "k8s.io/apimachinery"
-    apimachinery_version: "v0.34.0"
+    apimachinery_version: "v0.36.1"
     api: "k8s.io/api"
-    api_version: "v0.34.0"
+    api_version: "v0.36.1"
 
   external_libraries:
     hangar_client:
@@ -93,17 +93,17 @@ technical_stack:
   testing:
     framework: "testing (stdlib)"
     envtest: "sigs.k8s.io/controller-runtime/pkg/envtest"
-    envtest_version: "v0.22.3"
+    envtest_version: "v0.24.1"
     ginkgo: "github.com/onsi/ginkgo/v2"
-    ginkgo_version: "v2.20.2"
+    ginkgo_version: "v2.29.0"
     gomega: "github.com/onsi/gomega"
-    gomega_version: "v1.34.2"
+    gomega_version: "v1.41.0"
     coverage_target: "80%"
 
 infrastructure:
   containerization:
     tool: "podman"  # Primary container runtime per global CLAUDE.md
-    base_image_build: "golang:1.25-alpine"
+    base_image_build: "golang:1.26-alpine"
     base_image_runtime: "gcr.io/distroless/static-debian12:nonroot"
     security:
       - "Non-root user (uid 65532)"
@@ -498,8 +498,8 @@ decisions:
   - id: ADR-001
     date: 2025-10-31
     status: accepted
-    decision: "Use controller-runtime v0.22.3 as operator framework"
-    reasoning: "Latest stable version (Oct 2025), supports k8s.io/* v0.34, requires Go 1.25 which we have"
+    decision: "Use controller-runtime v0.24.1 as operator framework"
+    reasoning: "Stable release supporting k8s.io/* v0.36; requires Go 1.26 which we have. Adopted at v0.22.3 in 2025-10 and kept current with the k8s line."
     alternatives:
       - "controller-runtime v0.21.x: Older, supports k8s v0.33"
       - "Operator SDK: Higher level but less flexible, controller-runtime is more direct"
@@ -1022,7 +1022,7 @@ decisions:
     date: 2025-11-02
     status: accepted
     decision: "Use stdlib log/slog with controller-runtime logr bridge for structured logging"
-    reasoning: "Go 1.25+ includes stdlib slog which provides structured logging without external dependencies. controller-runtime v0.22.3 has native slog support via logr bridge. This eliminates dependency on zap while maintaining full compatibility with controller-runtime's logging expectations and existing controller code patterns."
+    reasoning: "Go 1.26+ includes stdlib slog which provides structured logging without external dependencies. controller-runtime v0.24.1 has native slog support via logr bridge. This eliminates dependency on zap while maintaining full compatibility with controller-runtime's logging expectations and existing controller code patterns."
     alternatives:
       - "Keep zap: Adds external dependency, heavier than stdlib slog"
       - "Native slog throughout: Would require changing all ctrl.LoggerFrom(ctx) calls, breaks controller-runtime integration"

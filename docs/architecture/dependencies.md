@@ -103,9 +103,9 @@ versions, err := client.ListVersions(ctx, "EssentialsX", "Essentials", hangar.Li
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| controller-runtime | v0.22+ | Operator framework |
-| client-go | v0.34+ | Kubernetes API client |
-| apimachinery | v0.34+ | API types and utilities |
+| controller-runtime | v0.24+ | Operator framework |
+| client-go | v0.36+ | Kubernetes API client |
+| apimachinery | v0.36+ | API types and utilities |
 
 ## Future Dependencies
 

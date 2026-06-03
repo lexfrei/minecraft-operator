@@ -126,7 +126,7 @@ Updates are applied safely:
 
 | Component | Technology |
 |-----------|------------|
-| Framework | controller-runtime v0.22+ |
+| Framework | controller-runtime v0.24+ |
 | Language | Go 1.26+ |
 | Container | distroless/static-debian12:nonroot |
 | Charts | Helm 3.14+ |
