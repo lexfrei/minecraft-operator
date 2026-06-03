@@ -515,7 +515,7 @@ All architectural decisions are documented as ADRs in `.architecture.yaml` (sing
 **Key finalized decisions:**
 
 - **Namespace scope**: Plugin and PaperMCServer are namespace-scoped (ADR-008)
-- **Framework**: controller-runtime v0.22.3 with Kubebuilder v4 scaffolding (ADR-001, ADR-009)
+- **Framework**: controller-runtime v0.24.1 with Kubebuilder v4 scaffolding (ADR-001, ADR-009)
 - **Solver**: Simple linear search for MVP, SAT solver in Phase 2 (ADR-010)
 - **Testing**: envtest for integration, Ginkgo/Gomega framework (ADR-011, ADR-017)
 - **Logging**: stdlib log/slog with configurable level and format (ADR-028)
