@@ -21,7 +21,20 @@ import (
 	mck8slexlav1beta1 "github.com/lexfrei/minecraft-operator/api/v1beta1"
 )
 
-const testServerVersion = "1.21.1"
+// Test fixture constants.
+const (
+	testServerVersion    = "1.21.1"
+	testNamespaceDefault = "default"
+	updateStrategyLatest = "latest"
+	testProjectName      = "test"
+	testSourceHangar     = "hangar"
+	testServerName       = "test-server"
+	testServerName1      = "server1"
+	testPluginName       = "test-plugin"
+	testRevision1        = "rev1"
+	testPluginVer100     = "1.0.0"
+	testPluginVer200     = "2.0.0"
+)
 
 func newTestSchemeWithAppsV1() *runtime.Scheme {
 	scheme := runtime.NewScheme()
@@ -40,7 +53,7 @@ func makeTestServer(name, namespace string) *mck8slexlav1beta1.PaperMCServer {
 		},
 		Spec: mck8slexlav1beta1.PaperMCServerSpec{
 			Version:        testServerVersion,
-			UpdateStrategy: "latest",
+			UpdateStrategy: updateStrategyLatest,
 		},
 	}
 }
@@ -63,8 +76,8 @@ func makeTestStatefulSet(name, namespace string, ready bool) *appsv1.StatefulSet
 		Status: appsv1.StatefulSetStatus{
 			Replicas:        replicas,
 			ReadyReplicas:   readyReplicas,
-			CurrentRevision: "rev1",
-			UpdateRevision:  "rev1",
+			CurrentRevision: testRevision1,
+			UpdateRevision:  testRevision1,
 		},
 	}
 }
@@ -74,7 +87,7 @@ func makeTestStatefulSet(name, namespace string, ready bool) *appsv1.StatefulSet
 func TestServerService_ListServers_AllNamespaces(t *testing.T) {
 	t.Parallel()
 
-	server1 := makeTestServer("server1", "ns1")
+	server1 := makeTestServer(testServerName1, "ns1")
 	server2 := makeTestServer("server2", "ns2")
 
 	fakeClient := fake.NewClientBuilder().
@@ -93,7 +106,7 @@ func TestServerService_ListServers_AllNamespaces(t *testing.T) {
 func TestServerService_ListServers_FilterByNamespace(t *testing.T) {
 	t.Parallel()
 
-	server1 := makeTestServer("server1", "ns1")
+	server1 := makeTestServer(testServerName1, "ns1")
 	server2 := makeTestServer("server2", "ns2")
 	server3 := makeTestServer("server3", "ns1")
 
@@ -133,7 +146,7 @@ func TestServerService_ListServers_Empty(t *testing.T) {
 func TestServerService_GetServer_Found(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test-server", "default")
+	server := makeTestServer(testServerName, testNamespaceDefault)
 	server.Status.CurrentVersion = testServerVersion
 	server.Status.CurrentBuild = 91
 
@@ -144,11 +157,11 @@ func TestServerService_GetServer_Found(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	result, err := svc.GetServer(context.Background(), "default", "test-server")
+	result, err := svc.GetServer(context.Background(), testNamespaceDefault, testServerName)
 
 	require.NoError(t, err)
-	assert.Equal(t, "test-server", result.Name)
-	assert.Equal(t, "default", result.Namespace)
+	assert.Equal(t, testServerName, result.Name)
+	assert.Equal(t, testNamespaceDefault, result.Namespace)
 	assert.Equal(t, testServerVersion, result.CurrentVersion)
 	assert.Equal(t, 91, result.CurrentBuild)
 }
@@ -162,7 +175,7 @@ func TestServerService_GetServer_NotFound(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	result, err := svc.GetServer(context.Background(), "default", "nonexistent")
+	result, err := svc.GetServer(context.Background(), testNamespaceDefault, "nonexistent")
 
 	require.Error(t, err)
 	assert.Nil(t, result)
@@ -212,10 +225,10 @@ func TestServerService_GetServerByName_NotFound(t *testing.T) {
 func TestServerService_DetermineStatus_Running(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test", "default")
+	server := makeTestServer(testProjectName, testNamespaceDefault)
 	server.Status.Conditions = []metav1.Condition{
 		{
-			Type:   "StatefulSetReady",
+			Type:   ConditionStatefulSetReady,
 			Status: metav1.ConditionTrue,
 		},
 	}
@@ -234,10 +247,10 @@ func TestServerService_DetermineStatus_Running(t *testing.T) {
 func TestServerService_DetermineStatus_Updating(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test", "default")
+	server := makeTestServer(testProjectName, testNamespaceDefault)
 	server.Status.Conditions = []metav1.Condition{
 		{
-			Type:   "StatefulSetReady",
+			Type:   ConditionStatefulSetReady,
 			Status: metav1.ConditionFalse,
 			Reason: "Updating",
 		},
@@ -257,7 +270,7 @@ func TestServerService_DetermineStatus_Updating(t *testing.T) {
 func TestServerService_DetermineStatus_FallbackToCurrentVersion(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test", "default")
+	server := makeTestServer(testProjectName, testNamespaceDefault)
 	server.Status.CurrentVersion = testServerVersion // No conditions, but has version
 
 	fakeClient := fake.NewClientBuilder().
@@ -274,7 +287,7 @@ func TestServerService_DetermineStatus_FallbackToCurrentVersion(t *testing.T) {
 func TestServerService_DetermineStatus_Unknown(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test", "default")
+	server := makeTestServer(testProjectName, testNamespaceDefault)
 	// No conditions and no current version
 
 	fakeClient := fake.NewClientBuilder().
@@ -293,7 +306,7 @@ func TestServerService_DetermineStatus_Unknown(t *testing.T) {
 func TestServerService_CheckStatefulSetStatus_Ready(t *testing.T) {
 	t.Parallel()
 
-	sts := makeTestStatefulSet("test-server", "default", true)
+	sts := makeTestStatefulSet(testServerName, testNamespaceDefault, true)
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestSchemeWithAppsV1()).
@@ -302,7 +315,7 @@ func TestServerService_CheckStatefulSetStatus_Ready(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	status := svc.CheckStatefulSetStatus(context.Background(), "test-server", "default")
+	status := svc.CheckStatefulSetStatus(context.Background(), testServerName, testNamespaceDefault)
 
 	assert.Equal(t, StatusRunning, status)
 }
@@ -310,8 +323,8 @@ func TestServerService_CheckStatefulSetStatus_Ready(t *testing.T) {
 func TestServerService_CheckStatefulSetStatus_Updating(t *testing.T) {
 	t.Parallel()
 
-	sts := makeTestStatefulSet("test-server", "default", false)
-	sts.Status.CurrentRevision = "rev1"
+	sts := makeTestStatefulSet(testServerName, testNamespaceDefault, false)
+	sts.Status.CurrentRevision = testRevision1
 	sts.Status.UpdateRevision = "rev2" // Different revisions
 
 	fakeClient := fake.NewClientBuilder().
@@ -321,7 +334,7 @@ func TestServerService_CheckStatefulSetStatus_Updating(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	status := svc.CheckStatefulSetStatus(context.Background(), "test-server", "default")
+	status := svc.CheckStatefulSetStatus(context.Background(), testServerName, testNamespaceDefault)
 
 	assert.Equal(t, StatusUpdating, status)
 }
@@ -335,7 +348,7 @@ func TestServerService_CheckStatefulSetStatus_NotFound(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	status := svc.CheckStatefulSetStatus(context.Background(), "nonexistent", "default")
+	status := svc.CheckStatefulSetStatus(context.Background(), "nonexistent", testNamespaceDefault)
 
 	assert.Equal(t, StatusUnknown, status)
 }
@@ -353,15 +366,15 @@ func TestServerService_CreateServer_Success(t *testing.T) {
 
 	data := ServerCreateData{
 		Name:               "new-server",
-		Namespace:          "default",
-		UpdateStrategy:     "latest",
+		Namespace:          testNamespaceDefault,
+		UpdateStrategy:     updateStrategyLatest,
 		Version:            testServerVersion,
 		Build:              91,
 		UpdateDelay:        "168h",
 		CheckCron:          "0 4 * * *",
 		MaintenanceEnabled: true,
 		MaintenanceCron:    "0 4 * * 0",
-		Labels:             map[string]string{"env": "test"},
+		Labels:             map[string]string{"env": testProjectName},
 	}
 
 	err := svc.CreateServer(context.Background(), data)
@@ -370,17 +383,21 @@ func TestServerService_CreateServer_Success(t *testing.T) {
 
 	// Verify server was created
 	var server mck8slexlav1beta1.PaperMCServer
-	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "new-server"}, &server)
+	err = fakeClient.Get(
+		context.Background(),
+		client.ObjectKey{Namespace: testNamespaceDefault, Name: "new-server"},
+		&server,
+	)
 	require.NoError(t, err)
 	assert.Equal(t, "new-server", server.Name)
-	assert.Equal(t, "latest", server.Spec.UpdateStrategy)
+	assert.Equal(t, updateStrategyLatest, server.Spec.UpdateStrategy)
 	assert.Equal(t, testServerVersion, server.Spec.Version)
 	assert.NotNil(t, server.Spec.Build)
 	assert.Equal(t, 91, *server.Spec.Build)
 	assert.Equal(t, "0 4 * * *", server.Spec.UpdateSchedule.CheckCron)
 	assert.True(t, server.Spec.UpdateSchedule.MaintenanceWindow.Enabled)
 	assert.Equal(t, "0 4 * * 0", server.Spec.UpdateSchedule.MaintenanceWindow.Cron)
-	assert.Equal(t, "test", server.Labels["env"])
+	assert.Equal(t, testProjectName, server.Labels["env"])
 }
 
 func TestServerService_CreateServer_MinimalData(t *testing.T) {
@@ -394,7 +411,7 @@ func TestServerService_CreateServer_MinimalData(t *testing.T) {
 
 	data := ServerCreateData{
 		Name:      "minimal-server",
-		Namespace: "default",
+		Namespace: testNamespaceDefault,
 	}
 
 	err := svc.CreateServer(context.Background(), data)
@@ -402,7 +419,11 @@ func TestServerService_CreateServer_MinimalData(t *testing.T) {
 	require.NoError(t, err)
 
 	var server mck8slexlav1beta1.PaperMCServer
-	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "minimal-server"}, &server)
+	err = fakeClient.Get(
+		context.Background(),
+		client.ObjectKey{Namespace: testNamespaceDefault, Name: "minimal-server"},
+		&server,
+	)
 	require.NoError(t, err)
 	assert.Nil(t, server.Spec.Build)
 	assert.Nil(t, server.Spec.UpdateDelay)
@@ -414,7 +435,7 @@ func TestServerService_CreateServer_MinimalData(t *testing.T) {
 func TestServerService_UpdateServer_Success(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test-server", "default")
+	server := makeTestServer(testServerName, testNamespaceDefault)
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestSchemeWithAppsV1()).
@@ -427,8 +448,8 @@ func TestServerService_UpdateServer_Success(t *testing.T) {
 	newVersion := "1.21.2"
 	newBuild := 100
 	data := ServerUpdateData{
-		Name:           "test-server",
-		Namespace:      "default",
+		Name:           testServerName,
+		Namespace:      testNamespaceDefault,
 		UpdateStrategy: &newStrategy,
 		Version:        &newVersion,
 		Build:          &newBuild,
@@ -439,7 +460,11 @@ func TestServerService_UpdateServer_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	var updated mck8slexlav1beta1.PaperMCServer
-	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "test-server"}, &updated)
+	err = fakeClient.Get(
+		context.Background(),
+		client.ObjectKey{Namespace: testNamespaceDefault, Name: testServerName},
+		&updated,
+	)
 	require.NoError(t, err)
 	assert.Equal(t, updateStrategyPin, updated.Spec.UpdateStrategy)
 	assert.Equal(t, "1.21.2", updated.Spec.Version)
@@ -458,7 +483,7 @@ func TestServerService_UpdateServer_NotFound(t *testing.T) {
 
 	data := ServerUpdateData{
 		Name:      "nonexistent",
-		Namespace: "default",
+		Namespace: testNamespaceDefault,
 	}
 
 	err := svc.UpdateServer(context.Background(), data)
@@ -472,7 +497,7 @@ func TestServerService_UpdateServer_NotFound(t *testing.T) {
 func TestServerService_DeleteServer_Success(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("to-delete", "default")
+	server := makeTestServer("to-delete", testNamespaceDefault)
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestSchemeWithAppsV1()).
@@ -481,12 +506,16 @@ func TestServerService_DeleteServer_Success(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	err := svc.DeleteServer(context.Background(), "default", "to-delete")
+	err := svc.DeleteServer(context.Background(), testNamespaceDefault, "to-delete")
 
 	require.NoError(t, err)
 
 	var deleted mck8slexlav1beta1.PaperMCServer
-	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "to-delete"}, &deleted)
+	err = fakeClient.Get(
+		context.Background(),
+		client.ObjectKey{Namespace: testNamespaceDefault, Name: "to-delete"},
+		&deleted,
+	)
 	require.Error(t, err)
 }
 
@@ -499,7 +528,7 @@ func TestServerService_DeleteServer_NotFound(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	err := svc.DeleteServer(context.Background(), "default", "nonexistent")
+	err := svc.DeleteServer(context.Background(), testNamespaceDefault, "nonexistent")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get server")
@@ -510,7 +539,7 @@ func TestServerService_DeleteServer_NotFound(t *testing.T) {
 func TestServerService_TriggerReconciliation_AddsAnnotation(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test-server", "default")
+	server := makeTestServer(testServerName, testNamespaceDefault)
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestSchemeWithAppsV1()).
@@ -519,12 +548,16 @@ func TestServerService_TriggerReconciliation_AddsAnnotation(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	err := svc.TriggerReconciliation(context.Background(), "default", "test-server")
+	err := svc.TriggerReconciliation(context.Background(), testNamespaceDefault, testServerName)
 
 	require.NoError(t, err)
 
 	var updated mck8slexlav1beta1.PaperMCServer
-	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "test-server"}, &updated)
+	err = fakeClient.Get(
+		context.Background(),
+		client.ObjectKey{Namespace: testNamespaceDefault, Name: testServerName},
+		&updated,
+	)
 	require.NoError(t, err)
 	assert.Contains(t, updated.Annotations, AnnotationReconcile)
 }
@@ -534,7 +567,7 @@ func TestServerService_TriggerReconciliation_AddsAnnotation(t *testing.T) {
 func TestServerService_ApplyNow_SetsAnnotation(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test-server", "default")
+	server := makeTestServer(testServerName, testNamespaceDefault)
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestSchemeWithAppsV1()).
@@ -543,12 +576,16 @@ func TestServerService_ApplyNow_SetsAnnotation(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	err := svc.ApplyNow(context.Background(), "default", "test-server")
+	err := svc.ApplyNow(context.Background(), testNamespaceDefault, testServerName)
 
 	require.NoError(t, err)
 
 	var updated mck8slexlav1beta1.PaperMCServer
-	err = fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "test-server"}, &updated)
+	err = fakeClient.Get(
+		context.Background(),
+		client.ObjectKey{Namespace: testNamespaceDefault, Name: testServerName},
+		&updated,
+	)
 	require.NoError(t, err)
 	assert.Contains(t, updated.Annotations, AnnotationApplyNow)
 }
@@ -562,7 +599,7 @@ func TestServerService_ApplyNow_NotFound(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	err := svc.ApplyNow(context.Background(), "default", "nonexistent")
+	err := svc.ApplyNow(context.Background(), testNamespaceDefault, "nonexistent")
 
 	require.Error(t, err)
 }
@@ -572,7 +609,7 @@ func TestServerService_ApplyNow_NotFound(t *testing.T) {
 func TestServerService_GetServerNamespaces(t *testing.T) {
 	t.Parallel()
 
-	server1 := makeTestServer("server1", "ns1")
+	server1 := makeTestServer(testServerName1, "ns1")
 	server2 := makeTestServer("server2", "ns2")
 	server3 := makeTestServer("server3", "ns1")
 
@@ -612,7 +649,7 @@ func TestServerToData_WithAvailableUpdate(t *testing.T) {
 	t.Parallel()
 
 	now := metav1.Now()
-	server := makeTestServer("test-server", "default")
+	server := makeTestServer(testServerName, testNamespaceDefault)
 	server.Status.AvailableUpdate = &mck8slexlav1beta1.AvailableUpdate{
 		Version:    "1.21.2",
 		Build:      92,
@@ -626,7 +663,7 @@ func TestServerToData_WithAvailableUpdate(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	result, err := svc.GetServer(context.Background(), "default", "test-server")
+	result, err := svc.GetServer(context.Background(), testNamespaceDefault, testServerName)
 
 	require.NoError(t, err)
 	require.NotNil(t, result.AvailableUpdate)
@@ -637,7 +674,7 @@ func TestServerToData_WithAvailableUpdate(t *testing.T) {
 func TestServerToData_WithMaintenanceSchedule(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test-server", "default")
+	server := makeTestServer(testServerName, testNamespaceDefault)
 	server.Spec.UpdateSchedule.MaintenanceWindow.Enabled = true
 	server.Spec.UpdateSchedule.MaintenanceWindow.Cron = "0 4 * * 0"
 	server.Spec.UpdateSchedule.CheckCron = "0 4 * * *"
@@ -649,7 +686,7 @@ func TestServerToData_WithMaintenanceSchedule(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	result, err := svc.GetServer(context.Background(), "default", "test-server")
+	result, err := svc.GetServer(context.Background(), testNamespaceDefault, testServerName)
 
 	require.NoError(t, err)
 	require.NotNil(t, result.MaintenanceSchedule)
@@ -662,7 +699,7 @@ func TestServerToData_WithUpdateHistory(t *testing.T) {
 	t.Parallel()
 
 	now := metav1.Now()
-	server := makeTestServer("test-server", "default")
+	server := makeTestServer(testServerName, testNamespaceDefault)
 	server.Status.LastUpdate = &mck8slexlav1beta1.UpdateHistory{
 		AppliedAt:       now,
 		PreviousVersion: "1.21.0",
@@ -676,7 +713,7 @@ func TestServerToData_WithUpdateHistory(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	result, err := svc.GetServer(context.Background(), "default", "test-server")
+	result, err := svc.GetServer(context.Background(), testNamespaceDefault, testServerName)
 
 	require.NoError(t, err)
 	require.NotNil(t, result.UpdateHistory)
@@ -687,15 +724,15 @@ func TestServerToData_WithUpdateHistory(t *testing.T) {
 func TestServerToData_WithPlugins(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test-server", "default")
+	server := makeTestServer(testServerName, testNamespaceDefault)
 	server.Status.Plugins = []mck8slexlav1beta1.ServerPluginStatus{
 		{
-			PluginRef:       mck8slexlav1beta1.PluginRef{Name: "plugin1", Namespace: "default"},
-			ResolvedVersion: "1.0.0",
+			PluginRef:       mck8slexlav1beta1.PluginRef{Name: "plugin1", Namespace: testNamespaceDefault},
+			ResolvedVersion: testPluginVer100,
 			CurrentVersion:  "0.9.0",
-			DesiredVersion:  "1.0.0",
+			DesiredVersion:  testPluginVer100,
 			Compatible:      true,
-			Source:          "hangar",
+			Source:          testSourceHangar,
 		},
 	}
 
@@ -706,12 +743,12 @@ func TestServerToData_WithPlugins(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	result, err := svc.GetServer(context.Background(), "default", "test-server")
+	result, err := svc.GetServer(context.Background(), testNamespaceDefault, testServerName)
 
 	require.NoError(t, err)
 	assert.Len(t, result.Plugins, 1)
 	assert.Equal(t, "plugin1", result.Plugins[0].Name)
-	assert.Equal(t, "1.0.0", result.Plugins[0].ResolvedVersion)
+	assert.Equal(t, testPluginVer100, result.Plugins[0].ResolvedVersion)
 	assert.True(t, result.Plugins[0].Compatible)
 }
 
@@ -720,23 +757,23 @@ func TestServerToData_WithPlugins(t *testing.T) {
 func TestFetchPluginDetails_WithExistingPlugin(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test-server", "default")
+	server := makeTestServer(testServerName, testNamespaceDefault)
 	server.Status.Plugins = []mck8slexlav1beta1.ServerPluginStatus{
 		{
-			PluginRef:       mck8slexlav1beta1.PluginRef{Name: "test-plugin", Namespace: "default"},
-			ResolvedVersion: "1.0.0",
+			PluginRef:       mck8slexlav1beta1.PluginRef{Name: testPluginName, Namespace: testNamespaceDefault},
+			ResolvedVersion: testPluginVer100,
 			Compatible:      true,
 		},
 	}
 
 	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-plugin",
-			Namespace: "default",
+			Name:      testPluginName,
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: "test-project",
 			},
 		},
@@ -749,22 +786,22 @@ func TestFetchPluginDetails_WithExistingPlugin(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	result, err := svc.GetServer(context.Background(), "default", "test-server")
+	result, err := svc.GetServer(context.Background(), testNamespaceDefault, testServerName)
 
 	require.NoError(t, err)
 	require.Len(t, result.Plugins, 1)
-	assert.Equal(t, "hangar", result.Plugins[0].SourceType)
+	assert.Equal(t, testSourceHangar, result.Plugins[0].SourceType)
 	assert.Equal(t, "test-project", result.Plugins[0].Project)
 }
 
 func TestFetchPluginDetails_PluginNotFound(t *testing.T) {
 	t.Parallel()
 
-	server := makeTestServer("test-server", "default")
+	server := makeTestServer(testServerName, testNamespaceDefault)
 	server.Status.Plugins = []mck8slexlav1beta1.ServerPluginStatus{
 		{
-			PluginRef:       mck8slexlav1beta1.PluginRef{Name: "missing-plugin", Namespace: "default"},
-			ResolvedVersion: "1.0.0",
+			PluginRef:       mck8slexlav1beta1.PluginRef{Name: "missing-plugin", Namespace: testNamespaceDefault},
+			ResolvedVersion: testPluginVer100,
 			Compatible:      true,
 		},
 	}
@@ -776,20 +813,20 @@ func TestFetchPluginDetails_PluginNotFound(t *testing.T) {
 
 	svc := NewServerService(fakeClient)
 
-	result, err := svc.GetServer(context.Background(), "default", "test-server")
+	result, err := svc.GetServer(context.Background(), testNamespaceDefault, testServerName)
 
 	// Should still return data with partial plugin info
 	require.NoError(t, err)
 	require.Len(t, result.Plugins, 1)
 	assert.Equal(t, "missing-plugin", result.Plugins[0].Name)
-	assert.Equal(t, "1.0.0", result.Plugins[0].ResolvedVersion)
+	assert.Equal(t, testPluginVer100, result.Plugins[0].ResolvedVersion)
 	assert.Empty(t, result.Plugins[0].SourceType)
 }
 
 func TestFetchPluginDetailsUsesPluginRefNamespace(t *testing.T) {
 	t.Parallel()
 
-	// Plugin is in "plugins-ns" namespace, but server is in "default"
+	// Plugin is in "plugins-ns" namespace, but server is in testNamespaceDefault
 	pluginInOtherNS := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cross-ns-plugin",
@@ -797,21 +834,21 @@ func TestFetchPluginDetailsUsesPluginRefNamespace(t *testing.T) {
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: "TestProject",
 			},
-			UpdateStrategy: "latest",
+			UpdateStrategy: updateStrategyLatest,
 		},
 	}
 
-	server := makeTestServer("test-server", "default")
+	server := makeTestServer(testServerName, testNamespaceDefault)
 	server.Status.Plugins = []mck8slexlav1beta1.ServerPluginStatus{
 		{
 			PluginRef: mck8slexlav1beta1.PluginRef{
 				Name:      "cross-ns-plugin",
 				Namespace: "plugins-ns", // Plugin is in different namespace
 			},
-			ResolvedVersion: "2.0.0",
+			ResolvedVersion: testPluginVer200,
 			Compatible:      true,
 		},
 	}
@@ -822,14 +859,14 @@ func TestFetchPluginDetailsUsesPluginRefNamespace(t *testing.T) {
 		Build()
 
 	svc := NewServerService(fakeClient)
-	result, err := svc.GetServer(context.Background(), "default", "test-server")
+	result, err := svc.GetServer(context.Background(), testNamespaceDefault, testServerName)
 
 	require.NoError(t, err)
 	require.Len(t, result.Plugins, 1)
 
 	// Should find the plugin using PluginRef.Namespace ("plugins-ns"),
-	// not the server's namespace ("default")
-	assert.Equal(t, "hangar", result.Plugins[0].SourceType,
+	// not the server's namespace (testNamespaceDefault)
+	assert.Equal(t, testSourceHangar, result.Plugins[0].SourceType,
 		"fetchPluginDetails should use PluginRef.Namespace to find the plugin")
 }
 
@@ -862,9 +899,9 @@ func TestServerService_CreateServer_InvalidUpdateDelay(t *testing.T) {
 
 	data := ServerCreateData{
 		Name:           "bad-delay-server",
-		Namespace:      "default",
+		Namespace:      testNamespaceDefault,
 		UpdateStrategy: "auto",
-		Version:        "1.21.1",
+		Version:        testServerVersion,
 		UpdateDelay:    "not-a-duration",
 	}
 
@@ -881,11 +918,11 @@ func TestServerService_UpdateServer_InvalidUpdateDelay(t *testing.T) {
 		WithObjects(&mck8slexlav1beta1.PaperMCServer{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "delay-test",
-				Namespace: "default",
+				Namespace: testNamespaceDefault,
 			},
 			Spec: mck8slexlav1beta1.PaperMCServerSpec{
 				UpdateStrategy: "auto",
-				Version:        "1.21.1",
+				Version:        testServerVersion,
 			},
 		}).
 		Build()
@@ -894,7 +931,7 @@ func TestServerService_UpdateServer_InvalidUpdateDelay(t *testing.T) {
 
 	badDelay := "invalid"
 	data := ServerUpdateData{
-		Namespace:   "default",
+		Namespace:   testNamespaceDefault,
 		Name:        "delay-test",
 		UpdateDelay: &badDelay,
 	}

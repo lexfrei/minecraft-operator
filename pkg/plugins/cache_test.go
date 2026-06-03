@@ -83,18 +83,18 @@ func (m *MockPluginClient) Reset() {
 func testVersions() []PluginVersion {
 	return []PluginVersion{
 		{
-			Version:           "1.0.0",
+			Version:           testPluginVersion,
 			ReleaseDate:       time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-			MinecraftVersions: []string{"1.21.1"},
-			PaperVersions:     []string{"1.21.1"},
+			MinecraftVersions: []string{mcVersion1211},
+			PaperVersions:     []string{mcVersion1211},
 			DownloadURL:       "https://example.com/plugin-1.0.0.jar",
 			Hash:              "abc123",
 		},
 		{
 			Version:           "1.1.0",
 			ReleaseDate:       time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC),
-			MinecraftVersions: []string{"1.21.1", "1.21.2"},
-			PaperVersions:     []string{"1.21.1", "1.21.2"},
+			MinecraftVersions: []string{mcVersion1211, mcVersion1212},
+			PaperVersions:     []string{mcVersion1211, mcVersion1212},
 			DownloadURL:       "https://example.com/plugin-1.1.0.jar",
 			Hash:              "def456",
 		},
@@ -103,8 +103,8 @@ func testVersions() []PluginVersion {
 
 func testCompatInfo() CompatibilityInfo {
 	return CompatibilityInfo{
-		MinecraftVersions: []string{"1.21.1", "1.21.2"},
-		PaperVersions:     []string{"1.21.1", "1.21.2"},
+		MinecraftVersions: []string{mcVersion1211, mcVersion1212},
+		PaperVersions:     []string{mcVersion1211, mcVersion1212},
 	}
 }
 
@@ -120,7 +120,7 @@ func TestCachedPluginClient_GetVersions_CacheMiss(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Len(t, versions, 2)
-	assert.Equal(t, "1.0.0", versions[0].Version)
+	assert.Equal(t, testPluginVersion, versions[0].Version)
 	assert.Equal(t, 1, mock.GetVersionsCalls, "should call underlying client on cache miss")
 }
 
@@ -206,7 +206,7 @@ func TestCachedPluginClient_GetCompatibility_CacheMiss(t *testing.T) {
 	mock := &MockPluginClient{GetCompatResult: testCompatInfo()}
 	client := NewCachedPluginClient(mock, time.Hour)
 
-	compat, err := client.GetCompatibility(context.Background(), "test-plugin", "1.0.0")
+	compat, err := client.GetCompatibility(context.Background(), "test-plugin", testPluginVersion)
 
 	require.NoError(t, err)
 	assert.Len(t, compat.MinecraftVersions, 2)
@@ -220,12 +220,12 @@ func TestCachedPluginClient_GetCompatibility_CacheHit(t *testing.T) {
 	client := NewCachedPluginClient(mock, time.Hour)
 
 	// First call
-	_, err := client.GetCompatibility(context.Background(), "test-plugin", "1.0.0")
+	_, err := client.GetCompatibility(context.Background(), "test-plugin", testPluginVersion)
 	require.NoError(t, err)
 	assert.Equal(t, 1, mock.GetCompatCalls)
 
 	// Second call - cache hit
-	compat, err := client.GetCompatibility(context.Background(), "test-plugin", "1.0.0")
+	compat, err := client.GetCompatibility(context.Background(), "test-plugin", testPluginVersion)
 	require.NoError(t, err)
 	assert.Len(t, compat.MinecraftVersions, 2)
 	assert.Equal(t, 1, mock.GetCompatCalls, "should NOT call underlying client on cache hit")
@@ -238,7 +238,7 @@ func TestCachedPluginClient_GetCompatibility_DifferentVersions(t *testing.T) {
 	client := NewCachedPluginClient(mock, time.Hour)
 
 	// Call for version 1.0.0
-	_, err := client.GetCompatibility(context.Background(), "test-plugin", "1.0.0")
+	_, err := client.GetCompatibility(context.Background(), "test-plugin", testPluginVersion)
 	require.NoError(t, err)
 
 	// Call for version 1.1.0 - different cache key
@@ -262,7 +262,7 @@ func TestCachedPluginClient_GetCompatibility_SeparateFromVersions(t *testing.T) 
 	require.NoError(t, err)
 
 	// Get compatibility - should NOT be cached (different key)
-	_, err = client.GetCompatibility(context.Background(), "test-plugin", "1.0.0")
+	_, err = client.GetCompatibility(context.Background(), "test-plugin", testPluginVersion)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, mock.GetVersionsCalls)
@@ -276,7 +276,7 @@ func TestCachedPluginClient_GetCompatibility_UnderlyingError(t *testing.T) {
 	mock := &MockPluginClient{GetCompatError: expectedErr}
 	client := NewCachedPluginClient(mock, time.Hour)
 
-	compat, err := client.GetCompatibility(context.Background(), "test-plugin", "1.0.0")
+	compat, err := client.GetCompatibility(context.Background(), "test-plugin", testPluginVersion)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "API error")
@@ -297,7 +297,7 @@ func TestCachedPluginClient_ClearCache_ClearsAll(t *testing.T) {
 	// Populate cache
 	_, _ = client.GetVersions(context.Background(), "project-a")
 	_, _ = client.GetVersions(context.Background(), "project-b")
-	_, _ = client.GetCompatibility(context.Background(), "project-a", "1.0.0")
+	_, _ = client.GetCompatibility(context.Background(), "project-a", testPluginVersion)
 	assert.Equal(t, 2, mock.GetVersionsCalls)
 	assert.Equal(t, 1, mock.GetCompatCalls)
 
@@ -307,7 +307,7 @@ func TestCachedPluginClient_ClearCache_ClearsAll(t *testing.T) {
 	// All calls should hit underlying again
 	_, _ = client.GetVersions(context.Background(), "project-a")
 	_, _ = client.GetVersions(context.Background(), "project-b")
-	_, _ = client.GetCompatibility(context.Background(), "project-a", "1.0.0")
+	_, _ = client.GetCompatibility(context.Background(), "project-a", testPluginVersion)
 
 	assert.Equal(t, 4, mock.GetVersionsCalls, "all version requests should hit underlying after clear")
 	assert.Equal(t, 2, mock.GetCompatCalls, "all compat requests should hit underlying after clear")
@@ -327,8 +327,8 @@ func TestCachedPluginClient_ClearProject_ClearsOnlyProject(t *testing.T) {
 	// Populate cache for two projects
 	_, _ = client.GetVersions(context.Background(), "project-a")
 	_, _ = client.GetVersions(context.Background(), "project-b")
-	_, _ = client.GetCompatibility(context.Background(), "project-a", "1.0.0")
-	_, _ = client.GetCompatibility(context.Background(), "project-b", "1.0.0")
+	_, _ = client.GetCompatibility(context.Background(), "project-a", testPluginVersion)
+	_, _ = client.GetCompatibility(context.Background(), "project-b", testPluginVersion)
 	assert.Equal(t, 2, mock.GetVersionsCalls)
 	assert.Equal(t, 2, mock.GetCompatCalls)
 
@@ -337,11 +337,11 @@ func TestCachedPluginClient_ClearProject_ClearsOnlyProject(t *testing.T) {
 
 	// Project-a should hit underlying
 	_, _ = client.GetVersions(context.Background(), "project-a")
-	_, _ = client.GetCompatibility(context.Background(), "project-a", "1.0.0")
+	_, _ = client.GetCompatibility(context.Background(), "project-a", testPluginVersion)
 
 	// Project-b should still be cached
 	_, _ = client.GetVersions(context.Background(), "project-b")
-	_, _ = client.GetCompatibility(context.Background(), "project-b", "1.0.0")
+	_, _ = client.GetCompatibility(context.Background(), "project-b", testPluginVersion)
 
 	assert.Equal(t, 3, mock.GetVersionsCalls, "only project-a versions should hit underlying")
 	assert.Equal(t, 3, mock.GetCompatCalls, "only project-a compat should hit underlying")
@@ -392,7 +392,7 @@ func TestCachedPluginClient_Concurrency_Safe(t *testing.T) {
 
 		go func() {
 			defer wg.Done()
-			_, err := client.GetCompatibility(context.Background(), "project", "1.0.0")
+			_, err := client.GetCompatibility(context.Background(), "project", testPluginVersion)
 			if err == nil {
 				successCount.Add(1)
 			}

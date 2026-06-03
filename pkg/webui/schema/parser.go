@@ -9,21 +9,29 @@ import (
 )
 
 const (
-	typeString = "string"
-	typeObject = "object"
-	typeArray  = "array"
-	fieldName  = "name"
-	fieldNS    = "namespace"
+	typeString  = "string"
+	typeObject  = "object"
+	typeArray   = "array"
+	typeBoolean = "boolean"
+	typeInteger = "integer"
+
+	fieldName           = "name"
+	fieldNS             = "namespace"
+	fieldVersion        = "version"
+	fieldUpdateStrategy = "updateStrategy"
+	fieldConfigMapRef   = "configMapRef"
+
+	strategyPin = "pin"
 )
 
 // conditionalRules defines known cross-field visibility dependencies.
 var conditionalRules = map[string]*Condition{
-	"version": {
-		DependsOn: "updateStrategy",
-		Values:    []string{"pin", "build-pin"},
+	fieldVersion: {
+		DependsOn: fieldUpdateStrategy,
+		Values:    []string{strategyPin, "build-pin"},
 	},
 	"build": {
-		DependsOn: "updateStrategy",
+		DependsOn: fieldUpdateStrategy,
 		Values:    []string{"build-pin"},
 	},
 }

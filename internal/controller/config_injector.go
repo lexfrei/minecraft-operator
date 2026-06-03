@@ -63,7 +63,7 @@ type configEntry struct {
 	sourcePath string
 	// targetPath is the full target path (e.g., /data/plugins/BlueMap/core.conf).
 	targetPath string
-	// overwrite is the overwrite policy ("always" or "ifNotExists").
+	// overwrite is the overwrite policy (gcOverwriteAlways or gcOverwriteIfNotExists).
 	overwrite string
 	// comment describes the config entry for the generated script.
 	comment string
@@ -161,7 +161,7 @@ func buildRCONPropertiesScript(server *mcv1beta1.PaperMCServer) string {
 
 	// Patch existing properties with sed
 	for _, kv := range []struct{ key, value string }{
-		{"enable-rcon", "true"},
+		{"enable-rcon", gcTrue},
 		{"rcon.port", fmt.Sprintf("%d", port)},
 	} {
 		fmt.Fprintf(&sb, "  if grep -q '^%s=' \"$PROPS\"; then\n", kv.key)
@@ -332,7 +332,7 @@ func collectServerConfigEntries(
 		targetPath := fmt.Sprintf("%s/%s", dataMountPath, cfg.Path)
 		overwrite := cfg.Overwrite
 		if overwrite == "" {
-			overwrite = "always"
+			overwrite = gcOverwriteAlways
 		}
 
 		entries = append(entries, configEntry{
@@ -367,7 +367,7 @@ func renderConfigScript(entries []configEntry) string {
 			fmt.Fprintf(&sb, "mkdir -p %s\n", dir)
 		}
 
-		if entry.overwrite == "ifNotExists" {
+		if entry.overwrite == gcOverwriteIfNotExists {
 			fmt.Fprintf(&sb, "if [ ! -f %s ]; then\n", entry.targetPath)
 			fmt.Fprintf(&sb, "  cp %s %s\n", entry.sourcePath, entry.targetPath)
 			sb.WriteString("fi\n")
@@ -411,7 +411,7 @@ func buildConfigInjection(
 
 	// Add RCON password Secret mount if RCON is enabled
 	if server.Spec.RCON.Enabled && server.Spec.RCON.PasswordSecret.Name != "" {
-		rconVolName := "rcon-secret"
+		rconVolName := gcRCONSecret
 		volumes = append(volumes, corev1.Volume{
 			Name: rconVolName,
 			VolumeSource: corev1.VolumeSource{
@@ -464,7 +464,7 @@ func buildConfigVolumes(scriptCMName string, refs []configMapVolumeRef) []corev1
 	defaultMode := int32(0o755)
 
 	volumes = append(volumes, corev1.Volume{
-		Name: "config-script",
+		Name: gcConfigScript,
 		VolumeSource: corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{Name: scriptCMName},
@@ -492,8 +492,8 @@ func buildConfigVolumeMounts(refs []configMapVolumeRef) []corev1.VolumeMount {
 	mounts := make([]corev1.VolumeMount, 0, len(refs)+2)
 
 	mounts = append(mounts,
-		corev1.VolumeMount{Name: "data", MountPath: dataMountPath},
-		corev1.VolumeMount{Name: "config-script", MountPath: configScriptPath},
+		corev1.VolumeMount{Name: gcVolumeData, MountPath: dataMountPath},
+		corev1.VolumeMount{Name: gcConfigScript, MountPath: configScriptPath},
 	)
 
 	for _, ref := range refs {
@@ -554,7 +554,7 @@ func buildPluginConfigEntry(
 
 	overwrite := cfg.Overwrite
 	if overwrite == "" {
-		overwrite = "always"
+		overwrite = gcOverwriteAlways
 	}
 
 	entry := configEntry{

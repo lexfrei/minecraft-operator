@@ -45,20 +45,20 @@ func newBackupTestScheme() *runtime.Scheme {
 }
 
 func newTestServer(backupSpec *mcv1beta1.BackupSpec) *mcv1beta1.PaperMCServer {
-	const name = "my-server"
-	const namespace = "minecraft"
+	const name = gcMyServer
+	const namespace = gcNamespaceMinecraft
 	return &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
 		Spec: mcv1beta1.PaperMCServerSpec{
-			UpdateStrategy: "latest",
+			UpdateStrategy: updateStrategyLatest,
 			UpdateSchedule: mcv1beta1.UpdateSchedule{
-				CheckCron: "0 3 * * *",
+				CheckCron: gcCronDaily3am,
 				MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 					Enabled: true,
-					Cron:    "0 4 * * 0",
+					Cron:    gcCronWeekly,
 				},
 			},
 			GracefulShutdown: mcv1beta1.GracefulShutdown{
@@ -68,7 +68,7 @@ func newTestServer(backupSpec *mcv1beta1.BackupSpec) *mcv1beta1.PaperMCServer {
 				Enabled: true,
 				PasswordSecret: mcv1beta1.SecretKeyRef{
 					Name: name + "-rcon",
-					Key:  "password",
+					Key:  gcPassword,
 				},
 				Port: 25575,
 			},
@@ -82,10 +82,10 @@ func newRCONSecret() *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-server-rcon",
-			Namespace: "minecraft",
+			Namespace: gcNamespaceMinecraft,
 		},
 		Data: map[string][]byte{
-			"password": []byte("test-password"),
+			gcPassword: []byte("test-password"),
 		},
 	}
 }
@@ -94,7 +94,7 @@ func newServerPVC() *corev1.PersistentVolumeClaim {
 	return &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "data-my-server-0",
-			Namespace: "minecraft",
+			Namespace: gcNamespaceMinecraft,
 		},
 	}
 }
@@ -103,10 +103,10 @@ func newServerPod() *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-server-0",
-			Namespace: "minecraft",
+			Namespace: gcNamespaceMinecraft,
 		},
 		Status: corev1.PodStatus{
-			PodIP: "10.0.0.1",
+			PodIP: gcPodIP,
 			Conditions: []corev1.PodCondition{
 				{
 					Type:   corev1.PodReady,
@@ -136,7 +136,7 @@ func TestBackupReconciler_BackupDisabled(t *testing.T) {
 	}
 
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 
 	require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestBackupReconciler_BackupDisabledExplicitly(t *testing.T) {
 	}
 
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 
 	require.NoError(t, err)
@@ -209,7 +209,7 @@ func TestBackupReconciler_ManualBackupTrigger(t *testing.T) { //nolint:funlen
 	}
 
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, ctrl.Result{}, result)
@@ -217,7 +217,7 @@ func TestBackupReconciler_ManualBackupTrigger(t *testing.T) { //nolint:funlen
 	verifyRCONBackupCommands(t, mockRCON)
 
 	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
-		context.Background(), "minecraft", "my-server")
+		context.Background(), gcNamespaceMinecraft, gcMyServer)
 	require.NoError(t, err)
 	assert.Len(t, snapshots, 1)
 	assert.Equal(t, "manual", snapshots[0].Labels[backup.LabelTrigger])
@@ -225,11 +225,11 @@ func TestBackupReconciler_ManualBackupTrigger(t *testing.T) { //nolint:funlen
 	// Verify owner reference for cascade deletion
 	require.Len(t, snapshots[0].OwnerReferences, 1, "VolumeSnapshot should have owner reference")
 	assert.Equal(t, "PaperMCServer", snapshots[0].OwnerReferences[0].Kind)
-	assert.Equal(t, "my-server", snapshots[0].OwnerReferences[0].Name)
+	assert.Equal(t, gcMyServer, snapshots[0].OwnerReferences[0].Name)
 
 	var updatedServer mcv1beta1.PaperMCServer
 	err = fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer)
 	require.NoError(t, err)
 	_, exists := updatedServer.Annotations[AnnotationBackupNow]
@@ -254,17 +254,17 @@ func TestBackupReconciler_RetentionCleanup(t *testing.T) { //nolint:funlen
 
 	existingSnapshots := []volumesnapshotv1.VolumeSnapshot{
 		{ObjectMeta: metav1.ObjectMeta{
-			Name: "my-server-backup-old1", Namespace: "minecraft",
+			Name: "my-server-backup-old1", Namespace: gcNamespaceMinecraft,
 			CreationTimestamp: metav1.NewTime(now.Add(-3 * time.Hour)),
 			Labels: map[string]string{
-				backup.LabelServerName: "my-server", backup.LabelManagedBy: "minecraft-operator",
+				backup.LabelServerName: gcMyServer, backup.LabelManagedBy: gcMinecraftOperator,
 			},
 		}},
 		{ObjectMeta: metav1.ObjectMeta{
-			Name: "my-server-backup-old2", Namespace: "minecraft",
+			Name: "my-server-backup-old2", Namespace: gcNamespaceMinecraft,
 			CreationTimestamp: metav1.NewTime(now.Add(-2 * time.Hour)),
 			Labels: map[string]string{
-				backup.LabelServerName: "my-server", backup.LabelManagedBy: "minecraft-operator",
+				backup.LabelServerName: gcMyServer, backup.LabelManagedBy: gcMinecraftOperator,
 			},
 		}},
 	}
@@ -288,12 +288,12 @@ func TestBackupReconciler_RetentionCleanup(t *testing.T) { //nolint:funlen
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
-		context.Background(), "minecraft", "my-server")
+		context.Background(), gcNamespaceMinecraft, gcMyServer)
 	require.NoError(t, err)
 	assert.Len(t, snapshots, 2, "should retain only maxCount snapshots")
 
@@ -336,7 +336,7 @@ func TestBackupReconciler_ConnectFailurePersistsStatus(t *testing.T) {
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	// Manual backup failure does NOT return error (annotation already removed,
 	// requeue would be pointless). Failure is recorded in status only.
@@ -344,7 +344,7 @@ func TestBackupReconciler_ConnectFailurePersistsStatus(t *testing.T) {
 
 	var updatedServer mcv1beta1.PaperMCServer
 	getErr := fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer)
 	require.NoError(t, getErr)
 
@@ -360,7 +360,7 @@ func TestBackupReconciler_CronTriggeredBackup(t *testing.T) {
 
 	server := newTestServer(&mcv1beta1.BackupSpec{
 		Enabled:   true,
-		Schedule:  "0 */6 * * *",
+		Schedule:  gcCronEvery6h,
 		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
 	})
 
@@ -384,7 +384,7 @@ func TestBackupReconciler_CronTriggeredBackup(t *testing.T) {
 
 	// First reconcile — sets up cron, no backup yet
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 	assert.NotZero(t, result.RequeueAfter, "should requeue for cron schedule check")
@@ -400,13 +400,13 @@ func TestBackupReconciler_CronTriggeredBackup(t *testing.T) {
 
 	// Second reconcile — should detect cron trigger and run backup
 	_, err = r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	// Verify backup was performed
 	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
-		context.Background(), "minecraft", "my-server")
+		context.Background(), gcNamespaceMinecraft, gcMyServer)
 	require.NoError(t, err)
 	assert.Len(t, snapshots, 1, "cron trigger should create a VolumeSnapshot")
 	assert.Equal(t, "scheduled", snapshots[0].Labels[backup.LabelTrigger])
@@ -436,7 +436,7 @@ func TestBackupReconciler_InvalidCronSchedule(t *testing.T) {
 	}
 
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 
 	require.NoError(t, err, "invalid cron should NOT return error (permanent user error)")
@@ -445,7 +445,7 @@ func TestBackupReconciler_InvalidCronSchedule(t *testing.T) {
 	// Verify condition was set
 	var updatedServer mcv1beta1.PaperMCServer
 	err = fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer)
 	require.NoError(t, err)
 
@@ -470,7 +470,7 @@ func TestBackupReconciler_ServerNotFound(t *testing.T) {
 	}
 
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "nonexistent", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcNonexistent, Namespace: gcNamespaceMinecraft},
 	})
 
 	require.NoError(t, err)
@@ -489,7 +489,7 @@ func TestBackupReconciler_PreSnapshotHookFailureStillSendsSaveOn(t *testing.T) {
 	})
 
 	server.Annotations = map[string]string{
-		"mc.k8s.lex.la/backup-now": fmt.Sprintf("%d", now.Unix()),
+		AnnotationBackupNow: fmt.Sprintf("%d", now.Unix()),
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -515,7 +515,7 @@ func TestBackupReconciler_PreSnapshotHookFailureStillSendsSaveOn(t *testing.T) {
 	}
 
 	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 
 	// Manual backup failure does NOT return error (annotation already removed).
@@ -591,7 +591,7 @@ func TestUpdateReconciler_BackupBeforeUpdate(t *testing.T) {
 
 	// Verify VolumeSnapshot was created with "before-update" trigger
 	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
-		context.Background(), "minecraft", "my-server")
+		context.Background(), gcNamespaceMinecraft, gcMyServer)
 	require.NoError(t, err)
 	assert.Len(t, snapshots, 1)
 	assert.Equal(t, "before-update", snapshots[0].Labels[backup.LabelTrigger])
@@ -638,7 +638,7 @@ func TestUpdateReconciler_BackupBeforeUpdateNilDefaultsToTrue(t *testing.T) {
 
 	// Verify VolumeSnapshot was created
 	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
-		context.Background(), "minecraft", "my-server")
+		context.Background(), gcNamespaceMinecraft, gcMyServer)
 	require.NoError(t, err)
 	assert.Len(t, snapshots, 1, "backup should be performed when BeforeUpdate is nil (default true)")
 	assert.Equal(t, "before-update", snapshots[0].Labels[backup.LabelTrigger])
@@ -678,7 +678,7 @@ func TestUpdateReconciler_BackupBeforeUpdateDisabled(t *testing.T) {
 
 	// Verify no snapshots were created
 	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
-		context.Background(), "minecraft", "my-server")
+		context.Background(), gcNamespaceMinecraft, gcMyServer)
 	require.NoError(t, err)
 	assert.Len(t, snapshots, 0)
 }
@@ -748,7 +748,7 @@ func TestUpdateReconciler_BackupBeforeUpdateSkipsWhenBackupDisabled(t *testing.T
 
 	// Verify no snapshots were created.
 	snapshots, listErr := backup.NewSnapshotter(fakeClient).ListSnapshots(
-		context.Background(), "minecraft", "my-server")
+		context.Background(), gcNamespaceMinecraft, gcMyServer)
 	require.NoError(t, listErr)
 	assert.Empty(t, snapshots, "no backup should be created when backup is disabled")
 }
@@ -766,7 +766,7 @@ func TestBackupReconciler_RCONDisabledCreatesSnapshotWithoutHooks(t *testing.T) 
 
 	server.Spec.RCON.Enabled = false
 	server.Annotations = map[string]string{
-		"mc.k8s.lex.la/backup-now": fmt.Sprintf("%d", now.Unix()),
+		AnnotationBackupNow: fmt.Sprintf("%d", now.Unix()),
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -789,7 +789,7 @@ func TestBackupReconciler_RCONDisabledCreatesSnapshotWithoutHooks(t *testing.T) 
 	}
 
 	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 
 	require.NoError(t, err)
@@ -797,7 +797,7 @@ func TestBackupReconciler_RCONDisabledCreatesSnapshotWithoutHooks(t *testing.T) 
 
 	// Verify snapshot was created
 	snapshots, listErr := backup.NewSnapshotter(fakeClient).ListSnapshots(
-		context.Background(), "minecraft", "my-server")
+		context.Background(), gcNamespaceMinecraft, gcMyServer)
 	require.NoError(t, listErr)
 	assert.Len(t, snapshots, 1)
 
@@ -859,15 +859,15 @@ func TestBackupReconciler_ShouldBackupNow_NonNumericAnnotation(t *testing.T) {
 
 	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-server",
-			Namespace: "minecraft",
+			Name:      gcMyServer,
+			Namespace: gcNamespaceMinecraft,
 			Annotations: map[string]string{
-				"mc.k8s.lex.la/backup-now": "true",
+				AnnotationBackupNow: gcTrue,
 			},
 		},
 	}
 
-	// "true" is not a valid Unix timestamp — should return false
+	// gcTrue is not a valid Unix timestamp — should return false
 	assert.False(t, reconciler.shouldBackupNow(context.Background(), server))
 }
 
@@ -880,10 +880,10 @@ func TestBackupReconciler_ShouldBackupNow_StaleAnnotation(t *testing.T) {
 	staleTimestamp := now.Add(-10 * time.Minute).Unix()
 	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-server",
-			Namespace: "minecraft",
+			Name:      gcMyServer,
+			Namespace: gcNamespaceMinecraft,
 			Annotations: map[string]string{
-				"mc.k8s.lex.la/backup-now": fmt.Sprintf("%d", staleTimestamp),
+				AnnotationBackupNow: fmt.Sprintf("%d", staleTimestamp),
 			},
 		},
 	}
@@ -901,10 +901,10 @@ func TestBackupReconciler_ShouldBackupNow_FutureTimestamp(t *testing.T) {
 	futureTimestamp := now.Add(1 * time.Hour).Unix()
 	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-server",
-			Namespace: "minecraft",
+			Name:      gcMyServer,
+			Namespace: gcNamespaceMinecraft,
 			Annotations: map[string]string{
-				"mc.k8s.lex.la/backup-now": fmt.Sprintf("%d", futureTimestamp),
+				AnnotationBackupNow: fmt.Sprintf("%d", futureTimestamp),
 			},
 		},
 	}
@@ -920,7 +920,7 @@ func TestBackupReconciler_ManualBackupConsumesPendingCronTrigger(t *testing.T) {
 	// Create server WITHOUT annotation — first reconcile only sets up cron
 	server := newTestServer(&mcv1beta1.BackupSpec{
 		Enabled:   true,
-		Schedule:  "0 */6 * * *",
+		Schedule:  gcCronEvery6h,
 		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
 	})
 
@@ -944,14 +944,14 @@ func TestBackupReconciler_ManualBackupConsumesPendingCronTrigger(t *testing.T) {
 
 	// First reconcile — sets up cron only (no annotation)
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	// Add both manual trigger AND cron trigger simultaneously
 	var currentServer mcv1beta1.PaperMCServer
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &currentServer))
 	currentServer.Annotations = map[string]string{
 		AnnotationBackupNow: fmt.Sprintf("%d", now.Unix()),
@@ -964,13 +964,13 @@ func TestBackupReconciler_ManualBackupConsumesPendingCronTrigger(t *testing.T) {
 
 	// Second reconcile — manual backup fires AND consumes cron trigger
 	_, err = r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	// Only one snapshot should exist (manual), not two
 	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
-		context.Background(), "minecraft", "my-server")
+		context.Background(), gcNamespaceMinecraft, gcMyServer)
 	require.NoError(t, err)
 	assert.Len(t, snapshots, 1, "only one snapshot should be created (manual consumes cron trigger)")
 	assert.Equal(t, "manual", snapshots[0].Labels[backup.LabelTrigger])
@@ -988,7 +988,7 @@ func TestBackupReconciler_ScheduledBackupFailurePreservesTrigger(t *testing.T) {
 
 	server := newTestServer(&mcv1beta1.BackupSpec{
 		Enabled:   true,
-		Schedule:  "0 */6 * * *",
+		Schedule:  gcCronEvery6h,
 		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
 	})
 
@@ -1015,7 +1015,7 @@ func TestBackupReconciler_ScheduledBackupFailurePreservesTrigger(t *testing.T) {
 
 	// First reconcile — sets up cron
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
@@ -1027,7 +1027,7 @@ func TestBackupReconciler_ScheduledBackupFailurePreservesTrigger(t *testing.T) {
 
 	// Second reconcile — backup fails due to RCON connect error
 	_, err = r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.Error(t, err, "backup should fail due to RCON connect error")
 
@@ -1044,7 +1044,7 @@ func TestBackupReconciler_ScheduledBackupSuccessConsumesTrigger(t *testing.T) {
 
 	server := newTestServer(&mcv1beta1.BackupSpec{
 		Enabled:   true,
-		Schedule:  "0 */6 * * *",
+		Schedule:  gcCronEvery6h,
 		Retention: mcv1beta1.BackupRetention{MaxCount: 10},
 	})
 
@@ -1068,7 +1068,7 @@ func TestBackupReconciler_ScheduledBackupSuccessConsumesTrigger(t *testing.T) {
 
 	// First reconcile — sets up cron
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
@@ -1080,7 +1080,7 @@ func TestBackupReconciler_ScheduledBackupSuccessConsumesTrigger(t *testing.T) {
 
 	// Second reconcile — backup succeeds
 	_, err = r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
@@ -1125,7 +1125,7 @@ func TestBackupReconciler_ManualBackupFailureRecordedInStatus(t *testing.T) {
 
 	// Reconcile — manual backup fails but no error returned
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
@@ -1133,7 +1133,7 @@ func TestBackupReconciler_ManualBackupFailureRecordedInStatus(t *testing.T) {
 	// since the annotation is already removed and there is no requeue.
 	var updatedServer mcv1beta1.PaperMCServer
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer))
 
 	require.NotNil(t, updatedServer.Status.Backup, "backup status should exist")
@@ -1171,7 +1171,7 @@ func TestBackupReconciler_VolumeSnapshotCRDUnavailable(t *testing.T) {
 	scheme := newBackupTestScheme()
 	server := newTestServer(&mcv1beta1.BackupSpec{
 		Enabled:  true,
-		Schedule: "0 */6 * * *",
+		Schedule: gcCronEvery6h,
 	})
 
 	fakeClient := fake.NewClientBuilder().
@@ -1189,7 +1189,7 @@ func TestBackupReconciler_VolumeSnapshotCRDUnavailable(t *testing.T) {
 	}
 
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, ctrl.Result{RequeueAfter: 5 * time.Minute}, result)
@@ -1197,7 +1197,7 @@ func TestBackupReconciler_VolumeSnapshotCRDUnavailable(t *testing.T) {
 	// Verify BackupReady condition is set
 	var updatedServer mcv1beta1.PaperMCServer
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer))
 
 	cond := meta.FindStatusCondition(updatedServer.Status.Conditions, "BackupReady")
@@ -1211,7 +1211,7 @@ func TestBackupReconciler_BackupReadyRecoveryAfterCRDInstall(t *testing.T) {
 	scheme := newBackupTestScheme()
 	server := newTestServer(&mcv1beta1.BackupSpec{
 		Enabled:  true,
-		Schedule: "0 */6 * * *",
+		Schedule: gcCronEvery6h,
 	})
 
 	fakeClient := fake.NewClientBuilder().
@@ -1230,13 +1230,13 @@ func TestBackupReconciler_BackupReadyRecoveryAfterCRDInstall(t *testing.T) {
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	var updatedServer mcv1beta1.PaperMCServer
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer))
 	cond := meta.FindStatusCondition(updatedServer.Status.Conditions, "BackupReady")
 	require.NotNil(t, cond)
@@ -1246,12 +1246,12 @@ func TestBackupReconciler_BackupReadyRecoveryAfterCRDInstall(t *testing.T) {
 	r.Snapshotter = backup.NewSnapshotter(fakeClient)
 
 	_, err = r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer))
 	cond = meta.FindStatusCondition(updatedServer.Status.Conditions, "BackupReady")
 	require.NotNil(t, cond, "BackupReady condition should still exist")
@@ -1289,14 +1289,14 @@ func TestBackupReconciler_PVCNotFoundClearError(t *testing.T) {
 
 	// Manual backup — error swallowed but status should reflect failure with clear message
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, ctrl.Result{}, result)
 
 	var updatedServer mcv1beta1.PaperMCServer
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer))
 
 	require.NotNil(t, updatedServer.Status.Backup)
@@ -1337,7 +1337,7 @@ func TestBackupReconciler_PVCNotFoundWithRCONStillSendsSaveOn(t *testing.T) {
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	// Manual backup error is swallowed
 	require.NoError(t, err)
@@ -1384,13 +1384,13 @@ func TestBackupReconciler_FailurePreservesExistingBackupCount(t *testing.T) {
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	var updatedServer mcv1beta1.PaperMCServer
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer))
 
 	require.NotNil(t, updatedServer.Status.Backup)
@@ -1402,7 +1402,7 @@ func TestSetBackupCronCondition_LastTransitionTimeStable(t *testing.T) {
 	server := newTestServer(&mcv1beta1.BackupSpec{Enabled: true})
 
 	// Set condition the first time
-	setBackupCronCondition(server, metav1.ConditionTrue, reasonBackupCronValid, "test")
+	setBackupCronCondition(server, metav1.ConditionTrue, reasonBackupCronValid, gcTest)
 	cond1 := meta.FindStatusCondition(server.Status.Conditions, conditionTypeBackupCronValid)
 	require.NotNil(t, cond1)
 	firstTime := cond1.LastTransitionTime
@@ -1411,7 +1411,7 @@ func TestSetBackupCronCondition_LastTransitionTimeStable(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Set condition again with SAME status — timestamp should NOT change
-	setBackupCronCondition(server, metav1.ConditionTrue, reasonBackupCronValid, "test")
+	setBackupCronCondition(server, metav1.ConditionTrue, reasonBackupCronValid, gcTest)
 	cond2 := meta.FindStatusCondition(server.Status.Conditions, conditionTypeBackupCronValid)
 	require.NotNil(t, cond2)
 
@@ -1423,7 +1423,7 @@ func TestBackupReconciler_BackupReadyRecoveryRefreshesServer(t *testing.T) {
 	scheme := newBackupTestScheme()
 	server := newTestServer(&mcv1beta1.BackupSpec{
 		Enabled:  true,
-		Schedule: "0 */6 * * *",
+		Schedule: gcCronEvery6h,
 	})
 
 	fakeClient := fake.NewClientBuilder().
@@ -1442,40 +1442,40 @@ func TestBackupReconciler_BackupReadyRecoveryRefreshesServer(t *testing.T) {
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	// Verify BackupReady=False is set
 	var s1 mcv1beta1.PaperMCServer
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &s1))
 	cond := meta.FindStatusCondition(s1.Status.Conditions, "BackupReady")
 	require.NotNil(t, cond)
 	assert.Equal(t, metav1.ConditionFalse, cond.Status)
 
 	// Simulate another controller updating status (changes ResourceVersion)
-	s1.Status.CurrentVersion = "1.21.4"
+	s1.Status.CurrentVersion = gcVersion1214
 	require.NoError(t, fakeClient.Status().Update(context.Background(), &s1))
 
 	// Now recover with a working snapshotter — must re-fetch to avoid conflict
 	r.Snapshotter = backup.NewSnapshotter(fakeClient)
 
 	_, err = r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	// Verify BackupReady=True and status update didn't conflict
 	var s2 mcv1beta1.PaperMCServer
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &s2))
 	cond = meta.FindStatusCondition(s2.Status.Conditions, "BackupReady")
 	require.NotNil(t, cond, "BackupReady should exist after recovery")
 	assert.Equal(t, metav1.ConditionTrue, cond.Status, "BackupReady should be True after CRD becomes available")
-	assert.Equal(t, "1.21.4", s2.Status.CurrentVersion,
+	assert.Equal(t, gcVersion1214, s2.Status.CurrentVersion,
 		"other status fields should be preserved")
 }
 
@@ -1507,14 +1507,14 @@ func TestBackupReconciler_StaleAnnotationCleanedUp(t *testing.T) {
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	// Stale annotation should be cleaned up so it doesn't persist indefinitely
 	var updatedServer mcv1beta1.PaperMCServer
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer))
 
 	_, exists := updatedServer.Annotations[AnnotationBackupNow]
@@ -1547,13 +1547,13 @@ func TestBackupReconciler_InvalidAnnotationCleanedUp(t *testing.T) {
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	var updatedServer mcv1beta1.PaperMCServer
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer))
 
 	_, exists := updatedServer.Annotations[AnnotationBackupNow]
@@ -1590,7 +1590,7 @@ func TestBackupReconciler_ScheduleRemovedCleansCron(t *testing.T) {
 
 	// Simulate pre-existing cron entry and trigger from a previous reconciliation.
 	r.cronEntriesMu.Lock()
-	r.cronEntries[key] = cronEntryInfo{ID: 42, Spec: "0 */6 * * *"}
+	r.cronEntries[key] = cronEntryInfo{ID: 42, Spec: gcCronEvery6h}
 	r.cronEntriesMu.Unlock()
 
 	r.cronTriggerMu.Lock()
@@ -1598,7 +1598,7 @@ func TestBackupReconciler_ScheduleRemovedCleansCron(t *testing.T) {
 	r.cronTriggerMu.Unlock()
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
@@ -1641,7 +1641,7 @@ func TestBackupReconciler_DisableBackupConsumesCronTrigger(t *testing.T) {
 	r.cronTriggerMu.Unlock()
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
@@ -1821,7 +1821,7 @@ func TestBackupReconciler_ValidCronPersistsBackupCronValidTrue(t *testing.T) {
 	scheme := newBackupTestScheme()
 	server := newTestServer(&mcv1beta1.BackupSpec{
 		Enabled:  true,
-		Schedule: "0 */6 * * *",
+		Schedule: gcCronEvery6h,
 	})
 
 	fakeClient := fake.NewClientBuilder().
@@ -1839,14 +1839,14 @@ func TestBackupReconciler_ValidCronPersistsBackupCronValidTrue(t *testing.T) {
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	// BackupCronValid=True should be persisted to the API server
 	var updatedServer mcv1beta1.PaperMCServer
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{
-		Name: "my-server", Namespace: "minecraft",
+		Name: gcMyServer, Namespace: gcNamespaceMinecraft,
 	}, &updatedServer))
 
 	cond := meta.FindStatusCondition(updatedServer.Status.Conditions, conditionTypeBackupCronValid)
@@ -1877,7 +1877,7 @@ func TestBackupReconciler_ServerDeletionCleansCronTrigger(t *testing.T) {
 
 	// Simulate an existing cron entry and a pending trigger
 	r.cronEntriesMu.Lock()
-	r.cronEntries[serverKey] = cronEntryInfo{ID: 1, Spec: "0 */6 * * *"}
+	r.cronEntries[serverKey] = cronEntryInfo{ID: 1, Spec: gcCronEvery6h}
 	r.cronEntriesMu.Unlock()
 
 	r.cronTriggerMu.Lock()
@@ -1886,7 +1886,7 @@ func TestBackupReconciler_ServerDeletionCleansCronTrigger(t *testing.T) {
 
 	// Reconcile — server not found
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
@@ -1922,11 +1922,11 @@ func TestBackupReconciler_MaxCountDefaultWhenZero(t *testing.T) {
 		snap := &volumesnapshotv1.VolumeSnapshot{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:              fmt.Sprintf("my-server-backup-old-%d", i),
-				Namespace:         "minecraft",
+				Namespace:         gcNamespaceMinecraft,
 				CreationTimestamp: metav1.NewTime(now.Add(time.Duration(-12+i) * time.Hour)),
 				Labels: map[string]string{
-					backup.LabelServerName: "my-server",
-					backup.LabelManagedBy:  "minecraft-operator",
+					backup.LabelServerName: gcMyServer,
+					backup.LabelManagedBy:  gcMinecraftOperator,
 				},
 			},
 		}
@@ -1952,14 +1952,14 @@ func TestBackupReconciler_MaxCountDefaultWhenZero(t *testing.T) {
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "my-server", Namespace: "minecraft"},
+		NamespacedName: types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft},
 	})
 	require.NoError(t, err)
 
 	// With defaultMaxBackupCount=10, after adding 1 new snapshot (total 13),
 	// the oldest 3 should be deleted, leaving 10
 	snapshots, err := backup.NewSnapshotter(fakeClient).ListSnapshots(
-		context.Background(), "minecraft", "my-server")
+		context.Background(), gcNamespaceMinecraft, gcMyServer)
 	require.NoError(t, err)
 	assert.Equal(t, int(defaultMaxBackupCount), len(snapshots),
 		"should retain exactly defaultMaxBackupCount snapshots when MaxCount is zero/unset")
@@ -1994,10 +1994,10 @@ func TestBackupReconciler_ServerDeletionCleansBackupMu(t *testing.T) {
 	}
 	r.initOnce.Do(r.initMaps)
 
-	key := types.NamespacedName{Name: "my-server", Namespace: "minecraft"}
+	key := types.NamespacedName{Name: gcMyServer, Namespace: gcNamespaceMinecraft}
 
 	// Trigger a backup to populate backupMu.
-	_ = r.performBackup(context.Background(), server.DeepCopy(), "test")
+	_ = r.performBackup(context.Background(), server.DeepCopy(), gcTest)
 
 	// Verify mutex entry exists.
 	_, loaded := r.backupMu.Load(key.String())
@@ -2136,7 +2136,7 @@ func (s *concurrencyTrackingSnapshotter) DeleteOldSnapshots(
 func TestBackupReconciler_RemoveBackupCronJob_NilCron(t *testing.T) {
 	reconciler := &BackupReconciler{
 		cronEntries: map[string]cronEntryInfo{
-			testServerKey: {ID: 1, Spec: "0 */6 * * *"},
+			testServerKey: {ID: 1, Spec: gcCronEvery6h},
 		},
 	}
 

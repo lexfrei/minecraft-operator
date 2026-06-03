@@ -137,8 +137,8 @@ func (r *PaperMCServerReconciler) buildNetworkPolicy(
 		Spec: networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app":                       "papermc",
-					"mc.k8s.lex.la/server-name": server.Name,
+					gcLabelApp:        containerNamePaperMC,
+					gcLabelServerName: server.Name,
 				},
 			},
 			PolicyTypes: policyTypes,
@@ -153,7 +153,7 @@ func sameNamespacePeer(namespace string) networkingv1.NetworkPolicyPeer {
 	return networkingv1.NetworkPolicyPeer{
 		NamespaceSelector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{
-				"kubernetes.io/metadata.name": namespace,
+				gcLabelMetadataName: namespace,
 			},
 		},
 	}
@@ -215,7 +215,7 @@ func buildPluginIngressRules(
 			var proto corev1.Protocol
 
 			switch ep.Protocol {
-			case "UDP":
+			case gcProtocolUDP:
 				proto = corev1.ProtocolUDP
 			default: // TCP, HTTP, or empty
 				proto = corev1.ProtocolTCP

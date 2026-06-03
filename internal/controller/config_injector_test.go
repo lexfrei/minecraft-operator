@@ -20,11 +20,11 @@ func newTestPlugin(name, dirName string, configs []mcv1beta1.PluginConfigFile) m
 	return mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: "default",
+			Namespace: gcNamespaceDefault,
 		},
 		Spec: mcv1beta1.PluginSpec{
 			Source: mcv1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    gcSourceHangar,
 				Project: name,
 			},
 			PluginDirName:    dirName,
@@ -38,16 +38,16 @@ func newConfigTestServer(name string) *mcv1beta1.PaperMCServer {
 	return &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: "default",
+			Namespace: gcNamespaceDefault,
 		},
 		Spec: mcv1beta1.PaperMCServerSpec{
-			UpdateStrategy: "latest",
+			UpdateStrategy: updateStrategyLatest,
 		},
 	}
 }
 
 func TestBuildConfigScript_NoConfigs(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{}
 
 	script, refs, warnings := buildConfigScript(server, plugins)
@@ -58,13 +58,13 @@ func TestBuildConfigScript_NoConfigs(t *testing.T) {
 }
 
 func TestBuildConfigScript_PluginDefaultsOnly(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
-				Path:         "core.conf",
-				Overwrite:    "always",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcBluemapDefaults, Key: gcCoreConf},
+				Path:         gcCoreConf,
+				Overwrite:    gcOverwriteAlways,
 			},
 		}),
 	}
@@ -75,19 +75,19 @@ func TestBuildConfigScript_PluginDefaultsOnly(t *testing.T) {
 	assert.Contains(t, script, "cp /configs/cm-bluemap-defaults/core.conf /data/plugins/BlueMap/core.conf")
 	assert.NotContains(t, script, "if [ ! -f")
 	require.Len(t, refs, 1)
-	assert.Equal(t, "bluemap-defaults", refs[0].ConfigMapName)
+	assert.Equal(t, gcBluemapDefaults, refs[0].ConfigMapName)
 	assert.Equal(t, "cm-bluemap-defaults", refs[0].VolumeName)
 	assert.Empty(t, warnings)
 }
 
 func TestBuildConfigScript_PluginDefaultIfNotExists(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
-				Path:         "core.conf",
-				Overwrite:    "ifNotExists",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcBluemapDefaults, Key: gcCoreConf},
+				Path:         gcCoreConf,
+				Overwrite:    gcOverwriteIfNotExists,
 			},
 		}),
 	}
@@ -101,15 +101,15 @@ func TestBuildConfigScript_PluginDefaultIfNotExists(t *testing.T) {
 }
 
 func TestBuildConfigScript_ServerOverridesPluginDefault(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	server.Spec.PluginConfigs = []mcv1beta1.ServerPluginConfig{
 		{
 			PluginName: "BlueMap",
 			Configs: []mcv1beta1.PluginConfigFile{
 				{
-					ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "prod-bluemap", Key: "core.conf"},
-					Path:         "core.conf",
-					Overwrite:    "always",
+					ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "prod-bluemap", Key: gcCoreConf},
+					Path:         gcCoreConf,
+					Overwrite:    gcOverwriteAlways,
 				},
 			},
 		},
@@ -117,9 +117,9 @@ func TestBuildConfigScript_ServerOverridesPluginDefault(t *testing.T) {
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
-				Path:         "core.conf",
-				Overwrite:    "always",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcBluemapDefaults, Key: gcCoreConf},
+				Path:         gcCoreConf,
+				Overwrite:    gcOverwriteAlways,
 			},
 		}),
 	}
@@ -135,12 +135,12 @@ func TestBuildConfigScript_ServerOverridesPluginDefault(t *testing.T) {
 }
 
 func TestBuildConfigScript_ServerConfigs(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
 		{
-			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-server-config", Key: "server.properties"},
-			Path:         "server.properties",
-			Overwrite:    "always",
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-server-config", Key: gcServerProperties},
+			Path:         gcServerProperties,
+			Overwrite:    gcOverwriteAlways,
 		},
 	}
 	plugins := []mcv1beta1.Plugin{}
@@ -155,12 +155,12 @@ func TestBuildConfigScript_ServerConfigs(t *testing.T) {
 }
 
 func TestBuildConfigScript_ServerConfigIfNotExists(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
 		{
-			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-server-config", Key: "server.properties"},
-			Path:         "server.properties",
-			Overwrite:    "ifNotExists",
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-server-config", Key: gcServerProperties},
+			Path:         gcServerProperties,
+			Overwrite:    gcOverwriteIfNotExists,
 		},
 	}
 	plugins := []mcv1beta1.Plugin{}
@@ -174,20 +174,20 @@ func TestBuildConfigScript_ServerConfigIfNotExists(t *testing.T) {
 }
 
 func TestBuildConfigScript_MixedPluginAndServerConfigs(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
 		{
-			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
-			Path:         "server.properties",
-			Overwrite:    "always",
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcMCConfig, Key: gcServerProperties},
+			Path:         gcServerProperties,
+			Overwrite:    gcOverwriteAlways,
 		},
 	}
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
-				Path:         "core.conf",
-				Overwrite:    "always",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcBluemapDefaults, Key: gcCoreConf},
+				Path:         gcCoreConf,
+				Overwrite:    gcOverwriteAlways,
 			},
 		}),
 	}
@@ -202,20 +202,20 @@ func TestBuildConfigScript_MixedPluginAndServerConfigs(t *testing.T) {
 }
 
 func TestBuildConfigScript_MultiplePlugins(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
-				Path:         "core.conf",
-				Overwrite:    "always",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcBluemapDefaults, Key: gcCoreConf},
+				Path:         gcCoreConf,
+				Overwrite:    gcOverwriteAlways,
 			},
 		}),
 		newTestPlugin("EssentialsX", "Essentials", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "essentials-defaults", Key: "config.yml"},
-				Path:         "config.yml",
-				Overwrite:    "ifNotExists",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "essentials-defaults", Key: gcConfigYML},
+				Path:         gcConfigYML,
+				Overwrite:    gcOverwriteIfNotExists,
 			},
 		}),
 	}
@@ -231,12 +231,12 @@ func TestBuildConfigScript_MultiplePlugins(t *testing.T) {
 }
 
 func TestBuildConfigScript_PluginWithoutDirNameUsesProjectName(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugin := newTestPlugin("BlueMap", "", []mcv1beta1.PluginConfigFile{
 		{
-			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
-			Path:         "core.conf",
-			Overwrite:    "always",
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcBluemapDefaults, Key: gcCoreConf},
+			Path:         gcCoreConf,
+			Overwrite:    gcOverwriteAlways,
 		},
 	})
 	// pluginDirName is empty, should fall back to source.project
@@ -249,7 +249,7 @@ func TestBuildConfigScript_PluginWithoutDirNameUsesProjectName(t *testing.T) {
 }
 
 func TestBuildConfigScript_PluginWithNoConfigsSkipped(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", nil),
 	}
@@ -262,18 +262,18 @@ func TestBuildConfigScript_PluginWithNoConfigsSkipped(t *testing.T) {
 }
 
 func TestBuildConfigScript_DeduplicatesConfigMapVolumes(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "shared-config", Key: "core.conf"},
-				Path:         "core.conf",
-				Overwrite:    "always",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcSharedConfig, Key: gcCoreConf},
+				Path:         gcCoreConf,
+				Overwrite:    gcOverwriteAlways,
 			},
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "shared-config", Key: "render.conf"},
-				Path:         "render.conf",
-				Overwrite:    "always",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcSharedConfig, Key: gcRenderConf},
+				Path:         gcRenderConf,
+				Overwrite:    gcOverwriteAlways,
 			},
 		}),
 	}
@@ -282,17 +282,17 @@ func TestBuildConfigScript_DeduplicatesConfigMapVolumes(t *testing.T) {
 
 	// Same ConfigMap referenced twice should produce only one volume ref
 	require.Len(t, refs, 1)
-	assert.Equal(t, "shared-config", refs[0].ConfigMapName)
+	assert.Equal(t, gcSharedConfig, refs[0].ConfigMapName)
 }
 
 func TestBuildConfigScript_SubdirectoryPath(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "overworld.conf"},
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcBluemapDefaults, Key: "overworld.conf"},
 				Path:         "maps/overworld.conf",
-				Overwrite:    "always",
+				Overwrite:    gcOverwriteAlways,
 			},
 		}),
 	}
@@ -304,12 +304,12 @@ func TestBuildConfigScript_SubdirectoryPath(t *testing.T) {
 }
 
 func TestBuildConfigScript_ServerConfigSubdirectory(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
 		{
-			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-config", Key: "paper-global.yml"},
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcMCConfig, Key: "paper-global.yml"},
 			Path:         "config/paper-global.yml",
-			Overwrite:    "always",
+			Overwrite:    gcOverwriteAlways,
 		},
 	}
 	plugins := []mcv1beta1.Plugin{}
@@ -321,15 +321,15 @@ func TestBuildConfigScript_ServerConfigSubdirectory(t *testing.T) {
 }
 
 func TestBuildConfigScript_ServerOverrideForUnmatchedPlugin(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	server.Spec.PluginConfigs = []mcv1beta1.ServerPluginConfig{
 		{
 			PluginName: "UnknownPlugin",
 			Configs: []mcv1beta1.PluginConfigFile{
 				{
-					ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "unknown-config", Key: "config.yml"},
-					Path:         "config.yml",
-					Overwrite:    "always",
+					ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "unknown-config", Key: gcConfigYML},
+					Path:         gcConfigYML,
+					Overwrite:    gcOverwriteAlways,
 				},
 			},
 		},
@@ -346,13 +346,13 @@ func TestBuildConfigScript_ServerOverrideForUnmatchedPlugin(t *testing.T) {
 }
 
 func TestBuildConfigScript_ScriptStartsWithShebang(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
-				Path:         "core.conf",
-				Overwrite:    "always",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcBluemapDefaults, Key: gcCoreConf},
+				Path:         gcCoreConf,
+				Overwrite:    gcOverwriteAlways,
 			},
 		}),
 	}
@@ -379,7 +379,7 @@ func TestConfigMapVolumeName_Long(t *testing.T) {
 // --- buildConfigInjection tests ---
 
 func TestBuildConfigInjection_NoConfigs(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{}
 
 	initContainer, volumes, scriptCM := buildConfigInjection(server, plugins)
@@ -390,13 +390,13 @@ func TestBuildConfigInjection_NoConfigs(t *testing.T) {
 }
 
 func TestBuildConfigInjection_WithPluginConfig(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
-				Path:         "core.conf",
-				Overwrite:    "always",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcBluemapDefaults, Key: gcCoreConf},
+				Path:         gcCoreConf,
+				Overwrite:    gcOverwriteAlways,
 			},
 		}),
 	}
@@ -417,7 +417,7 @@ func TestBuildConfigInjection_WithPluginConfig(t *testing.T) {
 	// Verify data mount
 	foundData := false
 	for _, vm := range initContainer.VolumeMounts {
-		if vm.Name == "data" && vm.MountPath == "/data" {
+		if vm.Name == gcVolumeData && vm.MountPath == "/data" {
 			foundData = true
 		}
 	}
@@ -431,12 +431,12 @@ func TestBuildConfigInjection_WithPluginConfig(t *testing.T) {
 }
 
 func TestBuildConfigInjection_WithServerConfig(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
 		{
-			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
-			Path:         "server.properties",
-			Overwrite:    "always",
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcMCConfig, Key: gcServerProperties},
+			Path:         gcServerProperties,
+			Overwrite:    gcOverwriteAlways,
 		},
 	}
 	plugins := []mcv1beta1.Plugin{}
@@ -450,11 +450,11 @@ func TestBuildConfigInjection_WithServerConfig(t *testing.T) {
 }
 
 func TestBuildConfigInjection_ScriptConfigMapOwnership(t *testing.T) {
-	server := newConfigTestServer("my-server")
+	server := newConfigTestServer(gcMyServer)
 	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
 		{
-			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
-			Path:         "server.properties",
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcMCConfig, Key: gcServerProperties},
+			Path:         gcServerProperties,
 		},
 	}
 
@@ -462,15 +462,15 @@ func TestBuildConfigInjection_ScriptConfigMapOwnership(t *testing.T) {
 
 	require.NotNil(t, scriptCM)
 	assert.Equal(t, "my-server-config-script", scriptCM.Name)
-	assert.Equal(t, "default", scriptCM.Namespace)
+	assert.Equal(t, gcNamespaceDefault, scriptCM.Namespace)
 }
 
 func TestBuildConfigInjection_InitContainerSecurityDefaults(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
 		{
-			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
-			Path:         "server.properties",
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcMCConfig, Key: gcServerProperties},
+			Path:         gcServerProperties,
 		},
 	}
 
@@ -489,7 +489,7 @@ func TestBuildConfigInjection_InitContainerSecurityDefaults(t *testing.T) {
 }
 
 func TestBuildConfigInjection_MultipleConfigMaps(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
 		{
 			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "config-a", Key: "file-a"},
@@ -510,53 +510,53 @@ func TestBuildConfigInjection_MultipleConfigMaps(t *testing.T) {
 // --- collectReferencedConfigMaps tests ---
 
 func TestCollectReferencedConfigMaps_NoConfigs(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	refs := collectReferencedConfigMaps(server, nil)
 	assert.Empty(t, refs)
 }
 
 func TestCollectReferencedConfigMaps_PluginConfigs(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
-				Path:         "core.conf",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcBluemapDefaults, Key: gcCoreConf},
+				Path:         gcCoreConf,
 			},
 		}),
 	}
 
 	refs := collectReferencedConfigMaps(server, plugins)
 	require.Len(t, refs, 1)
-	assert.Equal(t, "bluemap-defaults", refs[0].Name)
-	assert.Equal(t, "core.conf", refs[0].Key)
+	assert.Equal(t, gcBluemapDefaults, refs[0].Name)
+	assert.Equal(t, gcCoreConf, refs[0].Key)
 }
 
 func TestCollectReferencedConfigMaps_ServerConfigs(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	server.Spec.ServerConfigs = []mcv1beta1.ServerConfigFile{
 		{
-			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
-			Path:         "server.properties",
+			ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcMCConfig, Key: gcServerProperties},
+			Path:         gcServerProperties,
 		},
 	}
 
 	refs := collectReferencedConfigMaps(server, nil)
 	require.Len(t, refs, 1)
-	assert.Equal(t, "mc-config", refs[0].Name)
+	assert.Equal(t, gcMCConfig, refs[0].Name)
 }
 
 func TestCollectReferencedConfigMaps_Deduplicates(t *testing.T) {
-	server := newConfigTestServer("test")
+	server := newConfigTestServer(gcTest)
 	plugins := []mcv1beta1.Plugin{
 		newTestPlugin("BlueMap", "BlueMap", []mcv1beta1.PluginConfigFile{
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "shared-config", Key: "core.conf"},
-				Path:         "core.conf",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcSharedConfig, Key: gcCoreConf},
+				Path:         gcCoreConf,
 			},
 			{
-				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: "shared-config", Key: "render.conf"},
-				Path:         "render.conf",
+				ConfigMapRef: mcv1beta1.ConfigMapKeyRef{Name: gcSharedConfig, Key: gcRenderConf},
+				Path:         gcRenderConf,
 			},
 		}),
 	}
@@ -585,7 +585,7 @@ func TestBuildRCONPropertiesScript_Enabled(t *testing.T) {
 		"script should set enable-rcon to true")
 	assert.Contains(t, script, "rcon.port=25575",
 		"script should set rcon.port")
-	assert.Contains(t, script, "server.properties",
+	assert.Contains(t, script, gcServerProperties,
 		"script should target server.properties")
 	assert.Contains(t, script, "/secrets/rcon/rcon-password",
 		"script should read password from mounted Secret")

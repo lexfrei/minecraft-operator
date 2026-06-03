@@ -349,7 +349,7 @@ func (r *BackupReconciler) performBackup(
 
 	// Verify PVC exists BEFORE running RCON hooks.
 	// PVC name follows the StatefulSet convention: {claimTemplateName}-{statefulSetName}-{ordinal}.
-	// The PaperMCServer controller always uses "data" as the volume claim template name,
+	// The PaperMCServer controller always uses gcVolumeData as the volume claim template name,
 	// and we only snapshot the first replica (ordinal 0).
 	pvcName := fmt.Sprintf("data-%s-0", server.Name)
 

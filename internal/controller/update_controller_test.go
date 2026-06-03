@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	testNamespace               = "default"
+	testNamespace               = gcNamespaceDefault
 	updateControllerPath        = "update_controller.go"
 	papermcServerControllerPath = "papermcserver_controller.go"
 	funcPerformCombinedUpdate   = "performCombinedUpdate"
@@ -80,12 +80,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.0",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1210,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -95,16 +95,16 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
@@ -134,7 +134,7 @@ var _ = Describe("UpdateController", func() {
 				break
 			}
 			Expect(foundJob).NotTo(BeNil())
-			Expect(foundJob.Spec).To(Equal("0 4 * * 0"))
+			Expect(foundJob.Spec).To(Equal(gcCronWeekly))
 			Expect(foundJob.Removed).To(BeFalse())
 		})
 
@@ -145,12 +145,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.0",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1210,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: false, // Disabled
 						},
 					},
@@ -160,16 +160,16 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
@@ -200,10 +200,10 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.0",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1210,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "invalid cron expression",
 							Enabled: true,
@@ -215,16 +215,16 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
@@ -266,12 +266,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.0",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1210,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -281,16 +281,16 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
@@ -339,12 +339,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.0",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1210,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0", // Sunday 4 AM
+							Cron:    gcCronWeekly, // Sunday 4 AM
 							Enabled: true,
 						},
 					},
@@ -354,16 +354,16 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
@@ -385,7 +385,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mockCron.Jobs).To(HaveLen(1))
 
-			oldJob := mockCron.GetJobBySpec("0 4 * * 0")
+			oldJob := mockCron.GetJobBySpec(gcCronWeekly)
 			Expect(oldJob).NotTo(BeNil())
 
 			// Update cron spec
@@ -418,12 +418,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.0",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1210,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -433,16 +433,16 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
@@ -498,12 +498,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.0",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1210,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -513,16 +513,16 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
@@ -536,10 +536,10 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.0",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1210,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 							Cron:    "0 5 * * 1",
 							Enabled: true,
@@ -551,16 +551,16 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
@@ -590,7 +590,7 @@ var _ = Describe("UpdateController", func() {
 			// Verify two independent cron jobs
 			Expect(mockCron.Jobs).To(HaveLen(2))
 
-			job1 := mockCron.GetJobBySpec("0 4 * * 0")
+			job1 := mockCron.GetJobBySpec(gcCronWeekly)
 			job2 := mockCron.GetJobBySpec("0 5 * * 1")
 
 			Expect(job1).NotTo(BeNil())
@@ -617,13 +617,13 @@ var _ = Describe("UpdateController", func() {
 
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "latest",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        updateStrategyLatest,
 					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour}, // 3 days
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -633,26 +633,26 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
 					},
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.0",
+					CurrentVersion: gcVersion1210,
 					CurrentBuild:   100,
 					AvailableUpdate: &mcv1beta1.AvailableUpdate{
-						Version:    "1.21.1",
+						Version:    gcVersion1211,
 						Build:      150,
 						ReleasedAt: recentRelease, // Too recent
 					},
@@ -672,13 +672,13 @@ var _ = Describe("UpdateController", func() {
 
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "latest",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        updateStrategyLatest,
 					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour}, // 3 days
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -688,26 +688,26 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
 					},
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.0",
+					CurrentVersion: gcVersion1210,
 					CurrentBuild:   100,
 					AvailableUpdate: &mcv1beta1.AvailableUpdate{
-						Version:    "1.21.1",
+						Version:    gcVersion1211,
 						Build:      150,
 						ReleasedAt: oldRelease, // Old enough
 					},
@@ -726,13 +726,13 @@ var _ = Describe("UpdateController", func() {
 
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "latest",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        updateStrategyLatest,
 					// No updateDelay specified
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -742,26 +742,26 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
 					},
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.0",
+					CurrentVersion: gcVersion1210,
 					CurrentBuild:   100,
 					AvailableUpdate: &mcv1beta1.AvailableUpdate{
-						Version:    "1.21.1",
+						Version:    gcVersion1211,
 						Build:      150,
 						ReleasedAt: recentRelease, // Recent but no delay configured
 					},
@@ -777,13 +777,13 @@ var _ = Describe("UpdateController", func() {
 		It("should return true when no availableUpdate exists", func() {
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "latest",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        updateStrategyLatest,
 					UpdateDelay:    &metav1.Duration{Duration: 72 * time.Hour},
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -793,23 +793,23 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
 					},
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.0",
+					CurrentVersion: gcVersion1210,
 					CurrentBuild:   100,
 					// No availableUpdate
 				},
@@ -842,13 +842,13 @@ var _ = Describe("UpdateController", func() {
 
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "latest",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        updateStrategyLatest,
 					UpdateDelay:    &metav1.Duration{Duration: 36 * time.Hour},
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -858,26 +858,26 @@ var _ = Describe("UpdateController", func() {
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
 					},
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.0",
+					CurrentVersion: gcVersion1210,
 					CurrentBuild:   100,
 					AvailableUpdate: &mcv1beta1.AvailableUpdate{
-						Version:    "1.21.1",
+						Version:    gcVersion1211,
 						Build:      150,
 						ReleasedAt: releaseTime,
 					},
@@ -915,7 +915,7 @@ var _ = Describe("UpdateController", func() {
 			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-apply-now-mock",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 					Annotations: map[string]string{
 						AnnotationApplyNow: fmt.Sprintf("%d", annotationTime.Unix()),
 					},
@@ -942,14 +942,14 @@ var _ = Describe("UpdateController", func() {
 
 			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-timeout-server", Namespace: "default",
+					Name: "test-timeout-server", Namespace: gcNamespaceDefault,
 				},
 			}
-			_ = reconciler.downloadPluginToServer(ctx, server, "test-plugin",
-				"https://example.com/plugin.jar", "")
+			_ = reconciler.downloadPluginToServer(ctx, server, gcTestPlugin,
+				gcURLPlugin, "")
 
 			Expect(mockExec.Calls).To(HaveLen(2))
-			Expect(mockExec.Calls[0].Command).To(Equal([]string{"mkdir", "-p", "/data/plugins/update"}),
+			Expect(mockExec.Calls[0].Command).To(Equal([]string{gcCmdMkdir, "-p", gcPluginUpdateDir}),
 				"first call should create update directory")
 			Expect(mockExec.Calls[1].Command).To(ContainElement("--connect-timeout"),
 				"curl should set connection timeout")
@@ -970,20 +970,20 @@ var _ = Describe("UpdateController", func() {
 			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-exec-server",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 			}
 
 			ctx := context.Background()
 			// Will fail because curl won't work, but we verify the call was made to PodExecutor
-			_ = reconciler.downloadPluginToServer(ctx, server, "test-plugin",
-				"https://example.com/plugin.jar", "")
+			_ = reconciler.downloadPluginToServer(ctx, server, gcTestPlugin,
+				gcURLPlugin, "")
 
 			Expect(mockExec.Calls).To(HaveLen(2))
-			Expect(mockExec.Calls[0].Command).To(Equal([]string{"mkdir", "-p", "/data/plugins/update"}))
+			Expect(mockExec.Calls[0].Command).To(Equal([]string{gcCmdMkdir, "-p", gcPluginUpdateDir}))
 			Expect(mockExec.Calls[1].PodName).To(Equal("test-exec-server-0"))
-			Expect(mockExec.Calls[1].Namespace).To(Equal("default"))
-			Expect(mockExec.Calls[1].Container).To(Equal("papermc"))
+			Expect(mockExec.Calls[1].Namespace).To(Equal(gcNamespaceDefault))
+			Expect(mockExec.Calls[1].Container).To(Equal(containerNamePaperMC))
 			Expect(mockExec.Calls[1].Command).To(ContainElement("curl"))
 			Expect(mockExec.Calls[1].Command).To(ContainElement("--proto"),
 				"curl should restrict protocol to HTTPS to prevent redirect-based SSRF")
@@ -1002,7 +1002,7 @@ var _ = Describe("UpdateController", func() {
 				if arg == "--" {
 					dashDashIdx = i
 				}
-				if arg == "https://example.com/plugin.jar" {
+				if arg == gcURLPlugin {
 					urlIdx = i
 				}
 			}
@@ -1013,7 +1013,7 @@ var _ = Describe("UpdateController", func() {
 			// Verify User-Agent header is set to identify the operator in server logs.
 			Expect(mockExec.Calls[1].Command).To(ContainElement("--user-agent"),
 				"curl should set User-Agent header with --user-agent flag")
-			Expect(mockExec.Calls[1].Command).To(ContainElement("minecraft-operator"),
+			Expect(mockExec.Calls[1].Command).To(ContainElement(gcMinecraftOperator),
 				"curl User-Agent should identify as minecraft-operator")
 
 			// Verify all curl flags use full names (project standard: no short flags).
@@ -1064,12 +1064,12 @@ var _ = Describe("UpdateController", func() {
 			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cleanup-server",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 			}
 
-			err := reconciler.downloadPluginToServer(ctx, server, "test-plugin",
-				"https://example.com/plugin.jar", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+			err := reconciler.downloadPluginToServer(ctx, server, gcTestPlugin,
+				gcURLPlugin, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("checksum mismatch"))
 
@@ -1103,11 +1103,11 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1beta1.PluginSpec{
 					Source: mcv1beta1.PluginSource{
-						Type: "url",
+						Type: gcSourceURL,
 						URL:  "https://169.254.169.254/latest/meta-data/",
 					},
-					UpdateStrategy:   "latest",
-					InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"ssrf-test": "true"}},
+					UpdateStrategy:   updateStrategyLatest,
+					InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"ssrf-test": gcTrue}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, plugin)).To(Succeed())
@@ -1117,10 +1117,10 @@ var _ = Describe("UpdateController", func() {
 			plugin.Status = mcv1beta1.PluginStatus{
 				AvailableVersions: []mcv1beta1.PluginVersionInfo{
 					{
-						Version:           "1.0.0",
+						Version:           gcVersion100,
 						DownloadURL:       "https://169.254.169.254/latest/meta-data/",
-						Hash:              "abc123",
-						MinecraftVersions: []string{"1.21"},
+						Hash:              gcChecksumABC,
+						MinecraftVersions: []string{gcVersion121},
 						CachedAt:          metav1.Now(),
 						ReleasedAt:        metav1.Now(),
 					},
@@ -1140,7 +1140,7 @@ var _ = Describe("UpdateController", func() {
 								Name:      pluginName,
 								Namespace: testNamespace,
 							},
-							ResolvedVersion: "1.0.0",
+							ResolvedVersion: gcVersion100,
 						},
 					},
 				},
@@ -1168,14 +1168,14 @@ var _ = Describe("UpdateController", func() {
 			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-exec-server",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 			}
 
 			plugin := mcv1beta1.ServerPluginStatus{
 				PluginRef: mcv1beta1.PluginRef{
-					Name:      "test-plugin",
-					Namespace: "default",
+					Name:      gcTestPlugin,
+					Namespace: gcNamespaceDefault,
 				},
 				InstalledJARName: "test-plugin-1.0.jar",
 			}
@@ -1187,7 +1187,7 @@ var _ = Describe("UpdateController", func() {
 
 			Expect(mockExec.Calls).To(HaveLen(1))
 			Expect(mockExec.Calls[0].PodName).To(Equal("test-exec-server-0"))
-			Expect(mockExec.Calls[0].Container).To(Equal("papermc"))
+			Expect(mockExec.Calls[0].Container).To(Equal(containerNamePaperMC))
 			// Verify rm uses direct args (no sh -c) to avoid shell injection.
 			Expect(mockExec.Calls[0].Command[0]).To(Equal("rm"))
 			Expect(mockExec.Calls[0].Command[1]).To(Equal("--force"))
@@ -1234,23 +1234,23 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "latest",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        updateStrategyLatest,
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					GracefulShutdown: mcv1beta1.GracefulShutdown{
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -1258,8 +1258,8 @@ var _ = Describe("UpdateController", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
@@ -1290,8 +1290,8 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "latest",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        updateStrategyLatest,
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
@@ -1300,9 +1300,9 @@ var _ = Describe("UpdateController", func() {
 						Timeout: metav1.Duration{Duration: 300 * time.Second},
 					},
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -1310,8 +1310,8 @@ var _ = Describe("UpdateController", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:latest",
+									Name:  containerNamePaperMC,
+									Image: gcImageLatest,
 								},
 							},
 						},
@@ -1330,7 +1330,7 @@ var _ = Describe("UpdateController", func() {
 		It("should continue with pod deletion if RCON fails", func() {
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
@@ -1353,7 +1353,7 @@ var _ = Describe("UpdateController", func() {
 		It("should handle context cancellation during RCON", func() {
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					RCON: mcv1beta1.RCONConfig{
 						Enabled: true,
 						Port:    25575,
@@ -1416,12 +1416,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -1435,8 +1435,8 @@ var _ = Describe("UpdateController", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:1.21.1-100",
+									Name:  containerNamePaperMC,
+									Image: gcImage1211Build100,
 								},
 							},
 						},
@@ -1452,7 +1452,7 @@ var _ = Describe("UpdateController", func() {
 			}, server)).To(Succeed())
 
 			server.Status = mcv1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
 				Plugins: []mcv1beta1.ServerPluginStatus{
 					{
@@ -1460,10 +1460,10 @@ var _ = Describe("UpdateController", func() {
 							Name:      "plugin-to-delete",
 							Namespace: namespace,
 						},
-						ResolvedVersion:  "1.0.0",
-						CurrentVersion:   "1.0.0",
+						ResolvedVersion:  gcVersion100,
+						CurrentVersion:   gcVersion100,
 						Compatible:       true,
-						Source:           "hangar",
+						Source:           gcSourceHangar,
 						PendingDeletion:  true,
 						InstalledJARName: "TestPlugin-1.0.0.jar",
 					},
@@ -1472,10 +1472,10 @@ var _ = Describe("UpdateController", func() {
 							Name:      "plugin-to-keep",
 							Namespace: namespace,
 						},
-						ResolvedVersion:  "2.0.0",
-						CurrentVersion:   "2.0.0",
+						ResolvedVersion:  gcVersion200,
+						CurrentVersion:   gcVersion200,
 						Compatible:       true,
-						Source:           "hangar",
+						Source:           gcSourceHangar,
 						PendingDeletion:  false,
 						InstalledJARName: "KeepPlugin-2.0.0.jar",
 					},
@@ -1506,12 +1506,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -1525,8 +1525,8 @@ var _ = Describe("UpdateController", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:1.21.1-100",
+									Name:  containerNamePaperMC,
+									Image: gcImage1211Build100,
 								},
 							},
 						},
@@ -1542,7 +1542,7 @@ var _ = Describe("UpdateController", func() {
 			}, server)).To(Succeed())
 
 			server.Status = mcv1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
 				Plugins: []mcv1beta1.ServerPluginStatus{
 					{
@@ -1550,9 +1550,9 @@ var _ = Describe("UpdateController", func() {
 							Name:      "plugin-no-jar",
 							Namespace: namespace,
 						},
-						ResolvedVersion:  "1.0.0",
+						ResolvedVersion:  gcVersion100,
 						Compatible:       true,
-						Source:           "hangar",
+						Source:           gcSourceHangar,
 						PendingDeletion:  true,
 						InstalledJARName: "", // No JAR name
 					},
@@ -1583,13 +1583,13 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1beta1.PluginSpec{
 					Source: mcv1beta1.PluginSource{
-						Type:    "hangar",
-						Project: "TestPlugin",
+						Type:    gcSourceHangar,
+						Project: gcTestPluginCamel,
 					},
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					InstanceSelector: metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"test": "true",
+							gcTest: gcTrue,
 						},
 					},
 				},
@@ -1631,12 +1631,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -1650,8 +1650,8 @@ var _ = Describe("UpdateController", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:1.21.1-100",
+									Name:  containerNamePaperMC,
+									Image: gcImage1211Build100,
 								},
 							},
 						},
@@ -1667,7 +1667,7 @@ var _ = Describe("UpdateController", func() {
 			}, server)).To(Succeed())
 
 			server.Status = mcv1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
 				Plugins: []mcv1beta1.ServerPluginStatus{
 					{
@@ -1726,13 +1726,13 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1beta1.PluginSpec{
 					Source: mcv1beta1.PluginSource{
-						Type:    "hangar",
-						Project: "TestPlugin",
+						Type:    gcSourceHangar,
+						Project: gcTestPluginCamel,
 					},
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					InstanceSelector: metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"test": "true",
+							gcTest: gcTrue,
 						},
 					},
 				},
@@ -1793,13 +1793,13 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1beta1.PluginSpec{
 					Source: mcv1beta1.PluginSource{
-						Type:    "hangar",
-						Project: "TestPlugin",
+						Type:    gcSourceHangar,
+						Project: gcTestPluginCamel,
 					},
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					InstanceSelector: metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"test": "true",
+							gcTest: gcTrue,
 						},
 					},
 				},
@@ -1876,13 +1876,13 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1beta1.PluginSpec{
 					Source: mcv1beta1.PluginSource{
-						Type:    "hangar",
+						Type:    gcSourceHangar,
 						Project: "TestDownload",
 					},
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					InstanceSelector: metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"test": "true",
+							gcTest: gcTrue,
 						},
 					},
 				},
@@ -1892,11 +1892,11 @@ var _ = Describe("UpdateController", func() {
 			now := metav1.Now()
 			plugin.Status.AvailableVersions = []mcv1beta1.PluginVersionInfo{
 				{
-					Version:           "1.0.0",
+					Version:           gcVersion100,
 					DownloadURL:       "https://example.com/test-download-plugin-1.0.0.jar",
 					ReleasedAt:        now,
 					CachedAt:          now,
-					MinecraftVersions: []string{"1.21.1"},
+					MinecraftVersions: []string{gcVersion1211},
 				},
 			}
 			Expect(k8sClient.Status().Update(ctx, plugin)).To(Succeed())
@@ -1914,12 +1914,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -1933,8 +1933,8 @@ var _ = Describe("UpdateController", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:1.21.1-100",
+									Name:  containerNamePaperMC,
+									Image: gcImage1211Build100,
 								},
 							},
 						},
@@ -1944,7 +1944,7 @@ var _ = Describe("UpdateController", func() {
 			Expect(k8sClient.Create(ctx, server)).To(Succeed())
 
 			server.Status = mcv1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
 				Plugins: []mcv1beta1.ServerPluginStatus{
 					{
@@ -1952,9 +1952,9 @@ var _ = Describe("UpdateController", func() {
 							Name:      "test-download-plugin",
 							Namespace: namespace,
 						},
-						ResolvedVersion: "1.0.0",
+						ResolvedVersion: gcVersion100,
 						Compatible:      true,
-						Source:          "hangar",
+						Source:          gcSourceHangar,
 					},
 				},
 			}
@@ -2076,12 +2076,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: testNamespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -2092,15 +2092,15 @@ var _ = Describe("UpdateController", func() {
 						Enabled: true,
 						Port:    25575,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
+									Name:  containerNamePaperMC,
 									Image: "lexfrei/papermc:1.21.0-90",
 								},
 							},
@@ -2108,9 +2108,9 @@ var _ = Describe("UpdateController", func() {
 					},
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.0",
+					CurrentVersion: gcVersion1210,
 					CurrentBuild:   90,
-					DesiredVersion: "1.21.1",
+					DesiredVersion: gcVersion1211,
 					DesiredBuild:   100,
 				},
 			}
@@ -2337,12 +2337,12 @@ var _ = Describe("UpdateController", func() {
 					},
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -2356,8 +2356,8 @@ var _ = Describe("UpdateController", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:1.21.1-100",
+									Name:  containerNamePaperMC,
+									Image: gcImage1211Build100,
 								},
 							},
 						},
@@ -2383,12 +2383,12 @@ var _ = Describe("UpdateController", func() {
 					},
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -2402,8 +2402,8 @@ var _ = Describe("UpdateController", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:1.21.1-100",
+									Name:  containerNamePaperMC,
+									Image: gcImage1211Build100,
 								},
 							},
 						},
@@ -2428,12 +2428,12 @@ var _ = Describe("UpdateController", func() {
 					},
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -2447,8 +2447,8 @@ var _ = Describe("UpdateController", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:1.21.1-100",
+									Name:  containerNamePaperMC,
+									Image: gcImage1211Build100,
 								},
 							},
 						},
@@ -2470,12 +2470,12 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -2489,8 +2489,8 @@ var _ = Describe("UpdateController", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:1.21.1-100",
+									Name:  containerNamePaperMC,
+									Image: gcImage1211Build100,
 								},
 							},
 						},
@@ -2516,12 +2516,12 @@ var _ = Describe("UpdateController", func() {
 					},
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -2535,8 +2535,8 @@ var _ = Describe("UpdateController", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "papermc",
-									Image: "lexfrei/papermc:1.21.1-100",
+									Name:  containerNamePaperMC,
+									Image: gcImage1211Build100,
 								},
 							},
 						},
@@ -2591,11 +2591,11 @@ var _ = Describe("UpdateController", func() {
 		It("should update lastUpdate in status after successful update", func() {
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.0",
+					CurrentVersion: gcVersion1210,
 					CurrentBuild:   100,
 				},
 			}
@@ -2605,17 +2605,17 @@ var _ = Describe("UpdateController", func() {
 			// Verify lastUpdate was set
 			Expect(server.Status.LastUpdate).NotTo(BeNil())
 			Expect(server.Status.LastUpdate.Successful).To(BeTrue())
-			Expect(server.Status.LastUpdate.PreviousVersion).To(Equal("1.21.0"))
+			Expect(server.Status.LastUpdate.PreviousVersion).To(Equal(gcVersion1210))
 		})
 
 		It("should record failed update in status", func() {
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.0",
+					CurrentVersion: gcVersion1210,
 				},
 			}
 
@@ -2629,13 +2629,13 @@ var _ = Describe("UpdateController", func() {
 		It("should clear availableUpdate after successful update", func() {
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.0",
+					CurrentVersion: gcVersion1210,
 					AvailableUpdate: &mcv1beta1.AvailableUpdate{
-						Version: "1.21.1",
+						Version: gcVersion1211,
 						Build:   150,
 					},
 				},
@@ -2682,13 +2682,13 @@ var _ = Describe("UpdateController", func() {
 		It("should update CurrentVersion to DesiredVersion after successful update", func() {
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion:  "1.21.0",
+					CurrentVersion:  gcVersion1210,
 					CurrentBuild:    100,
-					DesiredVersion:  "1.21.1",
+					DesiredVersion:  gcVersion1211,
 					DesiredBuild:    150,
 					AvailableUpdate: &mcv1beta1.AvailableUpdate{},
 				},
@@ -2697,7 +2697,7 @@ var _ = Describe("UpdateController", func() {
 			reconciler.updateServerStatus(server, true)
 
 			// Verify CurrentVersion is updated to DesiredVersion
-			Expect(server.Status.CurrentVersion).To(Equal("1.21.1"),
+			Expect(server.Status.CurrentVersion).To(Equal(gcVersion1211),
 				"CurrentVersion should be updated to DesiredVersion after successful update")
 			Expect(server.Status.CurrentBuild).To(Equal(150),
 				"CurrentBuild should be updated to DesiredBuild after successful update")
@@ -2706,21 +2706,21 @@ var _ = Describe("UpdateController", func() {
 		It("should update plugin CurrentVersion to ResolvedVersion after successful update", func() {
 			server := &mcv1beta1.PaperMCServer{
 				Spec: mcv1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyLatest,
+					Version:        gcVersion1211,
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.0",
-					DesiredVersion: "1.21.1",
+					CurrentVersion: gcVersion1210,
+					DesiredVersion: gcVersion1211,
 					Plugins: []mcv1beta1.ServerPluginStatus{
 						{
-							PluginRef:       mcv1beta1.PluginRef{Name: "plugin1", Namespace: "default"},
-							CurrentVersion:  "1.0.0",
+							PluginRef:       mcv1beta1.PluginRef{Name: "plugin1", Namespace: gcNamespaceDefault},
+							CurrentVersion:  gcVersion100,
 							ResolvedVersion: "1.1.0",
 						},
 						{
-							PluginRef:       mcv1beta1.PluginRef{Name: "plugin2", Namespace: "default"},
-							CurrentVersion:  "2.0.0",
+							PluginRef:       mcv1beta1.PluginRef{Name: "plugin2", Namespace: gcNamespaceDefault},
+							CurrentVersion:  gcVersion200,
 							ResolvedVersion: "2.1.0",
 						},
 					},
@@ -2810,7 +2810,7 @@ var _ = Describe("UpdateController", func() {
 				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -2833,7 +2833,7 @@ var _ = Describe("UpdateController", func() {
 				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -2851,7 +2851,7 @@ var _ = Describe("UpdateController", func() {
 				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: false,
 						},
 					},
@@ -2876,7 +2876,7 @@ var _ = Describe("UpdateController", func() {
 				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -2899,7 +2899,7 @@ var _ = Describe("UpdateController", func() {
 				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -2922,7 +2922,7 @@ var _ = Describe("UpdateController", func() {
 						{
 							PluginRef: mcv1beta1.PluginRef{
 								Name:      "never-installed-plugin",
-								Namespace: "default",
+								Namespace: gcNamespaceDefault,
 							},
 							PendingDeletion:  true,
 							InstalledJARName: "", // never installed
@@ -3112,23 +3112,23 @@ var _ = Describe("UpdateController", func() {
 		It("should return no-op when no AvailableUpdate exists", func() {
 			serverName := "test-no-update"
 			createUpdateServer(serverName, mcv1beta1.PaperMCServerSpec{
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				UpdateSchedule: mcv1beta1.UpdateSchedule{
-					CheckCron: "0 3 * * *",
+					CheckCron: gcCronDaily3am,
 					MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-						Cron:    "0 4 * * 0",
+						Cron:    gcCronWeekly,
 						Enabled: false,
 					},
 				},
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			}, mcv1beta1.PaperMCServerStatus{
-				CurrentVersion:  "1.21.4",
+				CurrentVersion:  gcVersion1214,
 				CurrentBuild:    100,
-				DesiredVersion:  "1.21.4",
+				DesiredVersion:  gcVersion1214,
 				DesiredBuild:    100,
 				AvailableUpdate: nil, // No update available
 			})
@@ -3144,9 +3144,9 @@ var _ = Describe("UpdateController", func() {
 		It("should not no-op when plugins have pending installs even without AvailableUpdate", func() {
 			serverName := "test-pending-plugin"
 			createUpdateServer(serverName, mcv1beta1.PaperMCServerSpec{
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				UpdateSchedule: mcv1beta1.UpdateSchedule{
-					CheckCron: "0 3 * * *",
+					CheckCron: gcCronDaily3am,
 					MaintenanceWindow: mcv1beta1.MaintenanceWindow{
 						Cron:    "* * * * *", // always in window
 						Enabled: true,
@@ -3154,23 +3154,23 @@ var _ = Describe("UpdateController", func() {
 				},
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			}, mcv1beta1.PaperMCServerStatus{
-				CurrentVersion:  "1.21.4",
+				CurrentVersion:  gcVersion1214,
 				CurrentBuild:    100,
-				DesiredVersion:  "1.21.4",
+				DesiredVersion:  gcVersion1214,
 				DesiredBuild:    100,
 				AvailableUpdate: nil,
 				Plugins: []mcv1beta1.ServerPluginStatus{
 					{
-						PluginRef:       mcv1beta1.PluginRef{Name: "test-plugin", Namespace: namespace},
-						ResolvedVersion: "2.0.0",
-						DesiredVersion:  "2.0.0",
+						PluginRef:       mcv1beta1.PluginRef{Name: gcTestPlugin, Namespace: namespace},
+						ResolvedVersion: gcVersion200,
+						DesiredVersion:  gcVersion200,
 						CurrentVersion:  "", // not installed yet
 						Compatible:      true,
-						Source:          "hangar",
+						Source:          gcSourceHangar,
 					},
 				},
 			})
@@ -3193,26 +3193,26 @@ var _ = Describe("UpdateController", func() {
 
 			now := metav1.Now()
 			createUpdateServer(serverName, mcv1beta1.PaperMCServerSpec{
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				UpdateSchedule: mcv1beta1.UpdateSchedule{
-					CheckCron: "0 3 * * *",
+					CheckCron: gcCronDaily3am,
 					MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-						Cron:    "0 4 * * 0", // Sunday 4am
+						Cron:    gcCronWeekly, // Sunday 4am
 						Enabled: true,
 					},
 				},
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			}, mcv1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.3",
+				CurrentVersion: gcVersion1213,
 				CurrentBuild:   80,
-				DesiredVersion: "1.21.4",
+				DesiredVersion: gcVersion1214,
 				DesiredBuild:   100,
 				AvailableUpdate: &mcv1beta1.AvailableUpdate{
-					Version:    "1.21.4",
+					Version:    gcVersion1214,
 					Build:      100,
 					ReleasedAt: now,
 					FoundAt:    now,
@@ -3241,7 +3241,7 @@ var _ = Describe("UpdateController", func() {
 			serverName := "test-invalid-cron-reconcile"
 			now := metav1.Now()
 			createUpdateServer(serverName, mcv1beta1.PaperMCServerSpec{
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				UpdateSchedule: mcv1beta1.UpdateSchedule{
 					CheckCron: "invalid cron",
 					MaintenanceWindow: mcv1beta1.MaintenanceWindow{
@@ -3251,16 +3251,16 @@ var _ = Describe("UpdateController", func() {
 				},
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			}, mcv1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.3",
+				CurrentVersion: gcVersion1213,
 				CurrentBuild:   80,
-				DesiredVersion: "1.21.4",
+				DesiredVersion: gcVersion1214,
 				DesiredBuild:   100,
 				AvailableUpdate: &mcv1beta1.AvailableUpdate{
-					Version:    "1.21.4",
+					Version:    gcVersion1214,
 					Build:      100,
 					ReleasedAt: now,
 					FoundAt:    now,
@@ -3309,15 +3309,15 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: appsv1.StatefulSetSpec{
 					Selector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{"app": stsName},
+						MatchLabels: map[string]string{gcLabelApp: stsName},
 					},
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{"app": stsName},
+							Labels: map[string]string{gcLabelApp: stsName},
 						},
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
-								{Name: "papermc", Image: "docker.io/lexfrei/papermc:1.21.3-80"},
+								{Name: containerNamePaperMC, Image: "docker.io/lexfrei/papermc:1.21.3-80"},
 							},
 						},
 					},
@@ -3353,11 +3353,11 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: appsv1.StatefulSetSpec{
 					Selector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{"app": stsName},
+						MatchLabels: map[string]string{gcLabelApp: stsName},
 					},
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{"app": stsName},
+							Labels: map[string]string{gcLabelApp: stsName},
 						},
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -3423,8 +3423,8 @@ var _ = Describe("UpdateController", func() {
 						Enabled: true,
 						Port:    25575,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 				},
@@ -3443,7 +3443,7 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: "papermc", Image: "test"}},
+					Containers: []corev1.Container{{Name: containerNamePaperMC, Image: gcTest}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
@@ -3461,8 +3461,8 @@ var _ = Describe("UpdateController", func() {
 						Enabled: true,
 						Port:    25575,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
-							Name: "rcon-secret",
-							Key:  "password",
+							Name: gcRCONSecret,
+							Key:  gcPassword,
 						},
 					},
 				},
@@ -3481,15 +3481,15 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: "papermc", Image: "test"}},
+					Containers: []corev1.Container{{Name: containerNamePaperMC, Image: gcTest}},
 				},
 				Status: corev1.PodStatus{
-					PodIP: "10.0.0.1",
+					PodIP: gcPodIP,
 				},
 			}
 			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
 			// Set pod status (envtest might not accept status on create)
-			pod.Status.PodIP = "10.0.0.1"
+			pod.Status.PodIP = gcPodIP
 			Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
 			defer func() {
 				_ = k8sClient.Delete(ctx, pod)
@@ -3506,7 +3506,7 @@ var _ = Describe("UpdateController", func() {
 						Port:    25575,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "nonexistent-secret",
-							Key:  "password",
+							Key:  gcPassword,
 						},
 					},
 				},
@@ -3525,7 +3525,7 @@ var _ = Describe("UpdateController", func() {
 					Namespace: namespace,
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: "papermc", Image: "test"}},
+					Containers: []corev1.Container{{Name: containerNamePaperMC, Image: gcTest}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
@@ -3560,7 +3560,7 @@ var _ = Describe("UpdateController", func() {
 						Port:    25575,
 						PasswordSecret: mcv1beta1.SecretKeyRef{
 							Name: "rcon-bad-key-secret",
-							Key:  "password",
+							Key:  gcPassword,
 						},
 					},
 				},
@@ -3615,11 +3615,11 @@ var _ = Describe("UpdateController", func() {
 				},
 				Spec: mcv1beta1.PaperMCServerSpec{
 					UpdateStrategy: "auto",
-					Version:        "1.21.1",
+					Version:        gcVersion1211,
 					UpdateSchedule: mcv1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mcv1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0", // Sunday 4am
+							Cron:    gcCronWeekly, // Sunday 4am
 							Enabled: true,
 						},
 					},
@@ -3629,13 +3629,13 @@ var _ = Describe("UpdateController", func() {
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
-								{Name: "papermc", Image: "docker.io/lexfrei/papermc:1.21.1-100"},
+								{Name: containerNamePaperMC, Image: "docker.io/lexfrei/papermc:1.21.1-100"},
 							},
 						},
 					},
 				},
 				Status: mcv1beta1.PaperMCServerStatus{
-					CurrentVersion:  "1.21.1",
+					CurrentVersion:  gcVersion1211,
 					CurrentBuild:    100,
 					AvailableUpdate: nil, // No available update
 				},
@@ -3792,7 +3792,7 @@ var _ = Describe("UpdateController", func() {
 			server := &mcv1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        "nil-annotations-server",
-					Namespace:   "default",
+					Namespace:   gcNamespaceDefault,
 					Annotations: nil, // nil annotations
 				},
 			}

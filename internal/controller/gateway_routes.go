@@ -365,7 +365,7 @@ func (r *PaperMCServerReconciler) listOwnedHTTPRoutes(
 
 	if err := r.List(ctx, &existingList,
 		client.InNamespace(server.Namespace),
-		client.MatchingLabels{"mc.k8s.lex.la/route-type": "http"},
+		client.MatchingLabels{"mc.k8s.lex.la/route-type": gcProtocolHTTPLower},
 	); err != nil {
 		if meta.IsNoMatchError(err) {
 			slog.DebugContext(ctx, "Gateway API HTTPRoute CRD not installed, skipping")
@@ -378,7 +378,7 @@ func (r *PaperMCServerReconciler) listOwnedHTTPRoutes(
 	result := make(map[string]*gatewayv1.HTTPRoute)
 	for i := range existingList.Items {
 		route := &existingList.Items[i]
-		if route.Labels["mc.k8s.lex.la/route-type"] == "http" && isOwnedBy(route, server) {
+		if route.Labels["mc.k8s.lex.la/route-type"] == gcProtocolHTTPLower && isOwnedBy(route, server) {
 			result[route.Name] = route
 		}
 	}
@@ -478,7 +478,7 @@ func isOwnedBy(route *gatewayv1.HTTPRoute, server *mcv1beta1.PaperMCServer) bool
 func findHTTPEndpoint(plugin *mcv1beta1.Plugin, endpointName string) *mcv1beta1.PluginEndpoint {
 	for i := range plugin.Spec.Endpoints {
 		ep := &plugin.Spec.Endpoints[i]
-		if ep.Name == endpointName && ep.Protocol == "HTTP" {
+		if ep.Name == endpointName && ep.Protocol == gcProtocolHTTP {
 			return ep
 		}
 	}
@@ -527,7 +527,7 @@ func (r *PaperMCServerReconciler) buildHTTPRoute(
 	}
 
 	labels := standardLabels(server.Name, "networking")
-	labels["mc.k8s.lex.la/route-type"] = "http"
+	labels["mc.k8s.lex.la/route-type"] = gcProtocolHTTPLower
 
 	routeName := truncateK8sName(
 		fmt.Sprintf("%s-http-%s-%s", server.Name, hr.PluginName, hr.EndpointName),

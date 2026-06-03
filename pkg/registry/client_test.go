@@ -14,6 +14,9 @@ import (
 	"testing"
 )
 
+// Test fixture constants.
+const testTagLatestBuild = "1.21.10-91"
+
 type listTagsTestCase struct {
 	name         string
 	responseBody TagsResponse
@@ -30,12 +33,12 @@ func getListTagsTestCases() []listTagsTestCase {
 				Count: 3,
 				Results: []TagResult{
 					{Name: "latest"},
-					{Name: "1.21.10-91"},
+					{Name: testTagLatestBuild},
 					{Name: "1.21.9-88"},
 				},
 			},
 			statusCode: http.StatusOK,
-			wantTags:   []string{"latest", "1.21.10-91", "1.21.9-88"},
+			wantTags:   []string{"latest", testTagLatestBuild, "1.21.9-88"},
 			wantErr:    false,
 		},
 		{
@@ -193,7 +196,7 @@ func getImageExistsTestCases() []imageExistsTestCase {
 	return []imageExistsTestCase{
 		{
 			name:       "tag exists",
-			tag:        "1.21.10-91",
+			tag:        testTagLatestBuild,
 			statusCode: http.StatusOK,
 			wantExists: true,
 			wantErr:    false,

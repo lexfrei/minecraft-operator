@@ -91,7 +91,7 @@ var _ = Describe("Network failure handling", func() {
 	// --------------------------------------------------------------------------
 
 	Context("Hangar API failures", func() {
-		const ns = "default"
+		const ns = gcNamespaceDefault
 
 		It("should set RepositoryAvailable=False and requeue after 5m when Hangar API is down", func() {
 			pluginName := "net-hangar-down"
@@ -106,10 +106,10 @@ var _ = Describe("Network failure handling", func() {
 			}
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "DownPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "DownPlugin"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-hangar-down": "true"},
+					MatchLabels: map[string]string{"net-hangar-down": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -133,10 +133,10 @@ var _ = Describe("Network failure handling", func() {
 			mock := &testutil.MockPluginClient{
 				Versions: []plugins.PluginVersion{
 					{
-						Version:           "1.0.0",
-						MinecraftVersions: []string{"1.21.1"},
-						DownloadURL:       "https://example.com/v1.jar",
-						Hash:              "aaa",
+						Version:           gcVersion100,
+						MinecraftVersions: []string{gcVersion1211},
+						DownloadURL:       gcURLV1,
+						Hash:              gcChecksumAAA,
 					},
 				},
 			}
@@ -148,10 +148,10 @@ var _ = Describe("Network failure handling", func() {
 			}
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "OrphanPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "OrphanPlugin"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-hangar-orphan": "true"},
+					MatchLabels: map[string]string{"net-hangar-orphan": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -161,7 +161,7 @@ var _ = Describe("Network failure handling", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			p := getPlugin(pluginName, ns)
-			Expect(p.Status.RepositoryStatus).To(Equal("available"))
+			Expect(p.Status.RepositoryStatus).To(Equal(repositoryStatusAvailable))
 			Expect(p.Status.AvailableVersions).To(HaveLen(1))
 
 			// Hangar goes down
@@ -190,10 +190,10 @@ var _ = Describe("Network failure handling", func() {
 			mock := &testutil.MockPluginClient{
 				Versions: []plugins.PluginVersion{
 					{
-						Version:           "1.0.0",
-						MinecraftVersions: []string{"1.21.1"},
-						DownloadURL:       "https://example.com/v1.jar",
-						Hash:              "aaa",
+						Version:           gcVersion100,
+						MinecraftVersions: []string{gcVersion1211},
+						DownloadURL:       gcURLV1,
+						Hash:              gcChecksumAAA,
 					},
 				},
 			}
@@ -205,10 +205,10 @@ var _ = Describe("Network failure handling", func() {
 			}
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "RecoverPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "RecoverPlugin"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-hangar-recover": "true"},
+					MatchLabels: map[string]string{"net-hangar-recover": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -232,14 +232,14 @@ var _ = Describe("Network failure handling", func() {
 			mock.VersionErr = nil
 			mock.Versions = []plugins.PluginVersion{
 				{
-					Version:           "1.0.0",
-					MinecraftVersions: []string{"1.21.1"},
-					DownloadURL:       "https://example.com/v1.jar",
-					Hash:              "aaa",
+					Version:           gcVersion100,
+					MinecraftVersions: []string{gcVersion1211},
+					DownloadURL:       gcURLV1,
+					Hash:              gcChecksumAAA,
 				},
 				{
-					Version:           "2.0.0",
-					MinecraftVersions: []string{"1.21.1", "1.21.4"},
+					Version:           gcVersion200,
+					MinecraftVersions: []string{gcVersion1211, gcVersion1214},
 					DownloadURL:       "https://example.com/v2.jar",
 					Hash:              "bbb",
 				},
@@ -249,7 +249,7 @@ var _ = Describe("Network failure handling", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			p = getPlugin(pluginName, ns)
-			Expect(p.Status.RepositoryStatus).To(Equal("available"),
+			Expect(p.Status.RepositoryStatus).To(Equal(repositoryStatusAvailable),
 				"Should recover to available after Hangar comes back")
 			Expect(p.Status.AvailableVersions).To(HaveLen(2),
 				"Should have updated versions after recovery")
@@ -272,10 +272,10 @@ var _ = Describe("Network failure handling", func() {
 			}
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "RetryPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "RetryPlugin"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-hangar-retries": "true"},
+					MatchLabels: map[string]string{"net-hangar-retries": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -303,7 +303,7 @@ var _ = Describe("Network failure handling", func() {
 	// --------------------------------------------------------------------------
 
 	Context("URL download failures", func() {
-		const ns = "default"
+		const ns = gcNamespaceDefault
 
 		It("should set RepositoryAvailable=False when URL download returns HTTP 500", func() {
 			pluginName := "net-url-500"
@@ -322,12 +322,12 @@ var _ = Describe("Network failure handling", func() {
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-url-500": "true"},
+					MatchLabels: map[string]string{"net-url-500": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -376,12 +376,12 @@ var _ = Describe("Network failure handling", func() {
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-url-timeout": "true"},
+					MatchLabels: map[string]string{"net-url-timeout": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -412,12 +412,12 @@ var _ = Describe("Network failure handling", func() {
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-url-404": "true"},
+					MatchLabels: map[string]string{"net-url-404": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -460,13 +460,13 @@ var _ = Describe("Network failure handling", func() {
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type:     "url",
+					Type:     gcSourceURL,
 					URL:      testPluginURL,
 					Checksum: jarHash,
 				},
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-url-recover": "true"},
+					MatchLabels: map[string]string{"net-url-recover": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -486,10 +486,10 @@ var _ = Describe("Network failure handling", func() {
 			Expect(result.RequeueAfter).To(Equal(15 * time.Minute))
 
 			p = getPlugin(pluginName, ns)
-			Expect(p.Status.RepositoryStatus).To(Equal("available"),
+			Expect(p.Status.RepositoryStatus).To(Equal(repositoryStatusAvailable),
 				"Should recover to available after URL becomes accessible")
 			Expect(p.Status.AvailableVersions).To(HaveLen(1))
-			Expect(p.Status.AvailableVersions[0].Version).To(Equal("1.0.0"))
+			Expect(p.Status.AvailableVersions[0].Version).To(Equal(gcVersion100))
 		})
 
 		It("should handle connection reset gracefully", func() {
@@ -516,12 +516,12 @@ var _ = Describe("Network failure handling", func() {
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-url-connreset": "true"},
+					MatchLabels: map[string]string{"net-url-connreset": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -556,12 +556,12 @@ var _ = Describe("Network failure handling", func() {
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-url-truncated": "true"},
+					MatchLabels: map[string]string{"net-url-truncated": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -602,12 +602,12 @@ var _ = Describe("Network failure handling", func() {
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  "https://nonexistent.example.com/plugin.jar",
 				},
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-url-dns": "true"},
+					MatchLabels: map[string]string{"net-url-dns": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -631,14 +631,14 @@ var _ = Describe("Network failure handling", func() {
 	// --------------------------------------------------------------------------
 
 	Context("Docker registry failures", func() {
-		const ns = "default"
+		const ns = gcNamespaceDefault
 
 		It("should fail version resolution when registry ListTags returns error", func() {
 			mockRegistry := &testutil.MockRegistryAPI{
 				TagsErr: fmt.Errorf("registry unavailable: connection refused"),
 			}
 			mockPaper := &testutil.MockPaperAPI{
-				Versions: []string{"1.21.1", "1.21.0"},
+				Versions: []string{gcVersion1211, gcVersion1210},
 			}
 
 			reconciler := &PaperMCServerReconciler{
@@ -654,14 +654,14 @@ var _ = Describe("Network failure handling", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: ns,
-					Labels:    map[string]string{"net-registry": "true"},
+					Labels:    map[string]string{"net-registry": gcTrue},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
-								{Name: "papermc", Image: "lexfrei/papermc:1.21.1-91"},
+								{Name: containerNamePaperMC, Image: gcImage1211Build91},
 							},
 						},
 					},
@@ -685,8 +685,8 @@ var _ = Describe("Network failure handling", func() {
 				TagsErr: fmt.Errorf("registry timeout"),
 			}
 			mockPaper := &testutil.MockPaperAPI{
-				Versions:     []string{"1.21.1"},
-				BuildInfo:    &paper.BuildInfo{Version: "1.21.1", Build: 91},
+				Versions:     []string{gcVersion1211},
+				BuildInfo:    &paper.BuildInfo{Version: gcVersion1211, Build: 91},
 				BuildNumbers: []int{91, 90, 89},
 			}
 
@@ -703,14 +703,14 @@ var _ = Describe("Network failure handling", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: ns,
-					Labels:    map[string]string{"net-registry-recover": "true"},
+					Labels:    map[string]string{"net-registry-recover": gcTrue},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
-								{Name: "papermc", Image: "lexfrei/papermc:1.21.1-91"},
+								{Name: containerNamePaperMC, Image: gcImage1211Build91},
 							},
 						},
 					},
@@ -729,7 +729,7 @@ var _ = Describe("Network failure handling", func() {
 
 			// Registry comes back
 			mockRegistry.TagsErr = nil
-			mockRegistry.Tags = []string{"1.21.1-91", "1.21.1-90", "1.21.0-50"}
+			mockRegistry.Tags = []string{gcVersion1211Build91, "1.21.1-90", "1.21.0-50"}
 
 			// Second attempt — succeeds
 			_, err = reconciler.Reconcile(context.Background(), req)
@@ -739,18 +739,18 @@ var _ = Describe("Network failure handling", func() {
 			Expect(k8sClient.Get(context.Background(),
 				types.NamespacedName{Name: serverName, Namespace: ns}, &s)).To(Succeed())
 
-			Expect(s.Status.DesiredVersion).To(Equal("1.21.1"),
+			Expect(s.Status.DesiredVersion).To(Equal(gcVersion1211),
 				"Should resolve version after registry recovery")
 			Expect(s.Status.DesiredBuild).To(Equal(91))
 		})
 
 		It("should use existing DesiredVersion as fallback when resolution fails", func() {
 			mockRegistry := &testutil.MockRegistryAPI{
-				Tags: []string{"1.21.1-91", "1.21.1-90"},
+				Tags: []string{gcVersion1211Build91, "1.21.1-90"},
 			}
 			mockPaper := &testutil.MockPaperAPI{
-				Versions:     []string{"1.21.1"},
-				BuildInfo:    &paper.BuildInfo{Version: "1.21.1", Build: 91},
+				Versions:     []string{gcVersion1211},
+				BuildInfo:    &paper.BuildInfo{Version: gcVersion1211, Build: 91},
 				BuildNumbers: []int{91, 90},
 			}
 
@@ -767,14 +767,14 @@ var _ = Describe("Network failure handling", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: ns,
-					Labels:    map[string]string{"net-registry-fallback": "true"},
+					Labels:    map[string]string{"net-registry-fallback": gcTrue},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
-								{Name: "papermc", Image: "lexfrei/papermc:1.21.1-91"},
+								{Name: containerNamePaperMC, Image: gcImage1211Build91},
 							},
 						},
 					},
@@ -794,7 +794,7 @@ var _ = Describe("Network failure handling", func() {
 			var s mck8slexlav1beta1.PaperMCServer
 			Expect(k8sClient.Get(context.Background(),
 				types.NamespacedName{Name: serverName, Namespace: ns}, &s)).To(Succeed())
-			Expect(s.Status.DesiredVersion).To(Equal("1.21.1"))
+			Expect(s.Status.DesiredVersion).To(Equal(gcVersion1211))
 
 			// Registry goes down
 			mockRegistry.TagsErr = fmt.Errorf("connection refused")
@@ -807,7 +807,7 @@ var _ = Describe("Network failure handling", func() {
 
 			Expect(k8sClient.Get(context.Background(),
 				types.NamespacedName{Name: serverName, Namespace: ns}, &s)).To(Succeed())
-			Expect(s.Status.DesiredVersion).To(Equal("1.21.1"),
+			Expect(s.Status.DesiredVersion).To(Equal(gcVersion1211),
 				"Fallback DesiredVersion should be preserved")
 		})
 	})
@@ -817,7 +817,7 @@ var _ = Describe("Network failure handling", func() {
 	// --------------------------------------------------------------------------
 
 	Context("PaperMC API failures", func() {
-		const ns = "default"
+		const ns = gcNamespaceDefault
 
 		It("should fail when PaperMC API GetPaperVersions returns error (auto strategy)", func() {
 			// Auto strategy calls resolveAutoVersion → findAvailableUpdate →
@@ -826,7 +826,7 @@ var _ = Describe("Network failure handling", func() {
 				VersionsErr: fmt.Errorf("paper version API unreachable"),
 			}
 			mockRegistry := &testutil.MockRegistryAPI{
-				Tags: []string{"1.21.1-91"},
+				Tags: []string{gcVersion1211Build91},
 			}
 
 			reconciler := &PaperMCServerReconciler{
@@ -842,14 +842,14 @@ var _ = Describe("Network failure handling", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: ns,
-					Labels:    map[string]string{"net-paper-versions": "true"},
+					Labels:    map[string]string{"net-paper-versions": gcTrue},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
 					UpdateStrategy: "auto",
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
-								{Name: "papermc", Image: "lexfrei/papermc:1.21.1-91"},
+								{Name: containerNamePaperMC, Image: gcImage1211Build91},
 							},
 						},
 					},
@@ -871,8 +871,8 @@ var _ = Describe("Network failure handling", func() {
 				BuildsErr: fmt.Errorf("build info endpoint unavailable"),
 			}
 			mockRegistry := &testutil.MockRegistryAPI{
-				Tags:      []string{"1.21.1-91"},
-				TagExists: map[string]bool{"1.21.1-91": true},
+				Tags:      []string{gcVersion1211Build91},
+				TagExists: map[string]bool{gcVersion1211Build91: true},
 			}
 
 			reconciler := &PaperMCServerReconciler{
@@ -888,15 +888,15 @@ var _ = Describe("Network failure handling", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: ns,
-					Labels:    map[string]string{"net-paper-build": "true"},
+					Labels:    map[string]string{"net-paper-build": gcTrue},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "pin",
-					Version:        "1.21.1",
+					UpdateStrategy: updateStrategyPin,
+					Version:        gcVersion1211,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
-								{Name: "papermc", Image: "lexfrei/papermc:1.21.1-91"},
+								{Name: containerNamePaperMC, Image: gcImage1211Build91},
 							},
 						},
 					},
@@ -921,7 +921,7 @@ var _ = Describe("Network failure handling", func() {
 	// --------------------------------------------------------------------------
 
 	Context("Permanent vs transient error classification", func() {
-		const ns = "default"
+		const ns = gcNamespaceDefault
 
 		It("should NOT requeue on checksum mismatch (permanent user error)", func() {
 			pluginName := "net-checksum-perm"
@@ -944,13 +944,13 @@ var _ = Describe("Network failure handling", func() {
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type:     "url",
+					Type:     gcSourceURL,
 					URL:      testPluginURL,
 					Checksum: "0000000000000000000000000000000000000000000000000000000000000000",
 				},
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-checksum": "true"},
+					MatchLabels: map[string]string{"net-checksum": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -981,12 +981,12 @@ var _ = Describe("Network failure handling", func() {
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  "http://insecure.example.com/plugin.jar", // HTTP, not HTTPS
 				},
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-invalid-url": "true"},
+					MatchLabels: map[string]string{"net-invalid-url": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -1019,9 +1019,9 @@ var _ = Describe("Network failure handling", func() {
 						Type:    "modrinth", // Not yet implemented
 						Project: "SomePlugin",
 					},
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					InstanceSelector: metav1.LabelSelector{
-						MatchLabels: map[string]string{"net-unsupported": "true"},
+						MatchLabels: map[string]string{"net-unsupported": gcTrue},
 					},
 				},
 			}
@@ -1045,10 +1045,10 @@ var _ = Describe("Network failure handling", func() {
 			}
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "TransientPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "TransientPlugin"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-transient": "true"},
+					MatchLabels: map[string]string{"net-transient": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -1065,16 +1065,16 @@ var _ = Describe("Network failure handling", func() {
 	// --------------------------------------------------------------------------
 
 	Context("Status conditions lifecycle during failures", func() {
-		const ns = "default"
+		const ns = gcNamespaceDefault
 
 		It("should correctly transition conditions: available → unavailable → orphaned → available", func() {
 			pluginName := "net-cond-lifecycle"
 			mock := &testutil.MockPluginClient{
 				Versions: []plugins.PluginVersion{
 					{
-						Version:           "1.0.0",
-						MinecraftVersions: []string{"1.21.1"},
-						DownloadURL:       "https://example.com/plugin.jar",
+						Version:           gcVersion100,
+						MinecraftVersions: []string{gcVersion1211},
+						DownloadURL:       gcURLPlugin,
 						Hash:              "abc",
 					},
 				},
@@ -1087,10 +1087,10 @@ var _ = Describe("Network failure handling", func() {
 			}
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "LifecyclePlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "LifecyclePlugin"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-lifecycle": "true"},
+					MatchLabels: map[string]string{"net-lifecycle": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -1102,7 +1102,7 @@ var _ = Describe("Network failure handling", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			p := getPlugin(pluginName, ns)
-			Expect(p.Status.RepositoryStatus).To(Equal("available"))
+			Expect(p.Status.RepositoryStatus).To(Equal(repositoryStatusAvailable))
 			cond := findCondition(p.Status.Conditions, conditionTypeRepositoryAvailable)
 			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 
@@ -1128,9 +1128,9 @@ var _ = Describe("Network failure handling", func() {
 			mock.VersionErr = nil
 			mock.Versions = []plugins.PluginVersion{
 				{
-					Version:           "2.0.0",
-					MinecraftVersions: []string{"1.21.1", "1.21.4"},
-					DownloadURL:       "https://example.com/plugin-v2.jar",
+					Version:           gcVersion200,
+					MinecraftVersions: []string{gcVersion1211, gcVersion1214},
+					DownloadURL:       gcURLPluginV2,
 					Hash:              "def",
 				},
 			}
@@ -1139,7 +1139,7 @@ var _ = Describe("Network failure handling", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			p = getPlugin(pluginName, ns)
-			Expect(p.Status.RepositoryStatus).To(Equal("available"))
+			Expect(p.Status.RepositoryStatus).To(Equal(repositoryStatusAvailable))
 			cond = findCondition(p.Status.Conditions, conditionTypeRepositoryAvailable)
 			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 
@@ -1147,7 +1147,7 @@ var _ = Describe("Network failure handling", func() {
 			Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
 
 			Expect(p.Status.AvailableVersions).To(HaveLen(1))
-			Expect(p.Status.AvailableVersions[0].Version).To(Equal("2.0.0"),
+			Expect(p.Status.AvailableVersions[0].Version).To(Equal(gcVersion200),
 				"Should have new version after recovery")
 		})
 	})
@@ -1157,7 +1157,7 @@ var _ = Describe("Network failure handling", func() {
 	// --------------------------------------------------------------------------
 
 	Context("Requeue interval behavior", func() {
-		const ns = "default"
+		const ns = gcNamespaceDefault
 
 		It("should use fixed 5m requeue for all transient failures (no exponential backoff)", func() {
 			pluginName := "net-requeue-fixed"
@@ -1172,10 +1172,10 @@ var _ = Describe("Network failure handling", func() {
 			}
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "FixedRequeue"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "FixedRequeue"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-requeue": "true"},
+					MatchLabels: map[string]string{"net-requeue": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)
@@ -1200,7 +1200,7 @@ var _ = Describe("Network failure handling", func() {
 			mock := &testutil.MockPluginClient{
 				Versions: []plugins.PluginVersion{
 					{
-						Version:     "1.0.0",
+						Version:     gcVersion100,
 						DownloadURL: "https://example.com/ok.jar",
 					},
 				},
@@ -1213,10 +1213,10 @@ var _ = Describe("Network failure handling", func() {
 			}
 
 			createTestPlugin(pluginName, ns, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "OKPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "OKPlugin"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"net-requeue-ok": "true"},
+					MatchLabels: map[string]string{"net-requeue-ok": gcTrue},
 				},
 			})
 			defer deleteTestPlugin(pluginName, ns)

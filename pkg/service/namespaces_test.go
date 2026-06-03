@@ -40,7 +40,7 @@ func TestNamespaceService_ListNamespaces_IncludesDefault(t *testing.T) {
 	namespaces, err := svc.ListNamespaces(context.Background())
 
 	require.NoError(t, err)
-	assert.Contains(t, namespaces, "default")
+	assert.Contains(t, namespaces, testNamespaceDefault)
 	assert.Len(t, namespaces, 1)
 }
 
@@ -49,13 +49,13 @@ func TestNamespaceService_ListNamespaces_FromPlugins(t *testing.T) {
 
 	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-plugin",
+			Name:      testPluginName,
 			Namespace: "minecraft",
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
-				Project: "test",
+				Type:    testSourceHangar,
+				Project: testProjectName,
 			},
 		},
 	}
@@ -71,7 +71,7 @@ func TestNamespaceService_ListNamespaces_FromPlugins(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, namespaces, "minecraft")
-	assert.Contains(t, namespaces, "default")
+	assert.Contains(t, namespaces, testNamespaceDefault)
 	assert.Len(t, namespaces, 2)
 }
 
@@ -80,11 +80,11 @@ func TestNamespaceService_ListNamespaces_FromServers(t *testing.T) {
 
 	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-server",
+			Name:      testServerName,
 			Namespace: "games",
 		},
 		Spec: mck8slexlav1beta1.PaperMCServerSpec{
-			Version: "1.21.1",
+			Version: testServerVersion,
 		},
 	}
 
@@ -99,7 +99,7 @@ func TestNamespaceService_ListNamespaces_FromServers(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, namespaces, "games")
-	assert.Contains(t, namespaces, "default")
+	assert.Contains(t, namespaces, testNamespaceDefault)
 	assert.Len(t, namespaces, 2)
 }
 
@@ -109,24 +109,24 @@ func TestNamespaceService_ListNamespaces_Deduplicates(t *testing.T) {
 	// Plugin and server in the same namespace
 	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-plugin",
+			Name:      testPluginName,
 			Namespace: "shared",
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
-				Project: "test",
+				Type:    testSourceHangar,
+				Project: testProjectName,
 			},
 		},
 	}
 
 	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-server",
+			Name:      testServerName,
 			Namespace: "shared",
 		},
 		Spec: mck8slexlav1beta1.PaperMCServerSpec{
-			Version: "1.21.1",
+			Version: testServerVersion,
 		},
 	}
 
@@ -141,7 +141,7 @@ func TestNamespaceService_ListNamespaces_Deduplicates(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, namespaces, "shared")
-	assert.Contains(t, namespaces, "default")
+	assert.Contains(t, namespaces, testNamespaceDefault)
 	assert.Len(t, namespaces, 2) // No duplicates
 }
 
@@ -155,7 +155,7 @@ func TestNamespaceService_ListNamespaces_MultipleNamespaces(t *testing.T) {
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: "test1",
 			},
 		},
@@ -168,7 +168,7 @@ func TestNamespaceService_ListNamespaces_MultipleNamespaces(t *testing.T) {
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: "test2",
 			},
 		},
@@ -176,11 +176,11 @@ func TestNamespaceService_ListNamespaces_MultipleNamespaces(t *testing.T) {
 
 	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "server1",
+			Name:      testServerName1,
 			Namespace: "ns3",
 		},
 		Spec: mck8slexlav1beta1.PaperMCServerSpec{
-			Version: "1.21.1",
+			Version: testServerVersion,
 		},
 	}
 
@@ -197,7 +197,7 @@ func TestNamespaceService_ListNamespaces_MultipleNamespaces(t *testing.T) {
 	assert.Contains(t, namespaces, "ns1")
 	assert.Contains(t, namespaces, "ns2")
 	assert.Contains(t, namespaces, "ns3")
-	assert.Contains(t, namespaces, "default")
+	assert.Contains(t, namespaces, testNamespaceDefault)
 	assert.Len(t, namespaces, 4)
 }
 
@@ -208,12 +208,12 @@ func TestNamespaceService_ListNamespaces_DefaultNamespaceResources(t *testing.T)
 	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "default-plugin",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
-				Project: "test",
+				Type:    testSourceHangar,
+				Project: testProjectName,
 			},
 		},
 	}
@@ -228,7 +228,7 @@ func TestNamespaceService_ListNamespaces_DefaultNamespaceResources(t *testing.T)
 	namespaces, err := svc.ListNamespaces(context.Background())
 
 	require.NoError(t, err)
-	assert.Contains(t, namespaces, "default")
+	assert.Contains(t, namespaces, testNamespaceDefault)
 	assert.Len(t, namespaces, 1) // Only default, no duplicates
 }
 

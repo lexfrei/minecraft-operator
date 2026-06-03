@@ -21,8 +21,8 @@ func TestFilterByUpdateDelay_ZeroDelay_ShouldReturnCopy(t *testing.T) {
 	// instead of a defensive copy. Modifying the returned slice modifies
 	// the caller's input, which can cause subtle data corruption.
 	input := []VersionInfo{
-		{Version: "1.0.0", ReleaseDate: time.Now().Add(-48 * time.Hour)},
-		{Version: "2.0.0", ReleaseDate: time.Now().Add(-24 * time.Hour)},
+		{Version: testVer100, ReleaseDate: time.Now().Add(-48 * time.Hour)},
+		{Version: testVer200, ReleaseDate: time.Now().Add(-24 * time.Hour)},
 	}
 
 	result := FilterByUpdateDelay(input, 0)
@@ -40,8 +40,8 @@ func TestFilterByUpdateDelay_FiltersOldVersions(t *testing.T) {
 	t.Parallel()
 
 	input := []VersionInfo{
-		{Version: "1.0.0", ReleaseDate: time.Now().Add(-72 * time.Hour)},
-		{Version: "2.0.0", ReleaseDate: time.Now().Add(-24 * time.Hour)},
+		{Version: testVer100, ReleaseDate: time.Now().Add(-72 * time.Hour)},
+		{Version: testVer200, ReleaseDate: time.Now().Add(-24 * time.Hour)},
 		{Version: "3.0.0", ReleaseDate: time.Now().Add(-1 * time.Hour)},
 	}
 
@@ -49,7 +49,7 @@ func TestFilterByUpdateDelay_FiltersOldVersions(t *testing.T) {
 	result := FilterByUpdateDelay(input, 48*time.Hour)
 
 	require.Len(t, result, 1)
-	assert.Equal(t, "1.0.0", result[0].Version)
+	assert.Equal(t, testVer100, result[0].Version)
 }
 
 func TestFilterByUpdateDelay_EmptyInput(t *testing.T) {
@@ -72,8 +72,8 @@ func TestFilterByUpdateDelay_AllVersionsTooNew(t *testing.T) {
 	t.Parallel()
 
 	input := []VersionInfo{
-		{Version: "1.0.0", ReleaseDate: time.Now().Add(-1 * time.Hour)},
-		{Version: "2.0.0", ReleaseDate: time.Now()},
+		{Version: testVer100, ReleaseDate: time.Now().Add(-1 * time.Hour)},
+		{Version: testVer200, ReleaseDate: time.Now()},
 	}
 
 	result := FilterByUpdateDelay(input, 24*time.Hour)

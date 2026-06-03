@@ -21,6 +21,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// Test-only literals reused across webui handler test cases.
+const (
+	testNamespace  = "default"
+	testServerName = "test-server"
+	testVersion    = "1.21.1"
+	sourceHangar   = "hangar"
+	strategyLatest = "latest"
+	strategyAuto   = "auto"
+	projectBlueMap = "BlueMap"
+)
+
 func TestFormatCronSchedule(t *testing.T) {
 	t.Parallel()
 
@@ -179,7 +190,7 @@ func newTestServer(objs ...client.Object) *Server {
 
 	return &Server{
 		client:        fakeClient,
-		namespace:     "default",
+		namespace:     testNamespace,
 		sse:           NewSSEBroker(),
 		serverService: service.NewServerService(fakeClient),
 		pluginService: service.NewPluginService(fakeClient),
@@ -239,25 +250,25 @@ func TestHandlePluginListShowsAllPlugins(t *testing.T) {
 	plugin1 := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "essentialsx",
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    sourceHangar,
 				Project: "EssentialsX",
 			},
-			UpdateStrategy: "latest",
+			UpdateStrategy: strategyLatest,
 		},
 	}
 	plugin2 := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "bluemap",
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
-				Project: "BlueMap",
+				Type:    sourceHangar,
+				Project: projectBlueMap,
 			},
 			UpdateStrategy: "pin",
 			Version:        "5.4",
@@ -326,14 +337,14 @@ func TestHandlePluginDeleteRemovesPlugin(t *testing.T) {
 	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "to-delete",
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    sourceHangar,
 				Project: "DeleteMe",
 			},
-			UpdateStrategy: "latest",
+			UpdateStrategy: strategyLatest,
 		},
 	}
 
@@ -353,7 +364,7 @@ func TestHandlePluginDeleteRemovesPlugin(t *testing.T) {
 	var deletedPlugin mck8slexlav1beta1.Plugin
 	err := srv.client.Get(context.Background(), client.ObjectKey{
 		Name:      "to-delete",
-		Namespace: "default",
+		Namespace: testNamespace,
 	}, &deletedPlugin)
 	if err == nil {
 		t.Error("expected plugin to be deleted, but it still exists")
@@ -365,11 +376,11 @@ func TestHandleApplyNowSetsAnnotation(t *testing.T) {
 
 	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-server",
-			Namespace: "default",
+			Name:      testServerName,
+			Namespace: testNamespace,
 		},
 		Spec: mck8slexlav1beta1.PaperMCServerSpec{
-			UpdateStrategy: "auto",
+			UpdateStrategy: strategyAuto,
 		},
 	}
 
@@ -387,8 +398,8 @@ func TestHandleApplyNowSetsAnnotation(t *testing.T) {
 	// Verify annotation was set
 	var updatedServer mck8slexlav1beta1.PaperMCServer
 	err := srv.client.Get(context.Background(), client.ObjectKey{
-		Name:      "test-server",
-		Namespace: "default",
+		Name:      testServerName,
+		Namespace: testNamespace,
 	}, &updatedServer)
 	if err != nil {
 		t.Fatalf("failed to get server: %v", err)
@@ -421,11 +432,11 @@ func TestHandleApplyNowFromPluginRouteReturnsError(t *testing.T) {
 
 	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-server",
-			Namespace: "default",
+			Name:      testServerName,
+			Namespace: testNamespace,
 		},
 		Spec: mck8slexlav1beta1.PaperMCServerSpec{
-			UpdateStrategy: "auto",
+			UpdateStrategy: strategyAuto,
 		},
 	}
 
@@ -462,10 +473,10 @@ func TestHandleServerStatus_NegativeAttempt_ShouldClampOrReject(t *testing.T) {
 	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "status-test",
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 		Spec: mck8slexlav1beta1.PaperMCServerSpec{
-			UpdateStrategy: "auto",
+			UpdateStrategy: strategyAuto,
 		},
 	}
 
@@ -498,10 +509,10 @@ func TestHandleServerDeleteRemovesServer(t *testing.T) {
 	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "server-to-delete",
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 		Spec: mck8slexlav1beta1.PaperMCServerSpec{
-			UpdateStrategy: "auto",
+			UpdateStrategy: strategyAuto,
 		},
 	}
 
@@ -521,7 +532,7 @@ func TestHandleServerDeleteRemovesServer(t *testing.T) {
 	var deletedServer mck8slexlav1beta1.PaperMCServer
 	err := srv.client.Get(context.Background(), client.ObjectKey{
 		Name:      "server-to-delete",
-		Namespace: "default",
+		Namespace: testNamespace,
 	}, &deletedServer)
 	if err == nil {
 		t.Error("expected server to be deleted, but it still exists")
@@ -534,14 +545,14 @@ func TestHandleServerEditReturns200(t *testing.T) {
 	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "edit-server",
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 		Spec: mck8slexlav1beta1.PaperMCServerSpec{
-			UpdateStrategy: "auto",
-			Version:        "1.21.1",
+			UpdateStrategy: strategyAuto,
+			Version:        testVersion,
 		},
 		Status: mck8slexlav1beta1.PaperMCServerStatus{
-			CurrentVersion: "1.21.1",
+			CurrentVersion: testVersion,
 			CurrentBuild:   100,
 		},
 	}
@@ -587,14 +598,14 @@ func TestHandlePluginEditReturns200(t *testing.T) {
 	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "edit-plugin",
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
-				Project: "BlueMap",
+				Type:    sourceHangar,
+				Project: projectBlueMap,
 			},
-			UpdateStrategy: "latest",
+			UpdateStrategy: strategyLatest,
 		},
 	}
 
@@ -621,14 +632,14 @@ func TestHandlePluginDetailReturns200(t *testing.T) {
 	plugin := &mck8slexlav1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "detail-plugin",
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 		Spec: mck8slexlav1beta1.PluginSpec{
 			Source: mck8slexlav1beta1.PluginSource{
-				Type:    "hangar",
-				Project: "BlueMap",
+				Type:    sourceHangar,
+				Project: projectBlueMap,
 			},
-			UpdateStrategy: "latest",
+			UpdateStrategy: strategyLatest,
 		},
 	}
 
@@ -717,11 +728,11 @@ func TestHandleServerRoutes_UnknownAction_Returns404(t *testing.T) {
 
 	server := &mck8slexlav1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-server",
-			Namespace: "default",
+			Name:      testServerName,
+			Namespace: testNamespace,
 		},
 		Spec: mck8slexlav1beta1.PaperMCServerSpec{
-			UpdateStrategy: "auto",
+			UpdateStrategy: strategyAuto,
 		},
 	}
 
@@ -773,9 +784,9 @@ func TestServerDataToValues_IncludesLabels(t *testing.T) {
 
 	data := &service.ServerData{
 		Name:           "test",
-		Namespace:      "default",
-		UpdateStrategy: "auto",
-		CurrentVersion: "1.21.1",
+		Namespace:      testNamespace,
+		UpdateStrategy: strategyAuto,
+		CurrentVersion: testVersion,
 		Labels: map[string]string{
 			"env":  "prod",
 			"game": "survival",

@@ -19,6 +19,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test-only version literals reused across plugins test cases.
+const (
+	testPluginVersion = "1.0.0"
+	mcVersion1211     = "1.21.1"
+	mcVersion1212     = "1.21.2"
+)
+
 // newTestHangarClient creates a HangarClient pointing to a test server.
 func newTestHangarClient(serverURL string, httpClient *http.Client) *HangarClient {
 	client := hangar.NewClient(hangar.Config{
@@ -55,7 +62,7 @@ func makeTestVersion(name string, gameVersions, paperVersions []string, download
 		if hash != "" {
 			fileInfo.SHA256Hash = hash
 		}
-		downloads["PAPER"] = hangar.DownloadInfo{
+		downloads[platformPaper] = hangar.DownloadInfo{
 			DownloadURL: downloadURL,
 			FileInfo:    fileInfo,
 		}
@@ -63,7 +70,7 @@ func makeTestVersion(name string, gameVersions, paperVersions []string, download
 
 	platformDeps := map[string][]string{}
 	if len(paperVersions) > 0 {
-		platformDeps["PAPER"] = paperVersions
+		platformDeps[platformPaper] = paperVersions
 	}
 
 	return hangar.Version{
@@ -102,8 +109,9 @@ func TestHangarClient_GetVersions_Success(t *testing.T) {
 		case "/projects/TestOwner/test-plugin/versions":
 			// ListVersions call
 			versions := makeVersionsList(
-				makeTestVersion("1.0.0", []string{"1.21.1"}, []string{"1.21.1"}, "https://example.com/v1.jar", "abc123"),
-				makeTestVersion("1.1.0", []string{"1.21.1", "1.21.2"}, []string{"1.21.1", "1.21.2"},
+				makeTestVersion(testPluginVersion, []string{mcVersion1211}, []string{mcVersion1211},
+					"https://example.com/v1.jar", "abc123"),
+				makeTestVersion("1.1.0", []string{mcVersion1211, mcVersion1212}, []string{mcVersion1211, mcVersion1212},
 					"https://example.com/v2.jar", "def456"),
 			)
 			w.Header().Set("Content-Type", "application/json")
@@ -122,9 +130,9 @@ func TestHangarClient_GetVersions_Success(t *testing.T) {
 	require.Len(t, versions, 2)
 
 	// Check first version
-	assert.Equal(t, "1.0.0", versions[0].Version)
-	assert.Equal(t, []string{"1.21.1"}, versions[0].MinecraftVersions)
-	assert.Equal(t, []string{"1.21.1"}, versions[0].PaperVersions)
+	assert.Equal(t, testPluginVersion, versions[0].Version)
+	assert.Equal(t, []string{mcVersion1211}, versions[0].MinecraftVersions)
+	assert.Equal(t, []string{mcVersion1211}, versions[0].PaperVersions)
 	assert.Equal(t, "https://example.com/v1.jar", versions[0].DownloadURL)
 	assert.Equal(t, "abc123", versions[0].Hash)
 
@@ -173,10 +181,10 @@ func TestHangarClient_GetVersions_ExternalURLFallback(t *testing.T) {
 			// Version with ExternalURL instead of DownloadURL
 			version := hangar.Version{
 				ID:           1,
-				Name:         "1.0.0",
-				GameVersions: []string{"1.21.1"},
+				Name:         testPluginVersion,
+				GameVersions: []string{mcVersion1211},
 				Downloads: map[string]hangar.DownloadInfo{
-					"PAPER": {
+					platformPaper: {
 						ExternalURL: "https://github.com/example/plugin/releases/v1.0.0.jar",
 						FileInfo:    &hangar.FileInfo{SHA256Hash: "ext123"},
 					},
@@ -215,13 +223,13 @@ func TestHangarClient_GetVersions_GameVersionsFallback(t *testing.T) {
 			// Version with empty GameVersions - should fall back to PlatformDependencies.PAPER
 			version := hangar.Version{
 				ID:           1,
-				Name:         "1.0.0",
+				Name:         testPluginVersion,
 				GameVersions: nil, // Empty!
 				PlatformDependencies: map[string][]string{
-					"PAPER": {"1.21.1", "1.21.2"},
+					platformPaper: {mcVersion1211, mcVersion1212},
 				},
 				Downloads: map[string]hangar.DownloadInfo{
-					"PAPER": {
+					platformPaper: {
 						DownloadURL: "https://example.com/plugin.jar",
 					},
 				},
@@ -243,8 +251,8 @@ func TestHangarClient_GetVersions_GameVersionsFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, versions, 1)
 	// Should use PlatformDependencies.PAPER as fallback
-	assert.Equal(t, []string{"1.21.1", "1.21.2"}, versions[0].MinecraftVersions)
-	assert.Equal(t, []string{"1.21.1", "1.21.2"}, versions[0].PaperVersions)
+	assert.Equal(t, []string{mcVersion1211, mcVersion1212}, versions[0].MinecraftVersions)
+	assert.Equal(t, []string{mcVersion1211, mcVersion1212}, versions[0].PaperVersions)
 }
 
 func TestHangarClient_GetVersions_ProjectNotFound(t *testing.T) {
@@ -303,8 +311,8 @@ func TestHangarClient_GetVersions_NoPaperDownloads(t *testing.T) {
 			// Version without PAPER downloads (e.g., only Velocity)
 			version := hangar.Version{
 				ID:           1,
-				Name:         "1.0.0",
-				GameVersions: []string{"1.21.1"},
+				Name:         testPluginVersion,
+				GameVersions: []string{mcVersion1211},
 				Downloads: map[string]hangar.DownloadInfo{
 					"VELOCITY": {
 						DownloadURL: "https://example.com/velocity.jar",
@@ -339,7 +347,8 @@ func TestHangarClient_GetCompatibility_Success(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/projects/test-plugin/versions/1.0.0" {
-			version := makeTestVersion("1.0.0", []string{"1.21.1", "1.21.2"}, []string{"1.21.1", "1.21.2"}, "", "")
+			version := makeTestVersion(testPluginVersion,
+				[]string{mcVersion1211, mcVersion1212}, []string{mcVersion1211, mcVersion1212}, "", "")
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(version)
 		} else {
@@ -350,11 +359,11 @@ func TestHangarClient_GetCompatibility_Success(t *testing.T) {
 
 	client := newTestHangarClient(server.URL, server.Client())
 
-	compat, err := client.GetCompatibility(context.Background(), "test-plugin", "1.0.0")
+	compat, err := client.GetCompatibility(context.Background(), "test-plugin", testPluginVersion)
 
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1.21.1", "1.21.2"}, compat.MinecraftVersions)
-	assert.Equal(t, []string{"1.21.1", "1.21.2"}, compat.PaperVersions)
+	assert.Equal(t, []string{mcVersion1211, mcVersion1212}, compat.MinecraftVersions)
+	assert.Equal(t, []string{mcVersion1211, mcVersion1212}, compat.PaperVersions)
 }
 
 func TestHangarClient_GetCompatibility_VersionNotFound(t *testing.T) {
@@ -382,10 +391,10 @@ func TestHangarClient_GetCompatibility_FallbackVersions(t *testing.T) {
 			// Version with empty GameVersions
 			version := hangar.Version{
 				ID:           1,
-				Name:         "1.0.0",
+				Name:         testPluginVersion,
 				GameVersions: nil, // Empty
 				PlatformDependencies: map[string][]string{
-					"PAPER": {"1.21.1", "1.21.2"},
+					platformPaper: {mcVersion1211, mcVersion1212},
 				},
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -398,12 +407,12 @@ func TestHangarClient_GetCompatibility_FallbackVersions(t *testing.T) {
 
 	client := newTestHangarClient(server.URL, server.Client())
 
-	compat, err := client.GetCompatibility(context.Background(), "test-plugin", "1.0.0")
+	compat, err := client.GetCompatibility(context.Background(), "test-plugin", testPluginVersion)
 
 	require.NoError(t, err)
 	// Should fallback to PlatformDependencies.PAPER
-	assert.Equal(t, []string{"1.21.1", "1.21.2"}, compat.MinecraftVersions)
-	assert.Equal(t, []string{"1.21.1", "1.21.2"}, compat.PaperVersions)
+	assert.Equal(t, []string{mcVersion1211, mcVersion1212}, compat.MinecraftVersions)
+	assert.Equal(t, []string{mcVersion1211, mcVersion1212}, compat.PaperVersions)
 }
 
 // --- Constructor test ---
@@ -436,7 +445,7 @@ func TestHangarClient_GetVersions_ExternalURL_GitHubReleasePage(t *testing.T) {
 				Name:         "2.21.2",
 				GameVersions: []string{"1.21.8"},
 				Downloads: map[string]hangar.DownloadInfo{
-					"PAPER": {
+					platformPaper: {
 						// This is a release PAGE, not a direct JAR download!
 						ExternalURL: "https://github.com/EssentialsX/Essentials/releases/tags/2.21.2",
 					},
@@ -484,9 +493,9 @@ func TestHangarClient_GetVersions_ExternallyHosted_EmptyDownloadURL(t *testing.T
 			version := hangar.Version{
 				ID:           1,
 				Name:         "1.5.0",
-				GameVersions: []string{"1.21.1"},
+				GameVersions: []string{mcVersion1211},
 				Downloads: map[string]hangar.DownloadInfo{
-					"PAPER": {
+					platformPaper: {
 						// Both DownloadURL and ExternalURL are empty
 						DownloadURL: "",
 						ExternalURL: "",

@@ -53,14 +53,14 @@ func (v *PluginValidator) validate(p *Plugin) (admission.Warnings, error) {
 
 	// Source-specific validation.
 	switch p.Spec.Source.Type {
-	case "hangar":
+	case sourceTypeHangar:
 		if p.Spec.Source.Project == "" {
 			allErrs = append(allErrs, field.Required(
 				specPath.Child("source", "project"),
 				"project is required for source type 'hangar'",
 			))
 		}
-	case "url":
+	case sourceTypeURL:
 		urlWarnings, urlErrs := validateURLSource(p, specPath)
 		allErrs = append(allErrs, urlErrs...)
 		warnings = append(warnings, urlWarnings...)
@@ -77,7 +77,7 @@ func (v *PluginValidator) validate(p *Plugin) (admission.Warnings, error) {
 		allErrs = append(allErrs, field.NotSupported(
 			specPath.Child("source", "type"),
 			p.Spec.Source.Type,
-			[]string{"hangar", "url"},
+			[]string{sourceTypeHangar, sourceTypeURL},
 		))
 	}
 
@@ -132,16 +132,16 @@ func validatePluginStrategy(p *Plugin, specPath *field.Path) field.ErrorList {
 	var errs field.ErrorList
 
 	switch p.Spec.UpdateStrategy {
-	case "latest", "auto":
+	case strategyLatest, strategyAuto:
 		// No additional fields required.
-	case "pin":
+	case strategyPin:
 		if p.Spec.Version == "" {
 			errs = append(errs, field.Required(
 				specPath.Child("version"),
 				"version is required for 'pin' strategy",
 			))
 		}
-	case "build-pin":
+	case strategyBuildPin:
 		if p.Spec.Version == "" {
 			errs = append(errs, field.Required(
 				specPath.Child("version"),
@@ -159,7 +159,7 @@ func validatePluginStrategy(p *Plugin, specPath *field.Path) field.ErrorList {
 		errs = append(errs, field.NotSupported(
 			specPath.Child("updateStrategy"),
 			p.Spec.UpdateStrategy,
-			[]string{"latest", "auto", "pin", "build-pin"},
+			[]string{strategyLatest, strategyAuto, strategyPin, strategyBuildPin},
 		))
 	}
 
@@ -199,16 +199,16 @@ func validateEndpoints(p *Plugin, specPath *field.Path) field.ErrorList {
 
 		proto := ep.Protocol
 		if proto == "" {
-			proto = "TCP"
+			proto = protocolTCP
 		}
 
 		switch proto {
-		case "TCP", "UDP", "HTTP":
+		case protocolTCP, protocolUDP, protocolHTTP:
 			// valid
 		default:
 			errs = append(errs, field.NotSupported(
 				epPath.Child("protocol"), ep.Protocol,
-				[]string{"TCP", "UDP", "HTTP"},
+				[]string{protocolTCP, protocolUDP, protocolHTTP},
 			))
 		}
 

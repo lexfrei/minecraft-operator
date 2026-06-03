@@ -17,6 +17,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+// Update strategy values shared by PaperMCServer and Plugin validation.
+const (
+	strategyLatest   = "latest"
+	strategyAuto     = "auto"
+	strategyPin      = "pin"
+	strategyBuildPin = "build-pin"
+)
+
+// Plugin source type values.
+const (
+	sourceTypeHangar = "hangar"
+	sourceTypeURL    = "url"
+)
+
+// Endpoint protocol values.
+const (
+	protocolTCP  = "TCP"
+	protocolUDP  = "UDP"
+	protocolHTTP = "HTTP"
+)
+
 // hostnamePattern matches valid RFC 1123 hostnames.
 var hostnamePattern = regexp.MustCompile(
 	`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`,
@@ -65,16 +86,16 @@ func validateServerStrategy(s *PaperMCServer, specPath *field.Path) field.ErrorL
 	var errs field.ErrorList
 
 	switch s.Spec.UpdateStrategy {
-	case "latest", "auto":
+	case strategyLatest, strategyAuto:
 		// No additional fields required.
-	case "pin":
+	case strategyPin:
 		if s.Spec.Version == "" {
 			errs = append(errs, field.Required(
 				specPath.Child("version"),
 				"version is required for 'pin' strategy",
 			))
 		}
-	case "build-pin":
+	case strategyBuildPin:
 		if s.Spec.Version == "" {
 			errs = append(errs, field.Required(
 				specPath.Child("version"),
@@ -92,7 +113,7 @@ func validateServerStrategy(s *PaperMCServer, specPath *field.Path) field.ErrorL
 		errs = append(errs, field.NotSupported(
 			specPath.Child("updateStrategy"),
 			s.Spec.UpdateStrategy,
-			[]string{"latest", "auto", "pin", "build-pin"},
+			[]string{strategyLatest, strategyAuto, strategyPin, strategyBuildPin},
 		))
 	}
 

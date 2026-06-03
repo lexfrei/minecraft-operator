@@ -152,8 +152,8 @@ func serverDataToValues(data *service.ServerData) map[string]any {
 		version = data.DesiredVersion
 	}
 	values := map[string]any{
-		"name":           data.Name,
-		"namespace":      data.Namespace,
+		keyName:          data.Name,
+		keyNamespace:     data.Namespace,
 		"updateStrategy": data.UpdateStrategy,
 		"version":        version,
 		"checkCron":      "",
