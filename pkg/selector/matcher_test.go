@@ -18,15 +18,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// Test fixture constants.
+const (
+	labelKeyApp       = "app"
+	labelValuePapermc = "papermc"
+)
+
 func TestMatchesSelector(t *testing.T) {
 	t.Run("should match labels with matching selector", func(t *testing.T) {
 		labels := map[string]string{
-			"app":  "papermc",
-			"tier": "game",
+			labelKeyApp: labelValuePapermc,
+			"tier":      "game",
 		}
 		selector := metav1.LabelSelector{
 			MatchLabels: map[string]string{
-				"app": "papermc",
+				labelKeyApp: labelValuePapermc,
 			},
 		}
 
@@ -37,11 +43,11 @@ func TestMatchesSelector(t *testing.T) {
 
 	t.Run("should not match labels with non-matching selector", func(t *testing.T) {
 		labels := map[string]string{
-			"app": "papermc",
+			labelKeyApp: labelValuePapermc,
 		}
 		selector := metav1.LabelSelector{
 			MatchLabels: map[string]string{
-				"app": "vanilla",
+				labelKeyApp: "vanilla",
 			},
 		}
 
@@ -52,7 +58,7 @@ func TestMatchesSelector(t *testing.T) {
 
 	t.Run("should match empty selector to any labels", func(t *testing.T) {
 		labels := map[string]string{
-			"app": "papermc",
+			labelKeyApp: labelValuePapermc,
 		}
 		selector := metav1.LabelSelector{}
 
@@ -62,11 +68,11 @@ func TestMatchesSelector(t *testing.T) {
 	})
 
 	t.Run("should return error for invalid selector", func(t *testing.T) {
-		labels := map[string]string{"app": "papermc"}
+		labels := map[string]string{labelKeyApp: labelValuePapermc}
 		selector := metav1.LabelSelector{
 			MatchExpressions: []metav1.LabelSelectorRequirement{
 				{
-					Key:      "app",
+					Key:      labelKeyApp,
 					Operator: "InvalidOperator",
 				},
 			},
@@ -89,7 +95,7 @@ func TestFindMatchingPlugins_InvalidSelector(t *testing.T) {
 				UpdateStrategy: "latest",
 				InstanceSelector: metav1.LabelSelector{
 					MatchExpressions: []metav1.LabelSelectorRequirement{
-						{Key: "app", Operator: "InvalidOperator"},
+						{Key: labelKeyApp, Operator: "InvalidOperator"},
 					},
 				},
 			},
@@ -100,7 +106,7 @@ func TestFindMatchingPlugins_InvalidSelector(t *testing.T) {
 				Source:         mcv1beta1.PluginSource{Type: "hangar", Project: "TestPlugin2"},
 				UpdateStrategy: "latest",
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"app": "papermc"},
+					MatchLabels: map[string]string{labelKeyApp: labelValuePapermc},
 				},
 			},
 		}
@@ -111,7 +117,7 @@ func TestFindMatchingPlugins_InvalidSelector(t *testing.T) {
 			Build()
 
 		_, err := FindMatchingPlugins(
-			context.Background(), fakeClient, "default", map[string]string{"app": "papermc"},
+			context.Background(), fakeClient, "default", map[string]string{labelKeyApp: labelValuePapermc},
 		)
 		require.Error(t, err, "should return error for invalid instanceSelector")
 	})

@@ -10,6 +10,9 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
+// labelController is the Prometheus label key used in reconcile metric assertions.
+const labelController = "controller"
+
 func TestNoopRecorderImplementsRecorder(t *testing.T) {
 	var _ metrics.Recorder = &metrics.NoopRecorder{}
 }
@@ -83,7 +86,7 @@ func TestRecordReconcileIncrementsCounter(t *testing.T) {
 	r.RecordReconcile("plugin", nil, 100*time.Millisecond)
 	r.RecordReconcile("plugin", nil, 200*time.Millisecond)
 
-	labels := map[string]string{"controller": "plugin"}
+	labels := map[string]string{labelController: "plugin"}
 
 	val := getCounterValue(t, reg,
 		"minecraft_operator_reconcile_total", labels)
@@ -99,7 +102,7 @@ func TestRecordReconcileErrorIncrementsErrorCounter(t *testing.T) {
 	r.RecordReconcile("plugin", errors.New("fail"), time.Second)
 	r.RecordReconcile("plugin", nil, time.Second)
 
-	labels := map[string]string{"controller": "plugin"}
+	labels := map[string]string{labelController: "plugin"}
 
 	errVal := getCounterValue(t, reg,
 		"minecraft_operator_reconcile_errors_total", labels)
@@ -120,7 +123,7 @@ func TestRecordReconcileDurationObservesHistogram(t *testing.T) {
 
 	r.RecordReconcile("update", nil, 500*time.Millisecond)
 
-	labels := map[string]string{"controller": "update"}
+	labels := map[string]string{labelController: "update"}
 
 	count := getHistogramCount(t, reg,
 		"minecraft_operator_reconcile_duration_seconds", labels)

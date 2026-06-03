@@ -23,6 +23,23 @@ import (
 
 const testProject = "TestProject"
 
+// Test fixture constants.
+const (
+	testValue            = "test"
+	testNamespaceDefault = "default"
+	testServerName       = "test-server"
+	testMyServerName     = "my-server"
+	testMyPluginName     = "my-plugin"
+	testDeleteMeName     = "delete-me"
+	testNonexistentName  = "nonexistent"
+	testServerVersion    = "1.21.1"
+	testSourceHangar     = "hangar"
+	testStatusRunning    = "running"
+	testEndpointWebUI    = "web-ui"
+	labelKeyApp          = "app"
+	labelValuePapermc    = "papermc"
+)
+
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	_ = mcv1beta1.AddToScheme(scheme)
@@ -86,19 +103,19 @@ func TestListNamespaces_IncludesDefault(t *testing.T) {
 
 	nsResp, ok := resp.(generated.ListNamespaces200JSONResponse)
 	require.True(t, ok, "Expected 200 response, got %T", resp)
-	assert.Contains(t, nsResp.Namespaces, "default",
+	assert.Contains(t, nsResp.Namespaces, testNamespaceDefault,
 		"ListNamespaces should always include 'default' namespace")
 }
 
 func TestListNamespaces_IncludesServerNamespaces(t *testing.T) {
 	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-server",
+			Name:      testServerName,
 			Namespace: "minecraft",
 		},
 		Spec: mcv1beta1.PaperMCServerSpec{
-			Version:        "1.21.1",
-			UpdateStrategy: "latest",
+			Version:        testServerVersion,
+			UpdateStrategy: updateStrategyLatest,
 		},
 	}
 
@@ -108,7 +125,7 @@ func TestListNamespaces_IncludesServerNamespaces(t *testing.T) {
 		WithObjects(server).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	resp, err := srv.ListNamespaces(ctx, generated.ListNamespacesRequestObject{})
@@ -137,12 +154,12 @@ func TestListServers_Empty(t *testing.T) {
 func TestListServers_WithServer(t *testing.T) {
 	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-server",
-			Namespace: "default",
+			Name:      testMyServerName,
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mcv1beta1.PaperMCServerSpec{
-			Version:        "1.21.1",
-			UpdateStrategy: "latest",
+			Version:        testServerVersion,
+			UpdateStrategy: updateStrategyLatest,
 		},
 	}
 
@@ -152,7 +169,7 @@ func TestListServers_WithServer(t *testing.T) {
 		WithObjects(server).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	resp, err := srv.ListServers(ctx, generated.ListServersRequestObject{})
@@ -161,8 +178,8 @@ func TestListServers_WithServer(t *testing.T) {
 	listResp, ok := resp.(generated.ListServers200JSONResponse)
 	require.True(t, ok)
 	assert.Len(t, listResp.Servers, 1)
-	assert.Equal(t, "my-server", listResp.Servers[0].Name)
-	assert.Equal(t, "default", listResp.Servers[0].Namespace)
+	assert.Equal(t, testMyServerName, listResp.Servers[0].Name)
+	assert.Equal(t, testNamespaceDefault, listResp.Servers[0].Namespace)
 }
 
 func TestListServers_FilterByNamespace(t *testing.T) {
@@ -172,8 +189,8 @@ func TestListServers_FilterByNamespace(t *testing.T) {
 			Namespace: "ns1",
 		},
 		Spec: mcv1beta1.PaperMCServerSpec{
-			Version:        "1.21.1",
-			UpdateStrategy: "latest",
+			Version:        testServerVersion,
+			UpdateStrategy: updateStrategyLatest,
 		},
 	}
 	server2 := &mcv1beta1.PaperMCServer{
@@ -182,8 +199,8 @@ func TestListServers_FilterByNamespace(t *testing.T) {
 			Namespace: "ns2",
 		},
 		Spec: mcv1beta1.PaperMCServerSpec{
-			Version:        "1.21.1",
-			UpdateStrategy: "latest",
+			Version:        testServerVersion,
+			UpdateStrategy: updateStrategyLatest,
 		},
 	}
 
@@ -193,7 +210,7 @@ func TestListServers_FilterByNamespace(t *testing.T) {
 		WithObjects(server1, server2).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	ns := "ns1"
@@ -229,28 +246,28 @@ func TestCreateServer_Success(t *testing.T) {
 
 	resp, err := srv.CreateServer(ctx, generated.CreateServerRequestObject{
 		Body: &generated.CreateServerJSONRequestBody{
-			Name:           "test-server",
-			Namespace:      "default",
-			UpdateStrategy: "latest",
+			Name:           testServerName,
+			Namespace:      testNamespaceDefault,
+			UpdateStrategy: updateStrategyLatest,
 		},
 	})
 	require.NoError(t, err)
 
 	createResp, ok := resp.(generated.CreateServer201JSONResponse)
 	require.True(t, ok, "Expected 201 response, got %T", resp)
-	assert.Equal(t, "test-server", createResp.Name)
-	assert.Equal(t, "default", createResp.Namespace)
+	assert.Equal(t, testServerName, createResp.Name)
+	assert.Equal(t, testNamespaceDefault, createResp.Namespace)
 }
 
 func TestCreateServer_Duplicate(t *testing.T) {
 	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "existing-server",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mcv1beta1.PaperMCServerSpec{
-			Version:        "1.21.1",
-			UpdateStrategy: "latest",
+			Version:        testServerVersion,
+			UpdateStrategy: updateStrategyLatest,
 		},
 	}
 
@@ -260,14 +277,14 @@ func TestCreateServer_Duplicate(t *testing.T) {
 		WithObjects(server).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	resp, err := srv.CreateServer(ctx, generated.CreateServerRequestObject{
 		Body: &generated.CreateServerJSONRequestBody{
 			Name:           "existing-server",
-			Namespace:      "default",
-			UpdateStrategy: "latest",
+			Namespace:      testNamespaceDefault,
+			UpdateStrategy: updateStrategyLatest,
 		},
 	})
 	require.NoError(t, err)
@@ -281,12 +298,12 @@ func TestCreateServer_Duplicate(t *testing.T) {
 func TestGetServer_Found(t *testing.T) {
 	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-server",
-			Namespace: "default",
+			Name:      testMyServerName,
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mcv1beta1.PaperMCServerSpec{
-			Version:        "1.21.1",
-			UpdateStrategy: "latest",
+			Version:        testServerVersion,
+			UpdateStrategy: updateStrategyLatest,
 		},
 	}
 
@@ -296,18 +313,18 @@ func TestGetServer_Found(t *testing.T) {
 		WithObjects(server).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	resp, err := srv.GetServer(ctx, generated.GetServerRequestObject{
-		Namespace: "default",
-		Name:      "my-server",
+		Namespace: testNamespaceDefault,
+		Name:      testMyServerName,
 	})
 	require.NoError(t, err)
 
 	getResp, ok := resp.(generated.GetServer200JSONResponse)
 	require.True(t, ok, "Expected 200 response, got %T", resp)
-	assert.Equal(t, "my-server", getResp.Name)
+	assert.Equal(t, testMyServerName, getResp.Name)
 }
 
 func TestGetServer_NotFound(t *testing.T) {
@@ -315,8 +332,8 @@ func TestGetServer_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	resp, err := srv.GetServer(ctx, generated.GetServerRequestObject{
-		Namespace: "default",
-		Name:      "nonexistent",
+		Namespace: testNamespaceDefault,
+		Name:      testNonexistentName,
 	})
 	require.NoError(t, err)
 
@@ -329,12 +346,12 @@ func TestGetServer_NotFound(t *testing.T) {
 func TestDeleteServer_Success(t *testing.T) {
 	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "delete-me",
-			Namespace: "default",
+			Name:      testDeleteMeName,
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mcv1beta1.PaperMCServerSpec{
-			Version:        "1.21.1",
-			UpdateStrategy: "latest",
+			Version:        testServerVersion,
+			UpdateStrategy: updateStrategyLatest,
 		},
 	}
 
@@ -344,12 +361,12 @@ func TestDeleteServer_Success(t *testing.T) {
 		WithObjects(server).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	resp, err := srv.DeleteServer(ctx, generated.DeleteServerRequestObject{
-		Namespace: "default",
-		Name:      "delete-me",
+		Namespace: testNamespaceDefault,
+		Name:      testDeleteMeName,
 	})
 	require.NoError(t, err)
 
@@ -362,8 +379,8 @@ func TestDeleteServer_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	resp, err := srv.DeleteServer(ctx, generated.DeleteServerRequestObject{
-		Namespace: "default",
-		Name:      "nonexistent",
+		Namespace: testNamespaceDefault,
+		Name:      testNonexistentName,
 	})
 	require.NoError(t, err)
 
@@ -378,8 +395,8 @@ func TestUpdateServer_NilBody(t *testing.T) {
 	ctx := context.Background()
 
 	resp, err := srv.UpdateServer(ctx, generated.UpdateServerRequestObject{
-		Namespace: "default",
-		Name:      "test",
+		Namespace: testNamespaceDefault,
+		Name:      testValue,
 		Body:      nil,
 	})
 	require.NoError(t, err)
@@ -392,10 +409,10 @@ func TestUpdateServer_NotFound(t *testing.T) {
 	srv := newTestServer()
 	ctx := context.Background()
 
-	strategy := generated.UpdateStrategy("latest")
+	strategy := generated.UpdateStrategy(updateStrategyLatest)
 	resp, err := srv.UpdateServer(ctx, generated.UpdateServerRequestObject{
-		Namespace: "default",
-		Name:      "nonexistent",
+		Namespace: testNamespaceDefault,
+		Name:      testNonexistentName,
 		Body: &generated.ServerUpdateRequest{
 			UpdateStrategy: &strategy,
 		},
@@ -413,8 +430,8 @@ func TestResolveServer_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	resp, err := srv.ResolveServer(ctx, generated.ResolveServerRequestObject{
-		Namespace: "default",
-		Name:      "nonexistent",
+		Namespace: testNamespaceDefault,
+		Name:      testNonexistentName,
 	})
 	require.NoError(t, err)
 
@@ -429,8 +446,8 @@ func TestApplyNowServer_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	resp, err := srv.ApplyNowServer(ctx, generated.ApplyNowServerRequestObject{
-		Namespace: "default",
-		Name:      "nonexistent",
+		Namespace: testNamespaceDefault,
+		Name:      testNonexistentName,
 	})
 	require.NoError(t, err)
 
@@ -456,16 +473,16 @@ func TestListPlugins_WithPlugins(t *testing.T) {
 	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-plugin",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mcv1beta1.PluginSpec{
 			Source: mcv1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: testProject,
 			},
-			UpdateStrategy: "latest",
+			UpdateStrategy: updateStrategyLatest,
 			InstanceSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "papermc"},
+				MatchLabels: map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	}
@@ -476,7 +493,7 @@ func TestListPlugins_WithPlugins(t *testing.T) {
 		WithObjects(plugin).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	resp, err := srv.ListPlugins(ctx, generated.ListPluginsRequestObject{})
@@ -510,14 +527,14 @@ func TestCreatePlugin_Success(t *testing.T) {
 	project := testProject
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
-			Name:      "my-plugin",
-			Namespace: "default",
+			Name:      testMyPluginName,
+			Namespace: testNamespaceDefault,
 			Source: generated.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: &project,
 			},
 			InstanceSelector: generated.LabelSelector{
-				MatchLabels: &map[string]string{"app": "papermc"},
+				MatchLabels: &map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	})
@@ -525,24 +542,24 @@ func TestCreatePlugin_Success(t *testing.T) {
 
 	createResp, ok := resp.(generated.CreatePlugin201JSONResponse)
 	require.True(t, ok, "Expected 201 response, got %T", resp)
-	assert.Equal(t, "my-plugin", createResp.Name)
-	assert.Equal(t, "default", createResp.Namespace)
+	assert.Equal(t, testMyPluginName, createResp.Name)
+	assert.Equal(t, testNamespaceDefault, createResp.Namespace)
 }
 
 func TestCreatePlugin_Duplicate(t *testing.T) {
 	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "existing-plugin",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mcv1beta1.PluginSpec{
 			Source: mcv1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: "ExistingProject",
 			},
-			UpdateStrategy: "latest",
+			UpdateStrategy: updateStrategyLatest,
 			InstanceSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "papermc"},
+				MatchLabels: map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	}
@@ -553,20 +570,20 @@ func TestCreatePlugin_Duplicate(t *testing.T) {
 		WithObjects(plugin).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	project := "ExistingProject"
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
 			Name:      "existing-plugin",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 			Source: generated.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: &project,
 			},
 			InstanceSelector: generated.LabelSelector{
-				MatchLabels: &map[string]string{"app": "papermc"},
+				MatchLabels: &map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	})
@@ -581,17 +598,17 @@ func TestCreatePlugin_Duplicate(t *testing.T) {
 func TestGetPlugin_Found(t *testing.T) {
 	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-plugin",
-			Namespace: "default",
+			Name:      testMyPluginName,
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mcv1beta1.PluginSpec{
 			Source: mcv1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: testProject,
 			},
-			UpdateStrategy: "latest",
+			UpdateStrategy: updateStrategyLatest,
 			InstanceSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "papermc"},
+				MatchLabels: map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	}
@@ -602,38 +619,38 @@ func TestGetPlugin_Found(t *testing.T) {
 		WithObjects(plugin).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	resp, err := srv.GetPlugin(ctx, generated.GetPluginRequestObject{
-		Namespace: "default",
-		Name:      "my-plugin",
+		Namespace: testNamespaceDefault,
+		Name:      testMyPluginName,
 	})
 	require.NoError(t, err)
 
 	getResp, ok := resp.(generated.GetPlugin200JSONResponse)
 	require.True(t, ok, "Expected 200 response, got %T", resp)
-	assert.Equal(t, "my-plugin", getResp.Name)
+	assert.Equal(t, testMyPluginName, getResp.Name)
 }
 
 func TestGetPlugin_ReturnsEndpoints(t *testing.T) {
 	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "plugin-with-endpoints",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mcv1beta1.PluginSpec{
 			Source: mcv1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: testProject,
 			},
-			UpdateStrategy: "latest",
+			UpdateStrategy: updateStrategyLatest,
 			Endpoints: []mcv1beta1.PluginEndpoint{
-				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+				{Name: testEndpointWebUI, Port: 8100, Protocol: "HTTP"},
 				{Name: "metrics", Port: 9100, Protocol: "TCP"},
 			},
 			InstanceSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "papermc"},
+				MatchLabels: map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	}
@@ -644,11 +661,11 @@ func TestGetPlugin_ReturnsEndpoints(t *testing.T) {
 		WithObjects(plugin).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	resp, err := srv.GetPlugin(ctx, generated.GetPluginRequestObject{
-		Namespace: "default",
+		Namespace: testNamespaceDefault,
 		Name:      "plugin-with-endpoints",
 	})
 	require.NoError(t, err)
@@ -657,7 +674,7 @@ func TestGetPlugin_ReturnsEndpoints(t *testing.T) {
 	require.True(t, ok, "Expected 200 response, got %T", resp)
 	require.NotNil(t, getResp.Endpoints, "Endpoints should not be nil")
 	require.Len(t, *getResp.Endpoints, 2)
-	assert.Equal(t, "web-ui", (*getResp.Endpoints)[0].Name)
+	assert.Equal(t, testEndpointWebUI, (*getResp.Endpoints)[0].Name)
 	assert.Equal(t, 8100, (*getResp.Endpoints)[0].Port)
 	assert.Equal(t, "metrics", (*getResp.Endpoints)[1].Name)
 	assert.Equal(t, 9100, (*getResp.Endpoints)[1].Port)
@@ -668,8 +685,8 @@ func TestGetPlugin_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	resp, err := srv.GetPlugin(ctx, generated.GetPluginRequestObject{
-		Namespace: "default",
-		Name:      "nonexistent",
+		Namespace: testNamespaceDefault,
+		Name:      testNonexistentName,
 	})
 	require.NoError(t, err)
 
@@ -684,8 +701,8 @@ func TestUpdatePlugin_NilBody(t *testing.T) {
 	ctx := context.Background()
 
 	resp, err := srv.UpdatePlugin(ctx, generated.UpdatePluginRequestObject{
-		Namespace: "default",
-		Name:      "test",
+		Namespace: testNamespaceDefault,
+		Name:      testValue,
 		Body:      nil,
 	})
 	require.NoError(t, err)
@@ -698,10 +715,10 @@ func TestUpdatePlugin_NotFound(t *testing.T) {
 	srv := newTestServer()
 	ctx := context.Background()
 
-	strategy := generated.UpdateStrategy("latest")
+	strategy := generated.UpdateStrategy(updateStrategyLatest)
 	resp, err := srv.UpdatePlugin(ctx, generated.UpdatePluginRequestObject{
-		Namespace: "default",
-		Name:      "nonexistent",
+		Namespace: testNamespaceDefault,
+		Name:      testNonexistentName,
 		Body: &generated.PluginUpdateRequest{
 			UpdateStrategy: &strategy,
 		},
@@ -717,17 +734,17 @@ func TestUpdatePlugin_NotFound(t *testing.T) {
 func TestDeletePlugin_Success(t *testing.T) {
 	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "delete-me",
-			Namespace: "default",
+			Name:      testDeleteMeName,
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mcv1beta1.PluginSpec{
 			Source: mcv1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: testProject,
 			},
-			UpdateStrategy: "latest",
+			UpdateStrategy: updateStrategyLatest,
 			InstanceSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "papermc"},
+				MatchLabels: map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	}
@@ -738,12 +755,12 @@ func TestDeletePlugin_Success(t *testing.T) {
 		WithObjects(plugin).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	resp, err := srv.DeletePlugin(ctx, generated.DeletePluginRequestObject{
-		Namespace: "default",
-		Name:      "delete-me",
+		Namespace: testNamespaceDefault,
+		Name:      testDeleteMeName,
 	})
 	require.NoError(t, err)
 
@@ -756,8 +773,8 @@ func TestDeletePlugin_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	resp, err := srv.DeletePlugin(ctx, generated.DeletePluginRequestObject{
-		Namespace: "default",
-		Name:      "nonexistent",
+		Namespace: testNamespaceDefault,
+		Name:      testNonexistentName,
 	})
 	require.NoError(t, err)
 
@@ -772,8 +789,8 @@ func TestResolvePlugin_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	resp, err := srv.ResolvePlugin(ctx, generated.ResolvePluginRequestObject{
-		Namespace: "default",
-		Name:      "nonexistent",
+		Namespace: testNamespaceDefault,
+		Name:      testNonexistentName,
 	})
 	require.NoError(t, err)
 
@@ -807,25 +824,25 @@ func TestContainsString(t *testing.T) {
 func TestServerDataToSummary_MinimalFields(t *testing.T) {
 	// Verify conversion handles minimal data without panicking
 	data := service.ServerData{
-		Name:           "test-server",
-		Namespace:      "default",
-		UpdateStrategy: "latest",
-		Status:         "running",
+		Name:           testServerName,
+		Namespace:      testNamespaceDefault,
+		UpdateStrategy: updateStrategyLatest,
+		Status:         testStatusRunning,
 	}
 	summary := serverDataToSummary(data)
-	assert.Equal(t, "test-server", summary.Name)
-	assert.Equal(t, "default", summary.Namespace)
-	assert.Equal(t, generated.UpdateStrategy("latest"), summary.UpdateStrategy)
+	assert.Equal(t, testServerName, summary.Name)
+	assert.Equal(t, testNamespaceDefault, summary.Namespace)
+	assert.Equal(t, generated.UpdateStrategy(updateStrategyLatest), summary.UpdateStrategy)
 }
 
 func TestServerDataToSummary_WithAllFields(t *testing.T) {
 	data := service.ServerData{
 		Name:           "full-server",
 		Namespace:      "minecraft",
-		CurrentVersion: "1.21.1",
+		CurrentVersion: testServerVersion,
 		DesiredVersion: "1.21.2",
 		UpdateStrategy: "auto",
-		Status:         "running",
+		Status:         testStatusRunning,
 		PluginCount:    3,
 		Labels:         map[string]string{"env": "production"},
 		AvailableUpdate: &service.AvailableUpdateData{
@@ -836,7 +853,7 @@ func TestServerDataToSummary_WithAllFields(t *testing.T) {
 	summary := serverDataToSummary(data)
 	assert.Equal(t, "full-server", summary.Name)
 	require.NotNil(t, summary.CurrentVersion)
-	assert.Equal(t, "1.21.1", *summary.CurrentVersion)
+	assert.Equal(t, testServerVersion, *summary.CurrentVersion)
 	require.NotNil(t, summary.DesiredVersion)
 	assert.Equal(t, "1.21.2", *summary.DesiredVersion)
 	require.NotNil(t, summary.PluginCount)
@@ -848,28 +865,28 @@ func TestServerDataToSummary_WithAllFields(t *testing.T) {
 func TestPluginDataToSummary_MinimalFields(t *testing.T) {
 	data := service.PluginData{
 		Name:           "test-plugin",
-		Namespace:      "default",
-		SourceType:     "hangar",
-		UpdateStrategy: "latest",
+		Namespace:      testNamespaceDefault,
+		SourceType:     testSourceHangar,
+		UpdateStrategy: updateStrategyLatest,
 	}
 	summary := pluginDataToSummary(data)
 	assert.Equal(t, "test-plugin", summary.Name)
-	assert.Equal(t, "default", summary.Namespace)
-	assert.Equal(t, generated.PluginSourceType("hangar"), summary.SourceType)
+	assert.Equal(t, testNamespaceDefault, summary.Namespace)
+	assert.Equal(t, generated.PluginSourceType(testSourceHangar), summary.SourceType)
 }
 
 func TestServerDataToDetail_WithPlugins(t *testing.T) {
 	data := service.ServerData{
 		Name:           "detail-server",
-		Namespace:      "default",
-		UpdateStrategy: "latest",
-		Status:         "running",
+		Namespace:      testNamespaceDefault,
+		UpdateStrategy: updateStrategyLatest,
+		Status:         testStatusRunning,
 		Plugins: []service.ServerPluginData{
 			{
 				Name:       "plugin1",
-				Namespace:  "default",
+				Namespace:  testNamespaceDefault,
 				Compatible: true,
-				SourceType: "hangar",
+				SourceType: testSourceHangar,
 			},
 		},
 	}
@@ -883,20 +900,20 @@ func TestServerDataToDetail_WithPlugins(t *testing.T) {
 func TestPluginDataToDetail_WithVersions(t *testing.T) {
 	data := service.PluginData{
 		Name:           "detail-plugin",
-		Namespace:      "default",
-		SourceType:     "hangar",
-		UpdateStrategy: "latest",
+		Namespace:      testNamespaceDefault,
+		SourceType:     testSourceHangar,
+		UpdateStrategy: updateStrategyLatest,
 		AvailableVersions: []service.PluginVersionData{
 			{
 				Version:           "1.0.0",
-				SupportedVersions: []string{"1.21.1"},
+				SupportedVersions: []string{testServerVersion},
 				DownloadURL:       "https://example.com/plugin-1.0.0.jar",
 			},
 		},
 		MatchedInstances: []service.MatchedInstanceData{
 			{
 				Name:       "server1",
-				Namespace:  "default",
+				Namespace:  testNamespaceDefault,
 				Compatible: true,
 			},
 		},
@@ -912,52 +929,52 @@ func TestPluginDataToDetail_WithVersions(t *testing.T) {
 // --- Request conversion function tests ---
 
 func TestServerCreateRequestToData(t *testing.T) {
-	version := "1.21.1"
+	version := testServerVersion
 	req := generated.ServerCreateRequest{
 		Name:           "new-server",
-		Namespace:      "default",
-		UpdateStrategy: "pin",
+		Namespace:      testNamespaceDefault,
+		UpdateStrategy: updateStrategyPin,
 		Version:        &version,
 	}
 
 	data := serverCreateRequestToData(req)
 	assert.Equal(t, "new-server", data.Name)
-	assert.Equal(t, "default", data.Namespace)
-	assert.Equal(t, "pin", data.UpdateStrategy)
-	assert.Equal(t, "1.21.1", data.Version)
+	assert.Equal(t, testNamespaceDefault, data.Namespace)
+	assert.Equal(t, updateStrategyPin, data.UpdateStrategy)
+	assert.Equal(t, testServerVersion, data.Version)
 }
 
 func TestPluginCreateRequestToData(t *testing.T) {
 	project := testProject
 	req := generated.PluginCreateRequest{
 		Name:      "new-plugin",
-		Namespace: "default",
+		Namespace: testNamespaceDefault,
 		Source: generated.PluginSource{
-			Type:    "hangar",
+			Type:    testSourceHangar,
 			Project: &project,
 		},
 		InstanceSelector: generated.LabelSelector{
-			MatchLabels: &map[string]string{"app": "papermc"},
+			MatchLabels: &map[string]string{labelKeyApp: labelValuePapermc},
 		},
 	}
 
 	data := pluginCreateRequestToData(req)
 	assert.Equal(t, "new-plugin", data.Name)
-	assert.Equal(t, "default", data.Namespace)
-	assert.Equal(t, "hangar", data.Source.Type)
+	assert.Equal(t, testNamespaceDefault, data.Namespace)
+	assert.Equal(t, testSourceHangar, data.Source.Type)
 	assert.Equal(t, testProject, data.Source.Project)
 }
 
 func TestLabelSelectorToK8s(t *testing.T) {
 	sel := generated.LabelSelector{
 		MatchLabels: &map[string]string{
-			"app":  "papermc",
-			"tier": "game",
+			labelKeyApp: labelValuePapermc,
+			"tier":      "game",
 		},
 	}
 
 	result := labelSelectorToK8s(sel)
-	assert.Equal(t, "papermc", result.MatchLabels["app"])
+	assert.Equal(t, labelValuePapermc, result.MatchLabels[labelKeyApp])
 	assert.Equal(t, "game", result.MatchLabels["tier"])
 }
 
@@ -969,16 +986,16 @@ func TestCreatePlugin_EndpointInvalidPort_ShouldReturn400(t *testing.T) {
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
 			Name:      "bad-endpoint-plugin",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 			Endpoints: &[]generated.PluginEndpoint{
-				{Name: "web-ui", Port: -1},
+				{Name: testEndpointWebUI, Port: -1},
 			},
 			Source: generated.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: &project,
 			},
 			InstanceSelector: generated.LabelSelector{
-				MatchLabels: &map[string]string{"app": "papermc"},
+				MatchLabels: &map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	})
@@ -996,16 +1013,16 @@ func TestCreatePlugin_EndpointOverflowPort_ShouldReturn400(t *testing.T) {
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
 			Name:      "overflow-endpoint-plugin",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 			Endpoints: &[]generated.PluginEndpoint{
-				{Name: "web-ui", Port: 100000},
+				{Name: testEndpointWebUI, Port: 100000},
 			},
 			Source: generated.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: &project,
 			},
 			InstanceSelector: generated.LabelSelector{
-				MatchLabels: &map[string]string{"app": "papermc"},
+				MatchLabels: &map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	})
@@ -1019,16 +1036,16 @@ func TestUpdatePlugin_EndpointInvalidPort_ShouldReturn400(t *testing.T) {
 	plugin := &mcv1beta1.Plugin{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "endpoint-test-plugin",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 		},
 		Spec: mcv1beta1.PluginSpec{
 			Source: mcv1beta1.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: testProject,
 			},
-			UpdateStrategy: "latest",
+			UpdateStrategy: updateStrategyLatest,
 			InstanceSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "papermc"},
+				MatchLabels: map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	}
@@ -1039,15 +1056,15 @@ func TestUpdatePlugin_EndpointInvalidPort_ShouldReturn400(t *testing.T) {
 		WithObjects(plugin).
 		Build()
 
-	srv := NewServer(c, VersionInfo{Version: "test"})
+	srv := NewServer(c, VersionInfo{Version: testValue})
 	ctx := context.Background()
 
 	resp, err := srv.UpdatePlugin(ctx, generated.UpdatePluginRequestObject{
-		Namespace: "default",
+		Namespace: testNamespaceDefault,
 		Name:      "endpoint-test-plugin",
 		Body: &generated.PluginUpdateRequest{
 			Endpoints: &[]generated.PluginEndpoint{
-				{Name: "web-ui", Port: -1},
+				{Name: testEndpointWebUI, Port: -1},
 			},
 		},
 	})
@@ -1066,17 +1083,17 @@ func TestCreatePlugin_DuplicateEndpointNames_ShouldReturn400(t *testing.T) {
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
 			Name:      "dup-name-plugin",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 			Endpoints: &[]generated.PluginEndpoint{
-				{Name: "web-ui", Port: 8100, Protocol: &proto},
-				{Name: "web-ui", Port: 9100, Protocol: &proto},
+				{Name: testEndpointWebUI, Port: 8100, Protocol: &proto},
+				{Name: testEndpointWebUI, Port: 9100, Protocol: &proto},
 			},
 			Source: generated.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: &project,
 			},
 			InstanceSelector: generated.LabelSelector{
-				MatchLabels: &map[string]string{"app": "papermc"},
+				MatchLabels: &map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	})
@@ -1096,17 +1113,17 @@ func TestCreatePlugin_DuplicatePortProtocol_ShouldReturn400(t *testing.T) {
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
 			Name:      "dup-port-plugin",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 			Endpoints: &[]generated.PluginEndpoint{
 				{Name: "endpoint-a", Port: 8100, Protocol: &proto},
 				{Name: "endpoint-b", Port: 8100, Protocol: &proto},
 			},
 			Source: generated.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: &project,
 			},
 			InstanceSelector: generated.LabelSelector{
-				MatchLabels: &map[string]string{"app": "papermc"},
+				MatchLabels: &map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	})
@@ -1126,16 +1143,16 @@ func TestCreatePlugin_InvalidProtocol_ShouldReturn400(t *testing.T) {
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
 			Name:      "bad-proto-plugin",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 			Endpoints: &[]generated.PluginEndpoint{
-				{Name: "web-ui", Port: 8100, Protocol: &badProto},
+				{Name: testEndpointWebUI, Port: 8100, Protocol: &badProto},
 			},
 			Source: generated.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: &project,
 			},
 			InstanceSelector: generated.LabelSelector{
-				MatchLabels: &map[string]string{"app": "papermc"},
+				MatchLabels: &map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	})
@@ -1154,16 +1171,16 @@ func TestCreatePlugin_InvalidEndpointName_ShouldReturn400(t *testing.T) {
 	resp, err := srv.CreatePlugin(ctx, generated.CreatePluginRequestObject{
 		Body: &generated.CreatePluginJSONRequestBody{
 			Name:      "bad-name-plugin",
-			Namespace: "default",
+			Namespace: testNamespaceDefault,
 			Endpoints: &[]generated.PluginEndpoint{
 				{Name: "INVALID_NAME", Port: 8100},
 			},
 			Source: generated.PluginSource{
-				Type:    "hangar",
+				Type:    testSourceHangar,
 				Project: &project,
 			},
 			InstanceSelector: generated.LabelSelector{
-				MatchLabels: &map[string]string{"app": "papermc"},
+				MatchLabels: &map[string]string{labelKeyApp: labelValuePapermc},
 			},
 		},
 	})
@@ -1175,9 +1192,9 @@ func TestCreatePlugin_InvalidEndpointName_ShouldReturn400(t *testing.T) {
 }
 
 func TestLabelSelectorToK8s_WithExpressions(t *testing.T) {
-	key := "app"
+	key := labelKeyApp
 	operator := generated.LabelSelectorRequirementOperator("In")
-	values := []string{"papermc", "vanilla"}
+	values := []string{labelValuePapermc, "vanilla"}
 	sel := generated.LabelSelector{
 		MatchExpressions: &[]generated.LabelSelectorRequirement{
 			{
@@ -1190,16 +1207,16 @@ func TestLabelSelectorToK8s_WithExpressions(t *testing.T) {
 
 	result := labelSelectorToK8s(sel)
 	require.Len(t, result.MatchExpressions, 1)
-	assert.Equal(t, "app", result.MatchExpressions[0].Key)
+	assert.Equal(t, labelKeyApp, result.MatchExpressions[0].Key)
 	assert.Equal(t, metav1.LabelSelectorOperator("In"), result.MatchExpressions[0].Operator)
-	assert.Equal(t, []string{"papermc", "vanilla"}, result.MatchExpressions[0].Values)
+	assert.Equal(t, []string{labelValuePapermc, "vanilla"}, result.MatchExpressions[0].Values)
 }
 
 func TestValidateServerCreateRequest_InvalidName(t *testing.T) {
 	body := &generated.ServerCreateRequest{
 		Name:           "INVALID_NAME!!!",
-		Namespace:      "default",
-		UpdateStrategy: "latest",
+		Namespace:      testNamespaceDefault,
+		UpdateStrategy: updateStrategyLatest,
 	}
 	msg := validateServerCreateRequest(body)
 	assert.Contains(t, msg, "Name")
@@ -1221,8 +1238,8 @@ func TestValidatePluginCreateRequest_InvalidNamespace(t *testing.T) {
 
 func TestValidateServerCreateRequest_InvalidStrategy(t *testing.T) {
 	body := &generated.ServerCreateRequest{
-		Name:           "test",
-		Namespace:      "default",
+		Name:           testValue,
+		Namespace:      testNamespaceDefault,
 		UpdateStrategy: "garbage",
 	}
 	msg := validateServerCreateRequest(body)
@@ -1231,20 +1248,20 @@ func TestValidateServerCreateRequest_InvalidStrategy(t *testing.T) {
 
 func TestValidateServerCreateRequest_PinRequiresVersion(t *testing.T) {
 	body := &generated.ServerCreateRequest{
-		Name:           "test",
-		Namespace:      "default",
-		UpdateStrategy: "pin",
+		Name:           testValue,
+		Namespace:      testNamespaceDefault,
+		UpdateStrategy: updateStrategyPin,
 	}
 	msg := validateServerCreateRequest(body)
 	assert.Contains(t, msg, "Version is required")
 }
 
 func TestValidateServerCreateRequest_BuildPinRequiresBuild(t *testing.T) {
-	v := "1.21.1"
+	v := testServerVersion
 	body := &generated.ServerCreateRequest{
-		Name:           "test",
-		Namespace:      "default",
-		UpdateStrategy: "build-pin",
+		Name:           testValue,
+		Namespace:      testNamespaceDefault,
+		UpdateStrategy: updateStrategyBuildPin,
 		Version:        &v,
 	}
 	msg := validateServerCreateRequest(body)
@@ -1253,9 +1270,9 @@ func TestValidateServerCreateRequest_BuildPinRequiresBuild(t *testing.T) {
 
 func TestValidateServerCreateRequest_Valid(t *testing.T) {
 	body := &generated.ServerCreateRequest{
-		Name:           "test",
-		Namespace:      "default",
-		UpdateStrategy: "latest",
+		Name:           testValue,
+		Namespace:      testNamespaceDefault,
+		UpdateStrategy: updateStrategyLatest,
 	}
 	msg := validateServerCreateRequest(body)
 	assert.Empty(t, msg)

@@ -24,6 +24,13 @@ const (
 	actionDelete   = "delete"
 	actionApplyNow = "apply-now"
 	actionEdit     = "edit"
+
+	// Common resource field keys.
+	keyName      = "name"
+	keyNamespace = "namespace"
+
+	// weekdaySunday is the cron weekday label shared by values 0 and 7.
+	weekdaySunday = "Sunday"
 )
 
 // parseResourcePathAction extracts resource name, action, and namespace from a URL path.
@@ -213,14 +220,14 @@ func splitCronExpression(expr string) []string {
 // getWeekdayName returns the human-readable weekday name for a cron weekday value.
 func getWeekdayName(weekday string) string {
 	weekdays := map[string]string{
-		"0": "Sunday",
+		"0": weekdaySunday,
 		"1": "Monday",
 		"2": "Tuesday",
 		"3": "Wednesday",
 		"4": "Thursday",
 		"5": "Friday",
 		"6": "Saturday",
-		"7": "Sunday", // Sunday can be 0 or 7 in cron
+		"7": weekdaySunday, // Sunday can be 0 or 7 in cron
 	}
 	return weekdays[weekday]
 }
@@ -599,7 +606,7 @@ func (s *Server) handleCreateConfigMap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]string{
-		"name":      req.Name,
-		"namespace": req.Namespace,
+		keyName:      req.Name,
+		keyNamespace: req.Namespace,
 	})
 }

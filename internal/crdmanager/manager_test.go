@@ -17,6 +17,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// Embedded CRD object names exercised by the test suite.
+const (
+	crdNamePlugins       = "plugins.mc.k8s.lex.la"
+	crdNamePaperMCServer = "papermcservers.mc.k8s.lex.la"
+)
+
 func TestEmbeddedCRDsExist(t *testing.T) {
 	t.Parallel()
 
@@ -43,8 +49,8 @@ func TestParseCRDs(t *testing.T) {
 	require.Len(t, crds, 2, "should parse exactly 2 CRDs")
 
 	expectedNames := map[string]bool{
-		"plugins.mc.k8s.lex.la":        false,
-		"papermcservers.mc.k8s.lex.la": false,
+		crdNamePlugins:       false,
+		crdNamePaperMCServer: false,
 	}
 
 	for _, crd := range crds {
@@ -99,8 +105,8 @@ func TestApply(t *testing.T) {
 		names = append(names, crd.Name)
 	}
 
-	assert.Contains(t, names, "plugins.mc.k8s.lex.la")
-	assert.Contains(t, names, "papermcservers.mc.k8s.lex.la")
+	assert.Contains(t, names, crdNamePlugins)
+	assert.Contains(t, names, crdNamePaperMCServer)
 }
 
 func TestApplyIdempotent(t *testing.T) {
@@ -131,7 +137,7 @@ func TestWaitEstablished(t *testing.T) {
 
 	// Pre-create CRDs with Established condition
 	pluginCRD := &apiextensionsv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{Name: "plugins.mc.k8s.lex.la"},
+		ObjectMeta: metav1.ObjectMeta{Name: crdNamePlugins},
 		Status: apiextensionsv1.CustomResourceDefinitionStatus{
 			Conditions: []apiextensionsv1.CustomResourceDefinitionCondition{
 				{
@@ -143,7 +149,7 @@ func TestWaitEstablished(t *testing.T) {
 	}
 
 	serverCRD := &apiextensionsv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{Name: "papermcservers.mc.k8s.lex.la"},
+		ObjectMeta: metav1.ObjectMeta{Name: crdNamePaperMCServer},
 		Status: apiextensionsv1.CustomResourceDefinitionStatus{
 			Conditions: []apiextensionsv1.CustomResourceDefinitionCondition{
 				{
@@ -177,11 +183,11 @@ func TestWaitEstablishedTimeout(t *testing.T) {
 
 	// CRDs exist but NOT Established
 	pluginCRD := &apiextensionsv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{Name: "plugins.mc.k8s.lex.la"},
+		ObjectMeta: metav1.ObjectMeta{Name: crdNamePlugins},
 	}
 
 	serverCRD := &apiextensionsv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{Name: "papermcservers.mc.k8s.lex.la"},
+		ObjectMeta: metav1.ObjectMeta{Name: crdNamePaperMCServer},
 	}
 
 	cli := fake.NewClientBuilder().

@@ -99,7 +99,7 @@ func writeField(b *strings.Builder, field FormField, prefix string, values map[s
 		writeMapField(b, field, fullName, values)
 	case field.Type == typeArray && field.Items != nil:
 		writeArrayField(b, field, fullName, values)
-	case field.Name == "configMapRef" && field.Type == typeObject:
+	case field.Name == fieldConfigMapRef && field.Type == typeObject:
 		writeConfigMapRefField(b, field, fullName, values)
 	case field.Type == typeObject && len(field.Properties) > 0:
 		writeObjectField(b, field, fullName, values, mode)
@@ -119,9 +119,9 @@ func writeScalarField(b *strings.Builder, field FormField, fullName string, valu
 	switch {
 	case len(field.Enum) > 0:
 		writeSelect(b, field, fullName, value, readonly)
-	case field.Type == "boolean":
+	case field.Type == typeBoolean:
 		writeCheckbox(b, fullName, value, field.Default, readonly)
-	case field.Type == "integer":
+	case field.Type == typeInteger:
 		writeNumberInput(b, field, fullName, value, readonly)
 	default:
 		writeTextInput(b, field, fullName, value, readonly)

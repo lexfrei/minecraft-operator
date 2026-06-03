@@ -10,6 +10,9 @@ import (
 	"github.com/lexfrei/go-hangar/pkg/hangar"
 )
 
+// platformPaper is the Hangar platform key for PaperMC.
+const platformPaper = "PAPER"
+
 // HangarClient implements PluginClient using the go-hangar library.
 type HangarClient struct {
 	client  *hangar.Client
@@ -56,7 +59,7 @@ func (c *HangarClient) GetVersions(ctx context.Context, project string) ([]Plugi
 		// Extract Paper versions from platform dependencies
 		var paperVersions []string
 		if v.PlatformDependencies != nil {
-			if deps, ok := v.PlatformDependencies["PAPER"]; ok {
+			if deps, ok := v.PlatformDependencies[platformPaper]; ok {
 				paperVersions = deps
 			}
 		}
@@ -85,7 +88,7 @@ func (c *HangarClient) extractPaperDownload(v hangar.Version, owner, slug string
 	downloadURL := ""
 	hash := ""
 
-	if downloadInfo, ok := v.Downloads["PAPER"]; ok {
+	if downloadInfo, ok := v.Downloads[platformPaper]; ok {
 		if downloadInfo.DownloadURL != "" {
 			downloadURL = downloadInfo.DownloadURL
 		} else if downloadInfo.ExternalURL != "" && isDirectDownloadURL(downloadInfo.ExternalURL) {
@@ -99,7 +102,7 @@ func (c *HangarClient) extractPaperDownload(v hangar.Version, owner, slug string
 
 	// Fallback: use Hangar download API endpoint for externally-hosted plugins.
 	if downloadURL == "" && v.Downloads != nil {
-		if _, ok := v.Downloads["PAPER"]; ok {
+		if _, ok := v.Downloads[platformPaper]; ok {
 			downloadURL = fmt.Sprintf("%s/projects/%s/%s/versions/%s/PAPER/download",
 				c.baseURL, owner, slug, v.Name)
 		}
@@ -122,7 +125,7 @@ func (c *HangarClient) GetCompatibility(
 	// Extract Paper versions from platform dependencies
 	var paperVersions []string
 	if v.PlatformDependencies != nil {
-		if deps, ok := v.PlatformDependencies["PAPER"]; ok {
+		if deps, ok := v.PlatformDependencies[platformPaper]; ok {
 			paperVersions = deps
 		}
 	}

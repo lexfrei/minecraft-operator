@@ -43,12 +43,12 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 			Scheme: k8sClient.Scheme(),
 			Solver: solver.NewSimpleSolver(),
 			RegistryClient: &testutil.MockRegistryAPI{
-				Tags:       []string{"1.21.1-91"},
+				Tags:       []string{gcVersion1211Build91},
 				ImageExist: true,
 			},
 			PaperClient: &testutil.MockPaperAPI{
-				Versions:     []string{"1.21.1"},
-				BuildInfo:    &paper.BuildInfo{Version: "1.21.1", Build: 91},
+				Versions:     []string{gcVersion1211},
+				BuildInfo:    &paper.BuildInfo{Version: gcVersion1211, Build: 91},
 				BuildNumbers: []int{91},
 			},
 		}
@@ -61,12 +61,12 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				Namespace: ns,
 			},
 			Spec: mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "pin",
-				Version:        "1.21.1",
+				UpdateStrategy: updateStrategyPin,
+				Version:        gcVersion1211,
 				UpdateSchedule: mck8slexlav1beta1.UpdateSchedule{
-					CheckCron: "0 3 * * *",
+					CheckCron: gcCronDaily3am,
 					MaintenanceWindow: mck8slexlav1beta1.MaintenanceWindow{
-						Cron:    "0 4 * * 0",
+						Cron:    gcCronWeekly,
 						Enabled: true,
 					},
 				},
@@ -75,7 +75,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 				RCON: mck8slexlav1beta1.RCONConfig{
 					Enabled:        false,
-					PasswordSecret: mck8slexlav1beta1.SecretKeyRef{Name: "rcon-secret", Key: "password"},
+					PasswordSecret: mck8slexlav1beta1.SecretKeyRef{Name: gcRCONSecret, Key: gcPassword},
 				},
 				Service: mck8slexlav1beta1.ServiceConfig{
 					Type: corev1.ServiceTypeClusterIP,
@@ -84,7 +84,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
-							{Name: "papermc", Image: "docker.io/lexfrei/papermc:1.21.1-91"},
+							{Name: containerNamePaperMC, Image: gcImageDocker1211Build91},
 						},
 					},
 				},
@@ -105,12 +105,12 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				Namespace: ns,
 			},
 			Spec: mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "pin",
-				Version:        "1.21.1",
+				UpdateStrategy: updateStrategyPin,
+				Version:        gcVersion1211,
 				UpdateSchedule: mck8slexlav1beta1.UpdateSchedule{
-					CheckCron: "0 3 * * *",
+					CheckCron: gcCronDaily3am,
 					MaintenanceWindow: mck8slexlav1beta1.MaintenanceWindow{
-						Cron:    "0 4 * * 0",
+						Cron:    gcCronWeekly,
 						Enabled: true,
 					},
 				},
@@ -119,7 +119,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				},
 				RCON: mck8slexlav1beta1.RCONConfig{
 					Enabled:        true,
-					PasswordSecret: mck8slexlav1beta1.SecretKeyRef{Name: "rcon-secret", Key: "password"},
+					PasswordSecret: mck8slexlav1beta1.SecretKeyRef{Name: gcRCONSecret, Key: gcPassword},
 					Port:           25575,
 				},
 				Service: mck8slexlav1beta1.ServiceConfig{
@@ -129,7 +129,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
-							{Name: "papermc", Image: "docker.io/lexfrei/papermc:1.21.1-91"},
+							{Name: containerNamePaperMC, Image: gcImageDocker1211Build91},
 						},
 					},
 				},
@@ -160,8 +160,8 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 			}, &np)).To(Succeed())
 
 			// Verify pod selector matches StatefulSet pods
-			Expect(np.Spec.PodSelector.MatchLabels).To(HaveKeyWithValue("app", "papermc"))
-			Expect(np.Spec.PodSelector.MatchLabels).To(HaveKeyWithValue("mc.k8s.lex.la/server-name", server.Name))
+			Expect(np.Spec.PodSelector.MatchLabels).To(HaveKeyWithValue(gcLabelApp, containerNamePaperMC))
+			Expect(np.Spec.PodSelector.MatchLabels).To(HaveKeyWithValue(gcLabelServerName, server.Name))
 		})
 
 		It("should allow Minecraft port 25565 ingress", func() {
@@ -263,10 +263,10 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				Name: server.Name + "-minecraft", Namespace: ns,
 			}, &np)).To(Succeed())
 
-			Expect(np.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "papermc"))
+			Expect(np.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", containerNamePaperMC))
 			Expect(np.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", server.Name))
 			Expect(np.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "network-policy"))
-			Expect(np.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+			Expect(np.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", gcMinecraftOperator))
 		})
 
 		It("should set owner reference for garbage collection", func() {
@@ -358,7 +358,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
 					Enabled: true,
 					AllowFrom: []mck8slexlav1beta1.NetworkPolicySource{
-						{CIDR: "10.0.0.0/8"},
+						{CIDR: gcCIDR10},
 					},
 				},
 			})
@@ -380,7 +380,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 						found = true
 						Expect(rule.From).To(ContainElement(
 							networkingv1.NetworkPolicyPeer{
-								IPBlock: &networkingv1.IPBlock{CIDR: "10.0.0.0/8"},
+								IPBlock: &networkingv1.IPBlock{CIDR: gcCIDR10},
 							},
 						))
 					}
@@ -430,16 +430,16 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 
 			plugins := []mck8slexlav1beta1.Plugin{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "dynmap", Namespace: ns},
+					ObjectMeta: metav1.ObjectMeta{Name: gcPluginDynmap, Namespace: ns},
 					Spec: mck8slexlav1beta1.PluginSpec{
 						Endpoints: []mck8slexlav1beta1.PluginEndpoint{
-							{Name: "web-ui", Port: 8123, Protocol: "HTTP"},
+							{Name: gcWebUI, Port: 8123, Protocol: gcProtocolHTTP},
 						},
 						Source: mck8slexlav1beta1.PluginSource{
-							Type:    "hangar",
+							Type:    gcSourceHangar,
 							Project: "Dynmap",
 						},
-						UpdateStrategy:   "latest",
+						UpdateStrategy:   updateStrategyLatest,
 						InstanceSelector: metav1.LabelSelector{},
 					},
 				},
@@ -478,20 +478,20 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 
 			dupPlugins := []mck8slexlav1beta1.Plugin{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "dynmap", Namespace: ns},
+					ObjectMeta: metav1.ObjectMeta{Name: gcPluginDynmap, Namespace: ns},
 					Spec: mck8slexlav1beta1.PluginSpec{
-						Endpoints:        []mck8slexlav1beta1.PluginEndpoint{{Name: "web-ui", Port: 8123, Protocol: "HTTP"}},
-						Source:           mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "Dynmap"},
-						UpdateStrategy:   "latest",
+						Endpoints:        []mck8slexlav1beta1.PluginEndpoint{{Name: gcWebUI, Port: 8123, Protocol: gcProtocolHTTP}},
+						Source:           mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "Dynmap"},
+						UpdateStrategy:   updateStrategyLatest,
 						InstanceSelector: metav1.LabelSelector{},
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "bluemap", Namespace: ns},
+					ObjectMeta: metav1.ObjectMeta{Name: gcPluginBluemap, Namespace: ns},
 					Spec: mck8slexlav1beta1.PluginSpec{
-						Endpoints:        []mck8slexlav1beta1.PluginEndpoint{{Name: "web-map", Port: 8123, Protocol: "HTTP"}},
-						Source:           mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "BlueMap"},
-						UpdateStrategy:   "latest",
+						Endpoints:        []mck8slexlav1beta1.PluginEndpoint{{Name: "web-map", Port: 8123, Protocol: gcProtocolHTTP}},
+						Source:           mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "BlueMap"},
+						UpdateStrategy:   updateStrategyLatest,
 						InstanceSelector: metav1.LabelSelector{},
 					},
 				},
@@ -527,7 +527,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
 					Enabled: true,
 					AllowFrom: []mck8slexlav1beta1.NetworkPolicySource{
-						{CIDR: "10.0.0.0/8"},
+						{CIDR: gcCIDR10},
 					},
 				},
 			})
@@ -548,7 +548,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 							networkingv1.NetworkPolicyPeer{
 								NamespaceSelector: &metav1.LabelSelector{
 									MatchLabels: map[string]string{
-										"kubernetes.io/metadata.name": ns,
+										gcLabelMetadataName: ns,
 									},
 								},
 							},
@@ -590,15 +590,15 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 	Context("when allowFrom has both CIDR and podSelector", func() {
 		It("should return error for invalid peer with CIDR and selector", func() {
 			_, err := convertToPeer(mck8slexlav1beta1.NetworkPolicySource{
-				CIDR:        "10.0.0.0/8",
-				PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "proxy"}},
+				CIDR:        gcCIDR10,
+				PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{gcLabelApp: "proxy"}},
 			})
 			Expect(err).To(HaveOccurred(), "convertToPeer must reject CIDR combined with PodSelector")
 		})
 
 		It("should return error for CIDR and namespaceSelector", func() {
 			_, err := convertToPeer(mck8slexlav1beta1.NetworkPolicySource{
-				CIDR:              "10.0.0.0/8",
+				CIDR:              gcCIDR10,
 				NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"env": "prod"}},
 			})
 			Expect(err).To(HaveOccurred(), "convertToPeer must reject CIDR combined with NamespaceSelector")
@@ -667,7 +667,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 							networkingv1.NetworkPolicyPeer{
 								NamespaceSelector: &metav1.LabelSelector{
 									MatchLabels: map[string]string{
-										"kubernetes.io/metadata.name": operatorNS,
+										gcLabelMetadataName: operatorNS,
 									},
 								},
 							},
@@ -706,7 +706,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 							networkingv1.NetworkPolicyPeer{
 								NamespaceSelector: &metav1.LabelSelector{
 									MatchLabels: map[string]string{
-										"kubernetes.io/metadata.name": ns,
+										gcLabelMetadataName: ns,
 									},
 								},
 							},
@@ -809,7 +809,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 				NetworkPolicy: &mck8slexlav1beta1.ServerNetworkPolicy{
 					Enabled: true,
 					AllowFrom: []mck8slexlav1beta1.NetworkPolicySource{
-						{CIDR: "10.0.0.0/8"},
+						{CIDR: gcCIDR10},
 					},
 				},
 			})
@@ -844,7 +844,7 @@ var _ = Describe("NetworkPolicy for PaperMCServer", func() {
 						))
 						Expect(rule.From).NotTo(ContainElement(
 							networkingv1.NetworkPolicyPeer{
-								IPBlock: &networkingv1.IPBlock{CIDR: "10.0.0.0/8"},
+								IPBlock: &networkingv1.IPBlock{CIDR: gcCIDR10},
 							},
 						), "Old CIDR should be replaced")
 					}

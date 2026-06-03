@@ -11,10 +11,10 @@ package controller
 // role of the resource (e.g., "server", "service", "networking").
 func standardLabels(instanceName, component string) map[string]string {
 	return map[string]string{
-		"app.kubernetes.io/name":       "papermc",
+		"app.kubernetes.io/name":       containerNamePaperMC,
 		"app.kubernetes.io/instance":   instanceName,
-		"app.kubernetes.io/managed-by": "minecraft-operator",
+		"app.kubernetes.io/managed-by": gcMinecraftOperator,
 		"app.kubernetes.io/component":  component,
-		"app.kubernetes.io/part-of":    "minecraft-operator",
+		"app.kubernetes.io/part-of":    gcMinecraftOperator,
 	}
 }

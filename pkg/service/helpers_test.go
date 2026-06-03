@@ -20,15 +20,15 @@ import (
 func TestFormatVersionWithBuild_WithBuild(t *testing.T) {
 	t.Parallel()
 
-	result := FormatVersionWithBuild("1.21.1", 91)
+	result := FormatVersionWithBuild(testServerVersion, 91)
 	assert.Equal(t, "1.21.1-91", result)
 }
 
 func TestFormatVersionWithBuild_NoBuild(t *testing.T) {
 	t.Parallel()
 
-	result := FormatVersionWithBuild("1.21.1", 0)
-	assert.Equal(t, "1.21.1", result)
+	result := FormatVersionWithBuild(testServerVersion, 0)
+	assert.Equal(t, testServerVersion, result)
 }
 
 func TestFormatVersionWithBuild_Empty(t *testing.T) {
@@ -49,8 +49,8 @@ func TestFormatVersionWithBuild_NegativeBuild(t *testing.T) {
 	t.Parallel()
 
 	// Negative builds should be treated as no build
-	result := FormatVersionWithBuild("1.21.1", -1)
-	assert.Equal(t, "1.21.1", result)
+	result := FormatVersionWithBuild(testServerVersion, -1)
+	assert.Equal(t, testServerVersion, result)
 }
 
 // --- FormatCronSchedule tests ---
@@ -195,7 +195,7 @@ func TestIsValidKubernetesName_Valid(t *testing.T) {
 
 	testCases := []string{
 		"my-server",
-		"server1",
+		testServerName1,
 		"a",
 		"test-server-1",
 		"mc.server.example",

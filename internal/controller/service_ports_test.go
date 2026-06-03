@@ -30,7 +30,7 @@ func TestBuildServicePorts_PortNamesWithin15Chars(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "bluemap-very-long-name"},
 			Spec: mcv1beta1.PluginSpec{
 				Endpoints: []mcv1beta1.PluginEndpoint{
-					{Name: "web-ui-long-endpoint-name", Port: 8100, Protocol: "HTTP"},
+					{Name: "web-ui-long-endpoint-name", Port: 8100, Protocol: gcProtocolHTTP},
 				},
 			},
 		},
@@ -58,7 +58,7 @@ func TestBuildServicePorts_SamePortDifferentProtocol(t *testing.T) {
 			Spec: mcv1beta1.PluginSpec{
 				Endpoints: []mcv1beta1.PluginEndpoint{
 					{Name: "game-tcp", Port: 8123, Protocol: "TCP"},
-					{Name: "game-udp", Port: 8123, Protocol: "UDP"},
+					{Name: "game-udp", Port: 8123, Protocol: gcProtocolUDP},
 				},
 			},
 		},
@@ -90,10 +90,10 @@ func TestBuildServicePorts_HTTPEndpointCreatesTCP(t *testing.T) {
 	}
 	plugins := []mcv1beta1.Plugin{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "bluemap"},
+			ObjectMeta: metav1.ObjectMeta{Name: gcPluginBluemap},
 			Spec: mcv1beta1.PluginSpec{
 				Endpoints: []mcv1beta1.PluginEndpoint{
-					{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+					{Name: gcWebUI, Port: 8100, Protocol: gcProtocolHTTP},
 				},
 			},
 		},
@@ -123,18 +123,18 @@ func TestBuildServicePorts_DeduplicateAcrossPlugins(t *testing.T) {
 	}
 	plugins := []mcv1beta1.Plugin{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "dynmap"},
+			ObjectMeta: metav1.ObjectMeta{Name: gcPluginDynmap},
 			Spec: mcv1beta1.PluginSpec{
 				Endpoints: []mcv1beta1.PluginEndpoint{
-					{Name: "web-ui", Port: 8123, Protocol: "HTTP"},
+					{Name: gcWebUI, Port: 8123, Protocol: gcProtocolHTTP},
 				},
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "bluemap"},
+			ObjectMeta: metav1.ObjectMeta{Name: gcPluginBluemap},
 			Spec: mcv1beta1.PluginSpec{
 				Endpoints: []mcv1beta1.PluginEndpoint{
-					{Name: "web-ui", Port: 8123, Protocol: "HTTP"},
+					{Name: gcWebUI, Port: 8123, Protocol: gcProtocolHTTP},
 				},
 			},
 		},
@@ -161,7 +161,7 @@ func TestBuildServicePorts_MinecraftAndRCON(t *testing.T) {
 				Enabled: true,
 				Port:    25575,
 				PasswordSecret: mcv1beta1.SecretKeyRef{
-					Name: "rcon",
+					Name: gcRCON,
 					Key:  "pass",
 				},
 			},
@@ -170,8 +170,8 @@ func TestBuildServicePorts_MinecraftAndRCON(t *testing.T) {
 
 	ports := buildServicePorts(server, nil)
 	require.Len(t, ports, 2)
-	assert.Equal(t, "minecraft", ports[0].Name)
+	assert.Equal(t, gcPortNameMinecraft, ports[0].Name)
 	assert.Equal(t, int32(25565), ports[0].Port)
-	assert.Equal(t, "rcon", ports[1].Name)
+	assert.Equal(t, gcRCON, ports[1].Name)
 	assert.Equal(t, int32(25575), ports[1].Port)
 }

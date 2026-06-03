@@ -17,6 +17,21 @@ import (
 // defaultProtocol is the default network protocol for plugin endpoints.
 const defaultProtocol = "TCP"
 
+// Shared string literals used across handlers.
+const (
+	// errRequestBodyRequired is returned when a request has no body.
+	errRequestBodyRequired = "Request body is required"
+
+	// updateStrategyLatest is the "latest" update strategy value.
+	updateStrategyLatest = "latest"
+	// updateStrategyAuto is the "auto" update strategy value.
+	updateStrategyAuto = "auto"
+	// updateStrategyPin is the "pin" update strategy value.
+	updateStrategyPin = "pin"
+	// updateStrategyBuildPin is the "build-pin" update strategy value.
+	updateStrategyBuildPin = "build-pin"
+)
+
 // Ensure Server implements StrictServerInterface.
 var _ generated.StrictServerInterface = (*Server)(nil)
 
@@ -127,7 +142,7 @@ func (s *Server) CreateServer(
 	if req.Body == nil {
 		return generated.CreateServer400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{
-				Error: "Request body is required",
+				Error: errRequestBodyRequired,
 				Code:  ptr(generated.INVALIDREQUEST),
 			},
 		}, nil
@@ -219,7 +234,7 @@ func (s *Server) UpdateServer(
 	if req.Body == nil {
 		return generated.UpdateServer400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{
-				Error: "Request body is required",
+				Error: errRequestBodyRequired,
 				Code:  ptr(generated.INVALIDREQUEST),
 			},
 		}, nil
@@ -389,7 +404,7 @@ func (s *Server) CreatePlugin(
 	if req.Body == nil {
 		return generated.CreatePlugin400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{
-				Error: "Request body is required",
+				Error: errRequestBodyRequired,
 				Code:  ptr(generated.INVALIDREQUEST),
 			},
 		}, nil
@@ -475,7 +490,7 @@ func (s *Server) UpdatePlugin(
 	if req.Body == nil {
 		return generated.UpdatePlugin400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{
-				Error: "Request body is required",
+				Error: errRequestBodyRequired,
 				Code:  ptr(generated.INVALIDREQUEST),
 			},
 		}, nil
@@ -1117,10 +1132,10 @@ func validateEndpointRequest(endpoints *[]generated.PluginEndpoint) string {
 
 // validUpdateStrategies is the set of accepted update strategy values.
 var validUpdateStrategies = map[generated.UpdateStrategy]bool{
-	"latest":    true,
-	"auto":      true,
-	"pin":       true,
-	"build-pin": true,
+	updateStrategyLatest:   true,
+	updateStrategyAuto:     true,
+	updateStrategyPin:      true,
+	updateStrategyBuildPin: true,
 }
 
 // validateServerCreateRequest validates server create request fields.
@@ -1135,13 +1150,13 @@ func validateServerCreateRequest(body *generated.ServerCreateRequest) string {
 		return fmt.Sprintf("Invalid update strategy %q", body.UpdateStrategy)
 	}
 
-	if body.UpdateStrategy == "pin" || body.UpdateStrategy == "build-pin" {
+	if body.UpdateStrategy == updateStrategyPin || body.UpdateStrategy == updateStrategyBuildPin {
 		if body.Version == nil || *body.Version == "" {
 			return "Version is required for pin and build-pin strategies"
 		}
 	}
 
-	if body.UpdateStrategy == "build-pin" {
+	if body.UpdateStrategy == updateStrategyBuildPin {
 		if body.Build == nil {
 			return "Build is required for build-pin strategy"
 		}
@@ -1323,7 +1338,7 @@ func (s *Server) CreateConfigMap(
 	if req.Body == nil {
 		return generated.CreateConfigMap400JSONResponse{
 			BadRequestJSONResponse: generated.BadRequestJSONResponse{
-				Error: "Request body is required",
+				Error: errRequestBodyRequired,
 				Code:  ptr(generated.INVALIDREQUEST),
 			},
 		}, nil

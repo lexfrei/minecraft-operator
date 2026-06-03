@@ -43,7 +43,7 @@ var _ = Describe("Plugin Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: gcNamespaceDefault, // TODO(user):Modify as needed
 		}
 		plugin := &mck8slexlav1beta1.Plugin{}
 
@@ -54,17 +54,17 @@ var _ = Describe("Plugin Controller", func() {
 				resource := &mck8slexlav1beta1.Plugin{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
-						Namespace: "default",
+						Namespace: gcNamespaceDefault,
 					},
 					Spec: mck8slexlav1beta1.PluginSpec{
 						Source: mck8slexlav1beta1.PluginSource{
-							Type:    "hangar",
+							Type:    gcSourceHangar,
 							Project: "EssentialsX",
 						},
-						UpdateStrategy: "latest",
+						UpdateStrategy: updateStrategyLatest,
 						InstanceSelector: metav1.LabelSelector{
 							MatchLabels: map[string]string{
-								"test": "true",
+								gcTest: gcTrue,
 							},
 						},
 					},
@@ -88,8 +88,8 @@ var _ = Describe("Plugin Controller", func() {
 			resource := &mck8slexlav1beta1.Plugin{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resource.Spec.UpdateStrategy).To(Equal("latest"))
-			Expect(resource.Spec.Source.Type).To(Equal("hangar"))
+			Expect(resource.Spec.UpdateStrategy).To(Equal(updateStrategyLatest))
+			Expect(resource.Spec.Source.Type).To(Equal(gcSourceHangar))
 			// TODO(user): Add integration tests with full reconciler setup including PluginClient and Solver.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
@@ -103,7 +103,7 @@ var _ = Describe("Plugin Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      deletionTestName,
-			Namespace: "default",
+			Namespace: gcNamespaceDefault,
 		}
 
 		BeforeEach(func() {
@@ -111,17 +111,17 @@ var _ = Describe("Plugin Controller", func() {
 			server := &mck8slexlav1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      deletionTestServerName,
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 					Labels: map[string]string{
-						"deletion-test": "true",
+						"deletion-test": gcTrue,
 					},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					UpdateSchedule: mck8slexlav1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mck8slexlav1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -135,15 +135,15 @@ var _ = Describe("Plugin Controller", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "minecraft",
-									Image: "lexfrei/papermc:1.21.1-91",
+									Name:  gcNamespaceMinecraft,
+									Image: gcImage1211Build91,
 								},
 							},
 						},
 					},
 				},
 			}
-			err := k8sClient.Get(ctx, types.NamespacedName{Name: deletionTestServerName, Namespace: "default"}, server)
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: deletionTestServerName, Namespace: gcNamespaceDefault}, server)
 			if errors.IsNotFound(err) {
 				Expect(k8sClient.Create(ctx, server)).To(Succeed())
 			}
@@ -152,17 +152,17 @@ var _ = Describe("Plugin Controller", func() {
 			plugin := &mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      deletionTestName,
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PluginSpec{
 					Source: mck8slexlav1beta1.PluginSource{
-						Type:    "hangar",
-						Project: "TestPlugin",
+						Type:    gcSourceHangar,
+						Project: gcTestPluginCamel,
 					},
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					InstanceSelector: metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"deletion-test": "true",
+							"deletion-test": gcTrue,
 						},
 					},
 				},
@@ -200,7 +200,7 @@ var _ = Describe("Plugin Controller", func() {
 
 			By("cleaning up the PaperMCServer resource")
 			server := &mck8slexlav1beta1.PaperMCServer{}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: deletionTestServerName, Namespace: "default"}, server)
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: deletionTestServerName, Namespace: gcNamespaceDefault}, server)
 			if err == nil {
 				_ = k8sClient.Delete(ctx, server)
 			}
@@ -289,7 +289,7 @@ var _ = Describe("Plugin Controller", func() {
 			plugin.Status.DeletionProgress = []mck8slexlav1beta1.DeletionProgressEntry{
 				{
 					ServerName: deletionTestServerName,
-					Namespace:  "default",
+					Namespace:  gcNamespaceDefault,
 					JARDeleted: false,
 					DeletedAt:  nil,
 				},
@@ -326,7 +326,7 @@ var _ = Describe("Plugin Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      serverCleanupPluginName,
-			Namespace: "default",
+			Namespace: gcNamespaceDefault,
 		}
 
 		BeforeEach(func() {
@@ -334,17 +334,17 @@ var _ = Describe("Plugin Controller", func() {
 			server := &mck8slexlav1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      existingServerName,
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 					Labels: map[string]string{
-						"cleanup-test": "true",
+						"cleanup-test": gcTrue,
 					},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					UpdateSchedule: mck8slexlav1beta1.UpdateSchedule{
-						CheckCron: "0 3 * * *",
+						CheckCron: gcCronDaily3am,
 						MaintenanceWindow: mck8slexlav1beta1.MaintenanceWindow{
-							Cron:    "0 4 * * 0",
+							Cron:    gcCronWeekly,
 							Enabled: true,
 						},
 					},
@@ -358,15 +358,15 @@ var _ = Describe("Plugin Controller", func() {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:  "minecraft",
-									Image: "lexfrei/papermc:1.21.1-91",
+									Name:  gcNamespaceMinecraft,
+									Image: gcImage1211Build91,
 								},
 							},
 						},
 					},
 				},
 			}
-			err := k8sClient.Get(ctx, types.NamespacedName{Name: existingServerName, Namespace: "default"}, server)
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: existingServerName, Namespace: gcNamespaceDefault}, server)
 			if errors.IsNotFound(err) {
 				Expect(k8sClient.Create(ctx, server)).To(Succeed())
 			}
@@ -375,17 +375,17 @@ var _ = Describe("Plugin Controller", func() {
 			plugin := &mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverCleanupPluginName,
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PluginSpec{
 					Source: mck8slexlav1beta1.PluginSource{
-						Type:    "hangar",
+						Type:    gcSourceHangar,
 						Project: "CleanupTestPlugin",
 					},
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					InstanceSelector: metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"cleanup-test": "true",
+							"cleanup-test": gcTrue,
 						},
 					},
 				},
@@ -420,7 +420,7 @@ var _ = Describe("Plugin Controller", func() {
 
 			By("cleaning up the PaperMCServer resource")
 			server := &mck8slexlav1beta1.PaperMCServer{}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: existingServerName, Namespace: "default"}, server)
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: existingServerName, Namespace: gcNamespaceDefault}, server)
 			if err == nil {
 				_ = k8sClient.Delete(ctx, server)
 			}
@@ -438,7 +438,7 @@ var _ = Describe("Plugin Controller", func() {
 			plugin.Status.DeletionProgress = []mck8slexlav1beta1.DeletionProgressEntry{
 				{
 					ServerName: deletedServerName, // This server doesn't exist
-					Namespace:  "default",
+					Namespace:  gcNamespaceDefault,
 					JARDeleted: false,
 				},
 			}
@@ -452,7 +452,7 @@ var _ = Describe("Plugin Controller", func() {
 			// Note: The actual cleanupDeletedServers() logic will remove this entry
 			// This test verifies the precondition - the entry exists for a non-existent server
 			var nonExistentServer mck8slexlav1beta1.PaperMCServer
-			err := k8sClient.Get(ctx, types.NamespacedName{Name: deletedServerName, Namespace: "default"}, &nonExistentServer)
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: deletedServerName, Namespace: gcNamespaceDefault}, &nonExistentServer)
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "Server should not exist")
 		})
 
@@ -468,12 +468,12 @@ var _ = Describe("Plugin Controller", func() {
 			plugin.Status.DeletionProgress = []mck8slexlav1beta1.DeletionProgressEntry{
 				{
 					ServerName: existingServerName, // This server exists
-					Namespace:  "default",
+					Namespace:  gcNamespaceDefault,
 					JARDeleted: false,
 				},
 				{
 					ServerName: deletedServerName, // This server doesn't exist
-					Namespace:  "default",
+					Namespace:  gcNamespaceDefault,
 					JARDeleted: false,
 				},
 			}
@@ -485,10 +485,10 @@ var _ = Describe("Plugin Controller", func() {
 
 			By("verifying existing-server exists but deleted-server does not")
 			var existingServer mck8slexlav1beta1.PaperMCServer
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: existingServerName, Namespace: "default"}, &existingServer)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: existingServerName, Namespace: gcNamespaceDefault}, &existingServer)).To(Succeed())
 
 			var nonExistentServer mck8slexlav1beta1.PaperMCServer
-			err := k8sClient.Get(ctx, types.NamespacedName{Name: deletedServerName, Namespace: "default"}, &nonExistentServer)
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: deletedServerName, Namespace: gcNamespaceDefault}, &nonExistentServer)
 			Expect(errors.IsNotFound(err)).To(BeTrue())
 
 			// After cleanupDeletedServers() is called, only existing-server should remain
@@ -507,12 +507,12 @@ var _ = Describe("Plugin Controller", func() {
 			plugin.Status.DeletionProgress = []mck8slexlav1beta1.DeletionProgressEntry{
 				{
 					ServerName: deletedServerName,
-					Namespace:  "default",
+					Namespace:  gcNamespaceDefault,
 					JARDeleted: false,
 				},
 				{
 					ServerName: anotherDeletedServerName,
-					Namespace:  "default",
+					Namespace:  gcNamespaceDefault,
 					JARDeleted: false,
 				},
 			}
@@ -520,8 +520,8 @@ var _ = Describe("Plugin Controller", func() {
 
 			By("verifying both servers do not exist")
 			var server1, server2 mck8slexlav1beta1.PaperMCServer
-			err1 := k8sClient.Get(ctx, types.NamespacedName{Name: deletedServerName, Namespace: "default"}, &server1)
-			err2 := k8sClient.Get(ctx, types.NamespacedName{Name: anotherDeletedServerName, Namespace: "default"}, &server2)
+			err1 := k8sClient.Get(ctx, types.NamespacedName{Name: deletedServerName, Namespace: gcNamespaceDefault}, &server1)
+			err2 := k8sClient.Get(ctx, types.NamespacedName{Name: anotherDeletedServerName, Namespace: gcNamespaceDefault}, &server2)
 			Expect(errors.IsNotFound(err1)).To(BeTrue())
 			Expect(errors.IsNotFound(err2)).To(BeTrue())
 
@@ -546,13 +546,13 @@ var _ = Describe("Plugin Controller", func() {
 					DeletionProgress: []mck8slexlav1beta1.DeletionProgressEntry{
 						{
 							ServerName:          "stale-server",
-							Namespace:           "default",
+							Namespace:           gcNamespaceDefault,
 							JARDeleted:          false,
 							DeletionRequestedAt: &fifteenMinAgo, // 15 min ago — should be force-completed
 						},
 						{
 							ServerName:          "recent-server",
-							Namespace:           "default",
+							Namespace:           gcNamespaceDefault,
 							JARDeleted:          false,
 							DeletionRequestedAt: &oneMinAgo, // 1 min ago — should NOT be force-completed
 						},
@@ -582,7 +582,7 @@ var _ = Describe("Plugin Controller", func() {
 					DeletionProgress: []mck8slexlav1beta1.DeletionProgressEntry{
 						{
 							ServerName:          "no-timestamp-server",
-							Namespace:           "default",
+							Namespace:           gcNamespaceDefault,
 							JARDeleted:          false,
 							DeletionRequestedAt: nil,
 						},
@@ -695,20 +695,20 @@ var _ = Describe("Plugin Controller", func() {
 			// When downloadURL changes (e.g., from GitHub page URL to empty after ExternalURL
 			// filter removal), status update was skipped because len stays the same.
 			a := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 					{
-						Version:     "2.21.2",
+						Version:     gcVersion2212,
 						DownloadURL: "https://github.com/EssentialsX/Essentials/releases/tags/2.21.2",
 						CachedAt:    now,
 					},
 				},
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 					{
-						Version:     "2.21.2",
+						Version:     gcVersion2212,
 						DownloadURL: "", // Empty after ExternalURL filter removal
 						CachedAt:    now,
 					},
@@ -721,15 +721,15 @@ var _ = Describe("Plugin Controller", func() {
 
 		It("should detect version change in AvailableVersions", func() {
 			a := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
-					{Version: "1.0.0", CachedAt: now},
+					{Version: gcVersion100, CachedAt: now},
 				},
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
-					{Version: "2.0.0", CachedAt: now},
+					{Version: gcVersion200, CachedAt: now},
 				},
 			}
 
@@ -739,15 +739,15 @@ var _ = Describe("Plugin Controller", func() {
 
 		It("should detect MatchedInstances content change", func() {
 			a := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				MatchedInstances: []mck8slexlav1beta1.MatchedInstance{
-					{Name: "server-a", Compatible: true},
+					{Name: gcServerA, Compatible: true},
 				},
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				MatchedInstances: []mck8slexlav1beta1.MatchedInstance{
-					{Name: "server-b", Compatible: true},
+					{Name: gcServerB, Compatible: true},
 				},
 			}
 
@@ -757,21 +757,21 @@ var _ = Describe("Plugin Controller", func() {
 
 		It("should return true for truly equal statuses", func() {
 			a := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
-					{Version: "1.0.0", DownloadURL: "https://example.com/v1.jar", CachedAt: now},
+					{Version: gcVersion100, DownloadURL: gcURLV1, CachedAt: now},
 				},
 				MatchedInstances: []mck8slexlav1beta1.MatchedInstance{
-					{Name: "server-a", Compatible: true},
+					{Name: gcServerA, Compatible: true},
 				},
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
-					{Version: "1.0.0", DownloadURL: "https://example.com/v1.jar", CachedAt: now},
+					{Version: gcVersion100, DownloadURL: gcURLV1, CachedAt: now},
 				},
 				MatchedInstances: []mck8slexlav1beta1.MatchedInstance{
-					{Name: "server-a", Compatible: true},
+					{Name: gcServerA, Compatible: true},
 				},
 			}
 
@@ -781,11 +781,11 @@ var _ = Describe("Plugin Controller", func() {
 
 		It("should treat nil and empty AvailableVersions as equal", func() {
 			a := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus:  "available",
+				RepositoryStatus:  repositoryStatusAvailable,
 				AvailableVersions: nil,
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus:  "available",
+				RepositoryStatus:  repositoryStatusAvailable,
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{},
 			}
 
@@ -795,11 +795,11 @@ var _ = Describe("Plugin Controller", func() {
 
 		It("should treat nil and empty MatchedInstances as equal", func() {
 			a := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				MatchedInstances: nil,
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				MatchedInstances: []mck8slexlav1beta1.MatchedInstance{},
 			}
 
@@ -809,11 +809,11 @@ var _ = Describe("Plugin Controller", func() {
 
 		It("should treat nil and empty Conditions as equal", func() {
 			a := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				Conditions:       nil,
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				Conditions:       []metav1.Condition{},
 			}
 
@@ -828,10 +828,10 @@ var _ = Describe("Plugin Controller", func() {
 			// condition changes were lost.
 			now := metav1.Now()
 			a := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				Conditions: []metav1.Condition{
 					{
-						Type:               "Ready",
+						Type:               conditionTypeReady,
 						Status:             metav1.ConditionTrue,
 						LastTransitionTime: now,
 						Reason:             "ReconcileSuccess",
@@ -840,10 +840,10 @@ var _ = Describe("Plugin Controller", func() {
 				},
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				Conditions: []metav1.Condition{
 					{
-						Type:               "Ready",
+						Type:               conditionTypeReady,
 						Status:             metav1.ConditionFalse,
 						LastTransitionTime: now,
 						Reason:             "ReconcileError",
@@ -859,8 +859,8 @@ var _ = Describe("Plugin Controller", func() {
 
 	Context("buildMatchedInstances reflects server-side compatibility", func() {
 		const (
-			testPluginName      = "test-plugin"
-			testPluginNamespace = "default"
+			testPluginName      = gcTestPlugin
+			testPluginNamespace = gcNamespaceDefault
 		)
 
 		It("should set Compatible=true when server has resolved this plugin as compatible", func() {
@@ -868,9 +868,9 @@ var _ = Describe("Plugin Controller", func() {
 			pluginNamespace := testPluginNamespace
 			servers := []mck8slexlav1beta1.PaperMCServer{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "server1", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: gcServer1, Namespace: gcNamespaceDefault},
 					Status: mck8slexlav1beta1.PaperMCServerStatus{
-						CurrentVersion: "1.21.1",
+						CurrentVersion: gcVersion1211,
 						Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 							{
 								PluginRef:       mck8slexlav1beta1.PluginRef{Name: pluginName, Namespace: pluginNamespace},
@@ -893,9 +893,9 @@ var _ = Describe("Plugin Controller", func() {
 			pluginNamespace := testPluginNamespace
 			servers := []mck8slexlav1beta1.PaperMCServer{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "server1", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: gcServer1, Namespace: gcNamespaceDefault},
 					Status: mck8slexlav1beta1.PaperMCServerStatus{
-						CurrentVersion: "1.21.1",
+						CurrentVersion: gcVersion1211,
 						Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 							{
 								PluginRef:  mck8slexlav1beta1.PluginRef{Name: pluginName, Namespace: pluginNamespace},
@@ -917,9 +917,9 @@ var _ = Describe("Plugin Controller", func() {
 			pluginNamespace := testPluginNamespace
 			servers := []mck8slexlav1beta1.PaperMCServer{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "server1", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: gcServer1, Namespace: gcNamespaceDefault},
 					Status: mck8slexlav1beta1.PaperMCServerStatus{
-						CurrentVersion: "1.21.1",
+						CurrentVersion: gcVersion1211,
 						// No Plugins status yet — server hasn't been reconciled
 					},
 				},
@@ -936,9 +936,9 @@ var _ = Describe("Plugin Controller", func() {
 			pluginNamespace := testPluginNamespace
 			servers := []mck8slexlav1beta1.PaperMCServer{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "server-compat", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "server-compat", Namespace: gcNamespaceDefault},
 					Status: mck8slexlav1beta1.PaperMCServerStatus{
-						CurrentVersion: "1.21.1",
+						CurrentVersion: gcVersion1211,
 						Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 							{
 								PluginRef:       mck8slexlav1beta1.PluginRef{Name: pluginName, Namespace: pluginNamespace},
@@ -949,9 +949,9 @@ var _ = Describe("Plugin Controller", func() {
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "server-incompat", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "server-incompat", Namespace: gcNamespaceDefault},
 					Status: mck8slexlav1beta1.PaperMCServerStatus{
-						CurrentVersion: "1.20.4",
+						CurrentVersion: gcVersion1204,
 						Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 							{
 								PluginRef:  mck8slexlav1beta1.PluginRef{Name: pluginName, Namespace: pluginNamespace},
@@ -1002,20 +1002,20 @@ var _ = Describe("Plugin Controller", func() {
 		)
 
 		BeforeEach(func() {
-			namespace = "default"
+			namespace = gcNamespaceDefault
 			mockPlugin = &testutil.MockPluginClient{
 				Versions: []plugins.PluginVersion{
 					{
 						Version:           "2.21.0",
 						ReleaseDate:       time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC),
-						MinecraftVersions: []string{"1.20.4", "1.21.0", "1.21.1"},
+						MinecraftVersions: []string{gcVersion1204, gcVersion1210, gcVersion1211},
 						DownloadURL:       "https://example.com/plugin-2.21.0.jar",
-						Hash:              "abc123",
+						Hash:              gcChecksumABC,
 					},
 					{
-						Version:           "2.21.2",
+						Version:           gcVersion2212,
 						ReleaseDate:       time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
-						MinecraftVersions: []string{"1.21.0", "1.21.1", "1.21.4"},
+						MinecraftVersions: []string{gcVersion1210, gcVersion1211, gcVersion1214},
 						DownloadURL:       "https://example.com/plugin-2.21.2.jar",
 						Hash:              "def456",
 					},
@@ -1066,13 +1066,13 @@ var _ = Describe("Plugin Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "server-for-unavail-test",
 					Namespace: namespace,
-					Labels:    map[string]string{selectorLabel: "true"},
+					Labels:    map[string]string{selectorLabel: gcTrue},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{{Name: "papermc"}},
+							Containers: []corev1.Container{{Name: containerNamePaperMC}},
 						},
 					},
 				},
@@ -1094,10 +1094,10 @@ var _ = Describe("Plugin Controller", func() {
 			}
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "Nonexistent"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "Nonexistent"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{selectorLabel: "true"},
+					MatchLabels: map[string]string{selectorLabel: gcTrue},
 				},
 			})
 			defer deletePlugin(pluginName)
@@ -1126,10 +1126,10 @@ var _ = Describe("Plugin Controller", func() {
 		It("should add finalizer on first reconcile", func() {
 			pluginName := "test-finalizer-add"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "TestPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: gcTestPluginCamel},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"test-finalizer": "true"},
+					MatchLabels: map[string]string{"test-finalizer": gcTrue},
 				},
 			})
 			defer deletePlugin(pluginName)
@@ -1148,10 +1148,10 @@ var _ = Describe("Plugin Controller", func() {
 		It("should fetch metadata and set RepositoryAvailable condition", func() {
 			pluginName := "test-metadata-fetch"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "EssentialsX"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "EssentialsX"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"test-metadata": "true"},
+					MatchLabels: map[string]string{"test-metadata": gcTrue},
 				},
 			})
 			defer deletePlugin(pluginName)
@@ -1175,7 +1175,7 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 
 			// Verify metadata cached in status
-			Expect(plugin.Status.RepositoryStatus).To(Equal("available"))
+			Expect(plugin.Status.RepositoryStatus).To(Equal(repositoryStatusAvailable))
 			Expect(plugin.Status.AvailableVersions).To(HaveLen(2))
 			Expect(plugin.Status.LastFetched).NotTo(BeNil())
 
@@ -1187,10 +1187,10 @@ var _ = Describe("Plugin Controller", func() {
 		It("should set Ready=True and VersionResolved=True on successful reconcile", func() {
 			pluginName := "test-ready-true"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "TestPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: gcTestPluginCamel},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"test-ready": "true"},
+					MatchLabels: map[string]string{"test-ready": gcTrue},
 				},
 			})
 			defer deletePlugin(pluginName)
@@ -1223,10 +1223,10 @@ var _ = Describe("Plugin Controller", func() {
 			mockPlugin.Versions = nil
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "BrokenPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "BrokenPlugin"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"test-unavail": "true"},
+					MatchLabels: map[string]string{"test-unavail": gcTrue},
 				},
 			})
 			defer deletePlugin(pluginName)
@@ -1257,10 +1257,10 @@ var _ = Describe("Plugin Controller", func() {
 		It("should use cached data (orphaned status) when repository fails but cache exists", func() {
 			pluginName := "test-repo-orphaned"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "CachedPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "CachedPlugin"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"test-orphaned": "true"},
+					MatchLabels: map[string]string{"test-orphaned": gcTrue},
 				},
 			})
 			defer deletePlugin(pluginName)
@@ -1299,12 +1299,12 @@ var _ = Describe("Plugin Controller", func() {
 			cached := plugin.Status.AvailableVersions
 			Expect(cached[0].Version).To(Equal("2.21.0"))
 			Expect(cached[0].DownloadURL).To(Equal("https://example.com/plugin-2.21.0.jar"))
-			Expect(cached[0].Hash).To(Equal("abc123"))
-			Expect(cached[0].MinecraftVersions).To(ConsistOf("1.20.4", "1.21.0", "1.21.1"))
-			Expect(cached[1].Version).To(Equal("2.21.2"))
+			Expect(cached[0].Hash).To(Equal(gcChecksumABC))
+			Expect(cached[0].MinecraftVersions).To(ConsistOf(gcVersion1204, gcVersion1210, gcVersion1211))
+			Expect(cached[1].Version).To(Equal(gcVersion2212))
 			Expect(cached[1].DownloadURL).To(Equal("https://example.com/plugin-2.21.2.jar"))
 			Expect(cached[1].Hash).To(Equal("def456"))
-			Expect(cached[1].MinecraftVersions).To(ConsistOf("1.21.0", "1.21.1", "1.21.4"))
+			Expect(cached[1].MinecraftVersions).To(ConsistOf(gcVersion1210, gcVersion1211, gcVersion1214))
 		})
 
 		It("should build MatchedInstances from label selector", func() {
@@ -1317,14 +1317,14 @@ var _ = Describe("Plugin Controller", func() {
 					Name:      "match-target-server",
 					Namespace: namespace,
 					Labels: map[string]string{
-						matchLabel: "true",
+						matchLabel: gcTrue,
 					},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{{Name: "papermc"}},
+							Containers: []corev1.Container{{Name: containerNamePaperMC}},
 						},
 					},
 				},
@@ -1335,10 +1335,10 @@ var _ = Describe("Plugin Controller", func() {
 			}()
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "MatchPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "MatchPlugin"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{matchLabel: "true"},
+					MatchLabels: map[string]string{matchLabel: gcTrue},
 				},
 			})
 			defer deletePlugin(pluginName)
@@ -1387,16 +1387,16 @@ var _ = Describe("Plugin Controller", func() {
 			plugin := &mck8slexlav1beta1.Plugin{
 				Spec: mck8slexlav1beta1.PluginSpec{
 					Source: mck8slexlav1beta1.PluginSource{
-						Type: "url",
-						URL:  "https://example.com/plugin.jar",
+						Type: gcSourceURL,
+						URL:  gcURLPlugin,
 					},
-					Version: "2.0.0", // Changed from original "1.0.0"
+					Version: gcVersion200, // Changed from original gcVersion100
 				},
 				Status: mck8slexlav1beta1.PluginStatus{
 					AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 						{
-							Version:     "1.0.0", // Old version in cache
-							DownloadURL: "https://example.com/plugin.jar",
+							Version:     gcVersion100, // Old version in cache
+							DownloadURL: gcURLPlugin,
 							CachedAt:    metav1.Now(), // Fresh cache
 						},
 					},
@@ -1414,15 +1414,15 @@ var _ = Describe("Plugin Controller", func() {
 			plugin := &mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-resolve-jar", Namespace: namespace},
 				Spec: mck8slexlav1beta1.PluginSpec{
-					Source:  mck8slexlav1beta1.PluginSource{Type: "url", URL: "https://example.com/plugin.jar"},
-					Version: "1.0.0", // spec fallback should NOT be used
+					Source:  mck8slexlav1beta1.PluginSource{Type: gcSourceURL, URL: gcURLPlugin},
+					Version: gcVersion100, // spec fallback should NOT be used
 				},
 			}
 
 			versions := reconciler.resolveURLVersion(ctx, plugin, jarBytes, hash)
 			Expect(versions).To(HaveLen(1))
 			Expect(versions[0].Version).To(Equal("3.2.1"), "Should use JAR metadata version, not spec.version")
-			Expect(versions[0].MinecraftVersions).To(Equal([]string{"1.21"}))
+			Expect(versions[0].MinecraftVersions).To(Equal([]string{gcVersion121}))
 			Expect(versions[0].Hash).To(Equal(hash))
 		})
 
@@ -1434,7 +1434,7 @@ var _ = Describe("Plugin Controller", func() {
 			plugin := &mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-resolve-fallback", Namespace: namespace},
 				Spec: mck8slexlav1beta1.PluginSpec{
-					Source:  mck8slexlav1beta1.PluginSource{Type: "url", URL: "https://example.com/plugin.jar"},
+					Source:  mck8slexlav1beta1.PluginSource{Type: gcSourceURL, URL: gcURLPlugin},
 					Version: "2.5.0",
 				},
 			}
@@ -1452,7 +1452,7 @@ var _ = Describe("Plugin Controller", func() {
 			plugin := &mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-resolve-placeholder", Namespace: namespace},
 				Spec: mck8slexlav1beta1.PluginSpec{
-					Source: mck8slexlav1beta1.PluginSource{Type: "url", URL: "https://example.com/plugin.jar"},
+					Source: mck8slexlav1beta1.PluginSource{Type: gcSourceURL, URL: gcURLPlugin},
 					// No spec.version set
 				},
 			}
@@ -1469,13 +1469,13 @@ var _ = Describe("Plugin Controller", func() {
 			plugin := &mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-fallback-condition", Namespace: namespace},
 				Spec: mck8slexlav1beta1.PluginSpec{
-					Source: mck8slexlav1beta1.PluginSource{Type: "url", URL: "https://example.com/plugin.jar"},
+					Source: mck8slexlav1beta1.PluginSource{Type: gcSourceURL, URL: gcURLPlugin},
 				},
 			}
 
 			_ = reconciler.resolveURLVersion(ctx, plugin, jarBytes, hash)
 
-			cond := meta.FindStatusCondition(plugin.Status.Conditions, "VersionResolved")
+			cond := meta.FindStatusCondition(plugin.Status.Conditions, conditionTypeVersionResolved)
 			Expect(cond).NotTo(BeNil(), "VersionResolved condition should be set for 0.0.0 fallback")
 			Expect(cond.Status).To(Equal(metav1.ConditionFalse),
 				"VersionResolved should be False when using 0.0.0 placeholder")
@@ -1490,13 +1490,13 @@ var _ = Describe("Plugin Controller", func() {
 			plugin := &mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-fallback-clear", Namespace: namespace},
 				Spec: mck8slexlav1beta1.PluginSpec{
-					Source: mck8slexlav1beta1.PluginSource{Type: "url", URL: "https://example.com/plugin.jar"},
+					Source: mck8slexlav1beta1.PluginSource{Type: gcSourceURL, URL: gcURLPlugin},
 				},
 			}
 
 			// First: 0.0.0 fallback sets ConditionFalse
 			_ = reconciler.resolveURLVersion(ctx, plugin, jarNoVersion, hashNoVersion)
-			cond := meta.FindStatusCondition(plugin.Status.Conditions, "VersionResolved")
+			cond := meta.FindStatusCondition(plugin.Status.Conditions, conditionTypeVersionResolved)
 			Expect(cond).NotTo(BeNil())
 			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 
@@ -1506,11 +1506,11 @@ var _ = Describe("Plugin Controller", func() {
 			hashWithVersion := fmt.Sprintf("%x", sha256.Sum256(jarWithVersion))
 			_ = reconciler.resolveURLVersion(ctx, plugin, jarWithVersion, hashWithVersion)
 
-			cond = meta.FindStatusCondition(plugin.Status.Conditions, "VersionResolved")
+			cond = meta.FindStatusCondition(plugin.Status.Conditions, conditionTypeVersionResolved)
 			Expect(cond).NotTo(BeNil())
 			Expect(cond.Status).To(Equal(metav1.ConditionTrue),
 				"VersionResolved should be True after successful version resolution")
-			Expect(cond.Reason).To(Equal("Resolved"))
+			Expect(cond.Reason).To(Equal(reasonResolved))
 		})
 
 		It("should keep URL cache valid when checksum is removed from spec", func() {
@@ -1519,16 +1519,16 @@ var _ = Describe("Plugin Controller", func() {
 			plugin := &mck8slexlav1beta1.Plugin{
 				Spec: mck8slexlav1beta1.PluginSpec{
 					Source: mck8slexlav1beta1.PluginSource{
-						Type:     "url",
-						URL:      "https://example.com/plugin.jar",
+						Type:     gcSourceURL,
+						URL:      gcURLPlugin,
 						Checksum: "", // Removed — was previously "abc123..."
 					},
 				},
 				Status: mck8slexlav1beta1.PluginStatus{
 					AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 						{
-							Version:     "1.0.0",
-							DownloadURL: "https://example.com/plugin.jar",
+							Version:     gcVersion100,
+							DownloadURL: gcURLPlugin,
 							Hash:        "abc123def456", // Hash from previous download
 							CachedAt:    metav1.Now(),
 						},
@@ -1545,14 +1545,14 @@ var _ = Describe("Plugin Controller", func() {
 			plugin := &mck8slexlav1beta1.Plugin{
 				Spec: mck8slexlav1beta1.PluginSpec{
 					Source: mck8slexlav1beta1.PluginSource{
-						Type: "url",
-						URL:  "https://example.com/plugin-v2.jar", // Changed URL
+						Type: gcSourceURL,
+						URL:  gcURLPluginV2, // Changed URL
 					},
 				},
 				Status: mck8slexlav1beta1.PluginStatus{
 					AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 						{
-							Version:     "1.0.0",
+							Version:     gcVersion100,
 							DownloadURL: "https://example.com/plugin-v1.jar", // Old URL
 							CachedAt:    metav1.Now(),
 						},
@@ -1575,10 +1575,10 @@ var _ = Describe("Plugin Controller", func() {
 		It("should build empty MatchedInstances when no servers match selector", func() {
 			pluginName := "test-no-match"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "LonelyPlugin"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "LonelyPlugin"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"nonexistent-label": "true"},
+					MatchLabels: map[string]string{"nonexistent-label": gcTrue},
 				},
 			})
 			defer deletePlugin(pluginName)
@@ -1608,10 +1608,10 @@ var _ = Describe("Plugin Controller", func() {
 		It("should cache versions in AvailableVersions status field", func() {
 			pluginName := "test-cache-versions"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:         mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "CacheTest"},
-				UpdateStrategy: "latest",
+				Source:         mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "CacheTest"},
+				UpdateStrategy: updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
-					MatchLabels: map[string]string{"test-cache": "true"},
+					MatchLabels: map[string]string{"test-cache": gcTrue},
 				},
 			})
 			defer deletePlugin(pluginName)
@@ -1632,8 +1632,8 @@ var _ = Describe("Plugin Controller", func() {
 			Expect(plugin.Status.AvailableVersions).To(HaveLen(2))
 			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("2.21.0"))
 			Expect(plugin.Status.AvailableVersions[0].DownloadURL).To(Equal("https://example.com/plugin-2.21.0.jar"))
-			Expect(plugin.Status.AvailableVersions[0].Hash).To(Equal("abc123"))
-			Expect(plugin.Status.AvailableVersions[1].Version).To(Equal("2.21.2"))
+			Expect(plugin.Status.AvailableVersions[0].Hash).To(Equal(gcChecksumABC))
+			Expect(plugin.Status.AvailableVersions[1].Version).To(Equal(gcVersion2212))
 		})
 
 		It("should immediately complete deletion for plugins never installed on a server", func() {
@@ -1651,10 +1651,10 @@ var _ = Describe("Plugin Controller", func() {
 					Namespace: namespace,
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{{Name: "papermc"}},
+							Containers: []corev1.Container{{Name: containerNamePaperMC}},
 						},
 					},
 				},
@@ -1666,8 +1666,8 @@ var _ = Describe("Plugin Controller", func() {
 
 			// Create plugin that matches the server
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:           mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "NonExistentPlugin"},
-				UpdateStrategy:   "latest",
+				Source:           mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "NonExistentPlugin"},
+				UpdateStrategy:   updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
 					// Empty selector matches everything
 				},
@@ -1721,10 +1721,10 @@ var _ = Describe("Plugin Controller", func() {
 					Namespace: namespace,
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{{Name: "papermc"}},
+							Containers: []corev1.Container{{Name: containerNamePaperMC}},
 						},
 					},
 				},
@@ -1749,8 +1749,8 @@ var _ = Describe("Plugin Controller", func() {
 
 			// Create plugin that matches the server
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
-				Source:           mck8slexlav1beta1.PluginSource{Type: "hangar", Project: "NonExistentPlugin"},
-				UpdateStrategy:   "latest",
+				Source:           mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: "NonExistentPlugin"},
+				UpdateStrategy:   updateStrategyLatest,
 				InstanceSelector: metav1.LabelSelector{
 					// Empty selector matches everything
 				},
@@ -1807,11 +1807,11 @@ var _ = Describe("Plugin Controller", func() {
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-jar": "true"}},
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-jar": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -1824,12 +1824,12 @@ var _ = Describe("Plugin Controller", func() {
 			var plugin mck8slexlav1beta1.Plugin
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
 
-			Expect(plugin.Status.RepositoryStatus).To(Equal("available"))
+			Expect(plugin.Status.RepositoryStatus).To(Equal(repositoryStatusAvailable))
 			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
 			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("1.5.0"))
 			Expect(plugin.Status.AvailableVersions[0].Hash).To(Equal(expectedHash))
 			Expect(plugin.Status.AvailableVersions[0].DownloadURL).To(Equal(testPluginURL))
-			Expect(plugin.Status.AvailableVersions[0].MinecraftVersions).To(ContainElement("1.21"))
+			Expect(plugin.Status.AvailableVersions[0].MinecraftVersions).To(ContainElement(gcVersion121))
 
 			cond := findCondition(plugin.Status.Conditions, conditionTypeRepositoryAvailable)
 			Expect(cond).NotTo(BeNil())
@@ -1856,12 +1856,12 @@ var _ = Describe("Plugin Controller", func() {
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				Version:          "1.0.0",
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-fallback": "true"}},
+				Version:          gcVersion100,
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-fallback": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -1874,10 +1874,10 @@ var _ = Describe("Plugin Controller", func() {
 			var plugin mck8slexlav1beta1.Plugin
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
 
-			Expect(plugin.Status.RepositoryStatus).To(Equal("available"),
+			Expect(plugin.Status.RepositoryStatus).To(Equal(repositoryStatusAvailable),
 				"ZIP parse failure should use fallback, not mark repo unavailable")
 			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
-			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("1.0.0"),
+			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal(gcVersion100),
 				"Should fallback to spec.version")
 			Expect(plugin.Status.AvailableVersions[0].Hash).NotTo(BeEmpty(),
 				"Hash should be set because JAR bytes were downloaded successfully")
@@ -1901,12 +1901,12 @@ var _ = Describe("Plugin Controller", func() {
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				Version:          "1.0.0",
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-http-fail": "true"}},
+				Version:          gcVersion100,
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-http-fail": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -1947,12 +1947,12 @@ var _ = Describe("Plugin Controller", func() {
 			wrongChecksum := "0000000000000000000000000000000000000000000000000000000000000000"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type:     "url",
+					Type:     gcSourceURL,
 					URL:      testPluginURL,
 					Checksum: wrongChecksum,
 				},
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-checksum": "true"}},
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-checksum": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -1989,11 +1989,11 @@ var _ = Describe("Plugin Controller", func() {
 			pluginName := "test-url-http-rejected"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  "http://example.com/plugin.jar",
 				},
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-http": "true"}},
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-http": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -2022,11 +2022,11 @@ var _ = Describe("Plugin Controller", func() {
 			pluginName := "test-url-empty"
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  "",
 				},
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-empty": "true"}},
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-empty": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -2063,8 +2063,8 @@ var _ = Describe("Plugin Controller", func() {
 				},
 				Spec: mck8slexlav1beta1.PluginSpec{
 					Source:           mck8slexlav1beta1.PluginSource{Type: "spigot", Project: "FakePlugin"},
-					UpdateStrategy:   "latest",
-					InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"unsup": "true"}},
+					UpdateStrategy:   updateStrategyLatest,
+					InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"unsup": gcTrue}},
 				},
 			}
 
@@ -2110,11 +2110,11 @@ var _ = Describe("Plugin Controller", func() {
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-no-checksum": "true"}},
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-no-checksum": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -2127,10 +2127,10 @@ var _ = Describe("Plugin Controller", func() {
 			var plugin mck8slexlav1beta1.Plugin
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())
 
-			Expect(plugin.Status.RepositoryStatus).To(Equal("available"),
+			Expect(plugin.Status.RepositoryStatus).To(Equal(repositoryStatusAvailable),
 				"URL plugin without checksum should still succeed with a warning")
 			Expect(plugin.Status.AvailableVersions).To(HaveLen(1))
-			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal("2.0.0"))
+			Expect(plugin.Status.AvailableVersions[0].Version).To(Equal(gcVersion200))
 		})
 
 		It("should use cached metadata when URL has not changed", func() {
@@ -2155,11 +2155,11 @@ var _ = Describe("Plugin Controller", func() {
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-cache": "true"}},
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-cache": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -2205,11 +2205,11 @@ var _ = Describe("Plugin Controller", func() {
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-metrics": "true"}},
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"url-metrics": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -2221,14 +2221,14 @@ var _ = Describe("Plugin Controller", func() {
 
 			Expect(mockMetrics.PluginAPICalls).To(BeNumerically(">=", 1),
 				"RecordPluginAPICall should be called for URL source")
-			Expect(mockMetrics.PluginAPISources).To(ContainElement("url"),
+			Expect(mockMetrics.PluginAPISources).To(ContainElement(gcSourceURL),
 				"Metrics should record 'url' as source type")
 		})
 
 		It("should not re-download when spec.version differs from JAR version (cache by TTL)", func() {
 			pluginName := "test-url-version-stable"
 			downloadCount := 0
-			// JAR has version "2.0.0" in plugin.yml.
+			// JAR has version gcVersion200 in plugin.yml.
 			jarBytes := testutil.BuildTestJAR("plugin.yml",
 				"name: StablePlugin\nversion: \"2.0.0\"\n")
 
@@ -2249,14 +2249,14 @@ var _ = Describe("Plugin Controller", func() {
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
 				// spec.version differs from JAR version. This is the fallback,
 				// but JAR metadata takes priority. Cache should remain valid.
-				Version:          "1.0.0",
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"stable-cache": "true"}},
+				Version:          gcVersion100,
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"stable-cache": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -2304,11 +2304,11 @@ var _ = Describe("Plugin Controller", func() {
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"cache-ttl": "true"}},
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"cache-ttl": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -2341,14 +2341,14 @@ var _ = Describe("Plugin Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serverName,
 					Namespace: namespace,
-					Labels:    map[string]string{"cache-ttl": "true"},
+					Labels:    map[string]string{"cache-ttl": gcTrue},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{{
-								Name:  "papermc",
+								Name:  containerNamePaperMC,
 								Image: "docker.io/lexfrei/papermc:1.21.1-1",
 							}},
 						},
@@ -2403,12 +2403,12 @@ var _ = Describe("Plugin Controller", func() {
 
 			createPlugin(pluginName, mck8slexlav1beta1.PluginSpec{
 				Source: mck8slexlav1beta1.PluginSource{
-					Type: "url",
+					Type: gcSourceURL,
 					URL:  testPluginURL,
 				},
 				// No Version field — forces 0.0.0 fallback.
-				UpdateStrategy:   "latest",
-				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"no-version": "true"}},
+				UpdateStrategy:   updateStrategyLatest,
+				InstanceSelector: metav1.LabelSelector{MatchLabels: map[string]string{"no-version": gcTrue}},
 			})
 			defer deletePlugin(pluginName)
 
@@ -2434,20 +2434,20 @@ var _ = Describe("Plugin Controller", func() {
 			a := &mck8slexlav1beta1.PluginStatus{
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 					{
-						Version:           "1.0.0",
-						DownloadURL:       "https://example.com/v1.jar",
-						Hash:              "abc123",
-						MinecraftVersions: []string{"1.20", "1.21"},
+						Version:           gcVersion100,
+						DownloadURL:       gcURLV1,
+						Hash:              gcChecksumABC,
+						MinecraftVersions: []string{gcVersion120, gcVersion121},
 					},
 				},
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 					{
-						Version:           "1.0.0",
-						DownloadURL:       "https://example.com/v1.jar",
-						Hash:              "abc123",
-						MinecraftVersions: []string{"1.20"}, // Removed 1.21
+						Version:           gcVersion100,
+						DownloadURL:       gcURLV1,
+						Hash:              gcChecksumABC,
+						MinecraftVersions: []string{gcVersion120}, // Removed 1.21
 					},
 				},
 			}
@@ -2462,10 +2462,10 @@ var _ = Describe("Plugin Controller", func() {
 			a := &mck8slexlav1beta1.PluginStatus{
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 					{
-						Version:           "1.0.0",
-						DownloadURL:       "https://example.com/v1.jar",
-						Hash:              "abc123",
-						MinecraftVersions: []string{"1.21"},
+						Version:           gcVersion100,
+						DownloadURL:       gcURLV1,
+						Hash:              gcChecksumABC,
+						MinecraftVersions: []string{gcVersion121},
 						CachedAt:          now,
 						ReleasedAt:        now,
 					},
@@ -2474,10 +2474,10 @@ var _ = Describe("Plugin Controller", func() {
 			b := &mck8slexlav1beta1.PluginStatus{
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 					{
-						Version:           "1.0.0",
-						DownloadURL:       "https://example.com/v1.jar",
-						Hash:              "abc123",
-						MinecraftVersions: []string{"1.21"},
+						Version:           gcVersion100,
+						DownloadURL:       gcURLV1,
+						Hash:              gcChecksumABC,
+						MinecraftVersions: []string{gcVersion121},
 						CachedAt:          later,
 						ReleasedAt:        now,
 					},
@@ -2494,7 +2494,7 @@ var _ = Describe("Plugin Controller", func() {
 			a := &mck8slexlav1beta1.PluginStatus{
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 					{
-						Version:    "1.0.0",
+						Version:    gcVersion100,
 						ReleasedAt: now,
 					},
 				},
@@ -2502,7 +2502,7 @@ var _ = Describe("Plugin Controller", func() {
 			b := &mck8slexlav1beta1.PluginStatus{
 				AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 					{
-						Version:    "1.0.0",
+						Version:    gcVersion100,
 						ReleasedAt: later,
 					},
 				},
@@ -2515,11 +2515,11 @@ var _ = Describe("Plugin Controller", func() {
 			now := metav1.Now()
 			earlier := metav1.NewTime(now.Add(-1 * time.Hour))
 			a := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				LastFetched:      &now,
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				LastFetched:      &earlier,
 			}
 			Expect(statusEqual(a, b)).To(BeFalse(),
@@ -2529,11 +2529,11 @@ var _ = Describe("Plugin Controller", func() {
 		It("should detect LastFetched nil vs non-nil", func() {
 			now := metav1.Now()
 			a := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				LastFetched:      &now,
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
-				RepositoryStatus: "available",
+				RepositoryStatus: repositoryStatusAvailable,
 				LastFetched:      nil,
 			}
 			Expect(statusEqual(a, b)).To(BeFalse(),
@@ -2600,14 +2600,14 @@ var _ = Describe("PluginController helpers", func() {
 			// can produce different orderings across reconciliations.
 			a := &mck8slexlav1beta1.PluginStatus{
 				MatchedInstances: []mck8slexlav1beta1.MatchedInstance{
-					{Name: "server-a", Namespace: "ns1", Version: "1.21.1", Compatible: true},
-					{Name: "server-b", Namespace: "ns2", Version: "1.21.0", Compatible: false},
+					{Name: gcServerA, Namespace: "ns1", Version: gcVersion1211, Compatible: true},
+					{Name: gcServerB, Namespace: gcNamespace2, Version: gcVersion1210, Compatible: false},
 				},
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
 				MatchedInstances: []mck8slexlav1beta1.MatchedInstance{
-					{Name: "server-b", Namespace: "ns2", Version: "1.21.0", Compatible: false},
-					{Name: "server-a", Namespace: "ns1", Version: "1.21.1", Compatible: true},
+					{Name: gcServerB, Namespace: gcNamespace2, Version: gcVersion1210, Compatible: false},
+					{Name: gcServerA, Namespace: "ns1", Version: gcVersion1211, Compatible: true},
 				},
 			}
 
@@ -2625,31 +2625,31 @@ var _ = Describe("PluginController helpers", func() {
 			a := &mck8slexlav1beta1.PluginStatus{
 				Conditions: []metav1.Condition{
 					{
-						Type:    "Ready",
+						Type:    conditionTypeReady,
 						Status:  metav1.ConditionTrue,
-						Reason:  "AllGood",
+						Reason:  gcAllGood,
 						Message: "Plugin is ready",
 					},
 					{
-						Type:    "VersionResolved",
+						Type:    conditionTypeVersionResolved,
 						Status:  metav1.ConditionTrue,
-						Reason:  "Resolved",
-						Message: "Version resolved",
+						Reason:  reasonResolved,
+						Message: gcVersionResolvedMsg,
 					},
 				},
 			}
 			b := &mck8slexlav1beta1.PluginStatus{
 				Conditions: []metav1.Condition{
 					{
-						Type:    "VersionResolved",
+						Type:    conditionTypeVersionResolved,
 						Status:  metav1.ConditionTrue,
-						Reason:  "Resolved",
-						Message: "Version resolved",
+						Reason:  reasonResolved,
+						Message: gcVersionResolvedMsg,
 					},
 					{
-						Type:    "Ready",
+						Type:    conditionTypeReady,
 						Status:  metav1.ConditionTrue,
-						Reason:  "AllGood",
+						Reason:  gcAllGood,
 						Message: "Plugin is ready",
 					},
 				},

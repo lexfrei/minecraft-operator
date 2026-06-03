@@ -25,6 +25,9 @@ const (
 	AnnotationReconcile = "mc.k8s.lex.la/reconcile"
 	// AnnotationApplyNow triggers immediate update application.
 	AnnotationApplyNow = "mc.k8s.lex.la/apply-now"
+
+	// ConditionStatefulSetReady is the condition type reporting StatefulSet readiness.
+	ConditionStatefulSetReady = "StatefulSetReady"
 )
 
 // ServerService provides operations for PaperMCServer resources.
@@ -352,7 +355,7 @@ func (s *ServerService) UpdateServer(ctx context.Context, data ServerUpdateData)
 func (s *ServerService) DetermineStatus(server *mck8slexlav1beta1.PaperMCServer) string {
 	// Check StatefulSet readiness via conditions
 	for _, condition := range server.Status.Conditions {
-		if condition.Type == "StatefulSetReady" {
+		if condition.Type == ConditionStatefulSetReady {
 			if condition.Status == metav1.ConditionTrue {
 				return StatusRunning
 			}

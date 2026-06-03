@@ -5,21 +5,30 @@ import (
 	"testing"
 )
 
+// Test-only literals reused across schema test cases.
+const (
+	fieldEnabled   = "enabled"
+	fieldStrategy  = "strategy"
+	strategyLatest = "latest"
+	pathServers    = "/api/v1/servers"
+	pathTest       = "/api/v1/test"
+)
+
 func TestRenderForm_BasicFields(t *testing.T) {
 	schema := &FormSchema{
 		Title: "TestCreate",
 		Fields: []FormField{
 			{Name: fieldName, Type: typeString, Required: true, ReadOnlyOnEdit: true},
-			{Name: "strategy", Type: typeString, Enum: []string{"latest", "pin"}, Required: true},
-			{Name: "count", Type: "integer", Minimum: intPtr(1), Maximum: intPtr(100)},
-			{Name: "enabled", Type: "boolean", Default: "true"},
+			{Name: fieldStrategy, Type: typeString, Enum: []string{strategyLatest, strategyPin}, Required: true},
+			{Name: "count", Type: typeInteger, Minimum: intPtr(1), Maximum: intPtr(100)},
+			{Name: fieldEnabled, Type: typeBoolean, Default: "true"},
 		},
 	}
 
-	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: "/api/v1/servers"})
+	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: pathServers})
 
 	// Should contain form tag with hx-post
-	if !strings.Contains(html, `hx-post="/api/v1/servers"`) {
+	if !strings.Contains(html, `hx-post="`+pathServers+`"`) {
 		t.Error("expected hx-post attribute in form")
 	}
 
@@ -41,7 +50,7 @@ func TestRenderForm_BasicFields(t *testing.T) {
 	if !strings.Contains(html, "<select") {
 		t.Error("expected select element for enum field")
 	}
-	if !strings.Contains(html, `<option value="latest"`) {
+	if !strings.Contains(html, `<option value="`+strategyLatest+`"`) {
 		t.Error("expected 'latest' option")
 	}
 
@@ -64,13 +73,13 @@ func TestRenderForm_EditMode(t *testing.T) {
 		Title: "TestUpdate",
 		Fields: []FormField{
 			{Name: fieldName, Type: typeString, Required: true, ReadOnlyOnEdit: true},
-			{Name: "version", Type: typeString},
+			{Name: fieldVersion, Type: typeString},
 		},
 	}
 
 	values := map[string]any{
-		fieldName: "my-server",
-		"version": "1.21.1",
+		fieldName:    "my-server",
+		fieldVersion: "1.21.1",
 	}
 
 	html := RenderForm(schema, values, RenderOptions{
@@ -107,14 +116,14 @@ func TestRenderForm_NestedObject(t *testing.T) {
 				Name: "rcon",
 				Type: typeObject,
 				Properties: []FormField{
-					{Name: "enabled", Type: "boolean"},
-					{Name: "port", Type: "integer", Default: "25575"},
+					{Name: fieldEnabled, Type: typeBoolean},
+					{Name: "port", Type: typeInteger, Default: "25575"},
 				},
 			},
 		},
 	}
 
-	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: "/api/v1/servers"})
+	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: pathServers})
 
 	// Should use dot-notation for nested fields
 	if !strings.Contains(html, `name="rcon.enabled"`) {
@@ -129,19 +138,19 @@ func TestRenderForm_ConditionalVisibility(t *testing.T) {
 	schema := &FormSchema{
 		Title: "TestConditional",
 		Fields: []FormField{
-			{Name: "strategy", Type: typeString, Enum: []string{"latest", "pin"}},
+			{Name: fieldStrategy, Type: typeString, Enum: []string{strategyLatest, strategyPin}},
 			{
-				Name: "version",
+				Name: fieldVersion,
 				Type: typeString,
 				Condition: &Condition{
-					DependsOn: "strategy",
-					Values:    []string{"pin"},
+					DependsOn: fieldStrategy,
+					Values:    []string{strategyPin},
 				},
 			},
 		},
 	}
 
-	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: "/api/v1/servers"})
+	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: pathServers})
 
 	if !strings.Contains(html, `data-depends-on="strategy"`) {
 		t.Error("expected data-depends-on attribute")
@@ -159,7 +168,7 @@ func TestRenderForm_AdditionalProperties(t *testing.T) {
 		},
 	}
 
-	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: "/api/v1/servers"})
+	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: pathServers})
 
 	// Should have add button for key-value pairs
 	if !strings.Contains(html, "data-map-field") {
@@ -179,14 +188,14 @@ func TestRenderForm_ArrayField(t *testing.T) {
 					Type: typeObject,
 					Properties: []FormField{
 						{Name: fieldName, Type: typeString, Required: true},
-						{Name: "port", Type: "integer", Required: true},
+						{Name: "port", Type: typeInteger, Required: true},
 					},
 				},
 			},
 		},
 	}
 
-	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: "/api/v1/servers"})
+	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: pathServers})
 
 	if !strings.Contains(html, "data-array-field") {
 		t.Error("expected data-array-field attribute")
@@ -206,7 +215,7 @@ func TestRenderForm_RequiredMarker(t *testing.T) {
 		},
 	}
 
-	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: "/api/v1/test"})
+	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: pathTest})
 
 	// Required field label should have asterisk
 	nameLabel := extractBetween(html, `<label for="name"`, "</label>")
@@ -224,7 +233,7 @@ func TestRenderForm_RequiredMarker(t *testing.T) {
 func TestRenderForm_SubmitButton(t *testing.T) {
 	schema := &FormSchema{Title: "Test", Fields: []FormField{}}
 
-	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: "/api/v1/test"})
+	html := RenderForm(schema, nil, RenderOptions{Mode: ModeCreate, SubmitURL: pathTest})
 
 	if !strings.Contains(html, `type="submit"`) {
 		t.Error("expected submit button")
@@ -233,7 +242,7 @@ func TestRenderForm_SubmitButton(t *testing.T) {
 		t.Error("expected 'Create' button text for create mode")
 	}
 
-	html = RenderForm(schema, nil, RenderOptions{Mode: ModeEdit, SubmitURL: "/api/v1/test"})
+	html = RenderForm(schema, nil, RenderOptions{Mode: ModeEdit, SubmitURL: pathTest})
 
 	if !strings.Contains(html, "Update") {
 		t.Error("expected 'Update' button text for edit mode")
@@ -258,7 +267,7 @@ func TestRenderForm_ConfigMapRefField(t *testing.T) {
 		Title: "TestConfigMapRef",
 		Fields: []FormField{
 			{
-				Name: "configMapRef",
+				Name: fieldConfigMapRef,
 				Type: typeObject,
 				Properties: []FormField{
 					{Name: fieldName, Type: typeString, Required: true},
@@ -268,7 +277,7 @@ func TestRenderForm_ConfigMapRefField(t *testing.T) {
 		},
 	}
 
-	h := RenderForm(s, nil, RenderOptions{Mode: ModeCreate, SubmitURL: "/api/v1/test"})
+	h := RenderForm(s, nil, RenderOptions{Mode: ModeCreate, SubmitURL: pathTest})
 
 	if !strings.Contains(h, "data-configmap-ref") {
 		t.Error("expected data-configmap-ref attribute for ConfigMap picker")
@@ -292,7 +301,7 @@ func TestRenderForm_ConfigMapRefPreFill(t *testing.T) {
 		Title: "TestConfigMapRefEdit",
 		Fields: []FormField{
 			{
-				Name: "configMapRef",
+				Name: fieldConfigMapRef,
 				Type: typeObject,
 				Properties: []FormField{
 					{Name: fieldName, Type: typeString},
@@ -307,7 +316,7 @@ func TestRenderForm_ConfigMapRefPreFill(t *testing.T) {
 		"configMapRef.key":  "core.conf",
 	}
 
-	h := RenderForm(s, values, RenderOptions{Mode: ModeEdit, SubmitURL: "/api/v1/test"})
+	h := RenderForm(s, values, RenderOptions{Mode: ModeEdit, SubmitURL: pathTest})
 
 	if !strings.Contains(h, `value="my-config"`) {
 		t.Error("expected ConfigMap name to be pre-filled")
@@ -322,17 +331,17 @@ func TestRenderForm_DisabledSelectPreservesValue(t *testing.T) {
 		Title: "TestDisabled",
 		Fields: []FormField{
 			{
-				Name:           "strategy",
+				Name:           fieldStrategy,
 				Type:           typeString,
-				Enum:           []string{"latest", "pin"},
+				Enum:           []string{strategyLatest, strategyPin},
 				ReadOnlyOnEdit: true,
 			},
 		},
 	}
 
-	values := map[string]any{"strategy": "pin"}
+	values := map[string]any{fieldStrategy: strategyPin}
 
-	html := RenderForm(schema, values, RenderOptions{Mode: ModeEdit, SubmitURL: "/api/v1/test"})
+	html := RenderForm(schema, values, RenderOptions{Mode: ModeEdit, SubmitURL: pathTest})
 
 	// Select should be disabled
 	if !strings.Contains(html, "disabled") {

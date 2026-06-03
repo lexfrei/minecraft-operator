@@ -49,10 +49,10 @@ var _ = Describe("Gateway API Routes", func() {
 			Client:         k8sClient,
 			Scheme:         k8sClient.Scheme(),
 			Solver:         solver.NewSimpleSolver(),
-			RegistryClient: &testutil.MockRegistryAPI{Tags: []string{"1.21.1-91"}, ImageExist: true},
+			RegistryClient: &testutil.MockRegistryAPI{Tags: []string{gcVersion1211Build91}, ImageExist: true},
 			PaperClient: &testutil.MockPaperAPI{
-				Versions:     []string{"1.21.1"},
-				BuildInfo:    &paper.BuildInfo{Version: "1.21.1", Build: 91},
+				Versions:     []string{gcVersion1211},
+				BuildInfo:    &paper.BuildInfo{Version: gcVersion1211, Build: 91},
 				BuildNumbers: []int{91},
 			},
 		}
@@ -65,12 +65,12 @@ var _ = Describe("Gateway API Routes", func() {
 				Namespace: ns,
 			},
 			Spec: mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "pin",
-				Version:        "1.21.1",
+				UpdateStrategy: updateStrategyPin,
+				Version:        gcVersion1211,
 				UpdateSchedule: mck8slexlav1beta1.UpdateSchedule{
-					CheckCron: "0 3 * * *",
+					CheckCron: gcCronDaily3am,
 					MaintenanceWindow: mck8slexlav1beta1.MaintenanceWindow{
-						Cron:    "0 4 * * 0",
+						Cron:    gcCronWeekly,
 						Enabled: true,
 					},
 				},
@@ -79,7 +79,7 @@ var _ = Describe("Gateway API Routes", func() {
 				},
 				RCON: mck8slexlav1beta1.RCONConfig{
 					Enabled:        false,
-					PasswordSecret: mck8slexlav1beta1.SecretKeyRef{Name: "rcon-secret", Key: "password"},
+					PasswordSecret: mck8slexlav1beta1.SecretKeyRef{Name: gcRCONSecret, Key: gcPassword},
 				},
 				Service: mck8slexlav1beta1.ServiceConfig{
 					Type: corev1.ServiceTypeClusterIP,
@@ -88,7 +88,7 @@ var _ = Describe("Gateway API Routes", func() {
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
-							{Name: "papermc", Image: "docker.io/lexfrei/papermc:1.21.1-91"},
+							{Name: containerNamePaperMC, Image: gcImageDocker1211Build91},
 						},
 					},
 				},
@@ -108,7 +108,7 @@ var _ = Describe("Gateway API Routes", func() {
 			server := createServer("gw-tcp-basic", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
-					{Name: "game-gateway", Namespace: "gateway-system"},
+					{Name: gcGameGateway, Namespace: gcGatewaySystemNS},
 				},
 				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
 			})
@@ -127,7 +127,7 @@ var _ = Describe("Gateway API Routes", func() {
 
 			// Verify parentRefs
 			Expect(tcpRoute.Spec.ParentRefs).To(HaveLen(1))
-			gwNamespace := gatewayv1alpha2.Namespace("gateway-system")
+			gwNamespace := gatewayv1alpha2.Namespace(gcGatewaySystemNS)
 			Expect(tcpRoute.Spec.ParentRefs[0].Namespace).To(Equal(&gwNamespace))
 
 			// Verify backend references the server Service on port 25565
@@ -143,7 +143,7 @@ var _ = Describe("Gateway API Routes", func() {
 			server := createServer("gw-tcp-rcon", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
-					{Name: "game-gateway", Namespace: "gateway-system"},
+					{Name: gcGameGateway, Namespace: gcGatewaySystemNS},
 				},
 				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
 			})
@@ -175,7 +175,7 @@ var _ = Describe("Gateway API Routes", func() {
 			server := createServer("gw-udp-basic", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
-					{Name: "game-gateway", Namespace: "gateway-system"},
+					{Name: gcGameGateway, Namespace: gcGatewaySystemNS},
 				},
 				UDPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
 			})
@@ -215,7 +215,7 @@ var _ = Describe("Gateway API Routes", func() {
 			server := createServer("gw-cleanup", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
-					{Name: "gw", Namespace: "gw-ns"},
+					{Name: "gw", Namespace: gcGatewayNS},
 				},
 				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
 				UDPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
@@ -252,7 +252,7 @@ var _ = Describe("Gateway API Routes", func() {
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
 					{Name: "gw-1", Namespace: "ns-1"},
-					{Name: "gw-2", Namespace: "ns-2", SectionName: "minecraft"},
+					{Name: "gw-2", Namespace: "ns-2", SectionName: gcPortNameMinecraft},
 				},
 				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
 			})
@@ -267,7 +267,7 @@ var _ = Describe("Gateway API Routes", func() {
 
 			Expect(tcpRoute.Spec.ParentRefs).To(HaveLen(2))
 
-			sectionName := gatewayv1alpha2.SectionName("minecraft")
+			sectionName := gatewayv1alpha2.SectionName(gcPortNameMinecraft)
 			Expect(tcpRoute.Spec.ParentRefs[1].SectionName).To(Equal(&sectionName))
 		})
 	})
@@ -307,7 +307,7 @@ var _ = Describe("Gateway API Routes", func() {
 			server := createServer("gw-labels-tcp", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
-					{Name: "gw", Namespace: "gw-ns"},
+					{Name: "gw", Namespace: gcGatewayNS},
 				},
 				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
 			})
@@ -320,18 +320,18 @@ var _ = Describe("Gateway API Routes", func() {
 				Name: server.Name + "-tcp", Namespace: ns,
 			}, &tcpRoute)).To(Succeed())
 
-			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "papermc"))
+			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", containerNamePaperMC))
 			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", server.Name))
-			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", gcMinecraftOperator))
 			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "networking"))
-			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+			Expect(tcpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", gcMinecraftOperator))
 		})
 
 		It("should set component and part-of labels on UDPRoute", func() {
 			server := createServer("gw-labels-udp", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
-					{Name: "gw", Namespace: "gw-ns"},
+					{Name: "gw", Namespace: gcGatewayNS},
 				},
 				UDPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
 			})
@@ -344,11 +344,11 @@ var _ = Describe("Gateway API Routes", func() {
 				Name: server.Name + "-udp", Namespace: ns,
 			}, &udpRoute)).To(Succeed())
 
-			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "papermc"))
+			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", containerNamePaperMC))
 			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", server.Name))
-			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", gcMinecraftOperator))
 			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "networking"))
-			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+			Expect(udpRoute.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", gcMinecraftOperator))
 		})
 	})
 
@@ -357,7 +357,7 @@ var _ = Describe("Gateway API Routes", func() {
 			server := createServer("gw-race-tcp", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
-					{Name: "gw", Namespace: "gw-ns"},
+					{Name: "gw", Namespace: gcGatewayNS},
 				},
 				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
 			})
@@ -385,7 +385,7 @@ var _ = Describe("Gateway API Routes", func() {
 			server := createServer("gw-noop-tcp", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
-					{Name: "gw", Namespace: "gw-ns"},
+					{Name: "gw", Namespace: gcGatewayNS},
 				},
 				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
 			})
@@ -420,7 +420,7 @@ var _ = Describe("Gateway API Routes", func() {
 			server := createServer("gw-owner", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: true,
 				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{
-					{Name: "gw", Namespace: "gw-ns"},
+					{Name: "gw", Namespace: gcGatewayNS},
 				},
 				TCPRoute: &mck8slexlav1beta1.RouteConfig{Enabled: true},
 			})
@@ -448,8 +448,8 @@ var _ = Describe("Gateway API Routes", func() {
 					Namespace: ns,
 				},
 				Spec: mck8slexlav1beta1.PluginSpec{
-					Source:           mck8slexlav1beta1.PluginSource{Type: "hangar", Project: name},
-					UpdateStrategy:   "latest",
+					Source:           mck8slexlav1beta1.PluginSource{Type: gcSourceHangar, Project: name},
+					UpdateStrategy:   updateStrategyLatest,
 					InstanceSelector: metav1.LabelSelector{},
 					Endpoints:        endpoints,
 				},
@@ -459,16 +459,16 @@ var _ = Describe("Gateway API Routes", func() {
 		}
 
 		It("should create HTTPRoute when plugin has HTTP endpoint and server has httpRoutes", func() {
-			plugin := createPlugin("bluemap", []mck8slexlav1beta1.PluginEndpoint{
-				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+			plugin := createPlugin(gcPluginBluemap, []mck8slexlav1beta1.PluginEndpoint{
+				{Name: gcWebUI, Port: 8100, Protocol: gcProtocolHTTP},
 			})
 
 			server := createServer("http-route-create", &mck8slexlav1beta1.GatewayConfig{
 				Enabled:    true,
-				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: gcMyGateway}},
 				TCPRoute:   &mck8slexlav1beta1.RouteConfig{Enabled: true},
 				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
-					{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "map.example.com"},
+					{PluginName: gcPluginBluemap, EndpointName: gcWebUI, Hostname: gcMapHostname},
 				},
 			})
 
@@ -482,9 +482,9 @@ var _ = Describe("Gateway API Routes", func() {
 			}, &httpRoute)).To(Succeed())
 
 			Expect(httpRoute.Spec.Hostnames).To(HaveLen(1))
-			Expect(string(httpRoute.Spec.Hostnames[0])).To(Equal("map.example.com"))
+			Expect(string(httpRoute.Spec.Hostnames[0])).To(Equal(gcMapHostname))
 			Expect(httpRoute.Spec.ParentRefs).To(HaveLen(1))
-			Expect(string(httpRoute.Spec.ParentRefs[0].Name)).To(Equal("my-gateway"))
+			Expect(string(httpRoute.Spec.ParentRefs[0].Name)).To(Equal(gcMyGateway))
 			Expect(httpRoute.Spec.Rules).To(HaveLen(1))
 			Expect(httpRoute.Spec.Rules[0].BackendRefs).To(HaveLen(1))
 			Expect(*httpRoute.Spec.Rules[0].BackendRefs[0].Port).To(Equal(int32(8100)))
@@ -492,13 +492,13 @@ var _ = Describe("Gateway API Routes", func() {
 
 		It("should NOT create HTTPRoute when gateway is disabled", func() {
 			plugin := createPlugin("bluemap-gw-off", []mck8slexlav1beta1.PluginEndpoint{
-				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+				{Name: gcWebUI, Port: 8100, Protocol: gcProtocolHTTP},
 			})
 
 			server := createServer("http-route-gw-off", &mck8slexlav1beta1.GatewayConfig{
 				Enabled: false,
 				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
-					{PluginName: "bluemap-gw-off", EndpointName: "web-ui", Hostname: "map.example.com"},
+					{PluginName: "bluemap-gw-off", EndpointName: gcWebUI, Hostname: gcMapHostname},
 				},
 			})
 
@@ -513,9 +513,9 @@ var _ = Describe("Gateway API Routes", func() {
 		It("should NOT create HTTPRoute when referenced plugin is not in matchedPlugins", func() {
 			server := createServer("http-route-no-plugin", &mck8slexlav1beta1.GatewayConfig{
 				Enabled:    true,
-				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: gcMyGateway}},
 				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
-					{PluginName: "nonexistent", EndpointName: "web-ui", Hostname: "map.example.com"},
+					{PluginName: gcNonexistent, EndpointName: gcWebUI, Hostname: gcMapHostname},
 				},
 			})
 
@@ -537,9 +537,9 @@ var _ = Describe("Gateway API Routes", func() {
 
 			server := createServer("http-route-wrong-proto", &mck8slexlav1beta1.GatewayConfig{
 				Enabled:    true,
-				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: gcMyGateway}},
 				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
-					{PluginName: "tcp-plugin", EndpointName: "game", Hostname: "map.example.com"},
+					{PluginName: "tcp-plugin", EndpointName: "game", Hostname: gcMapHostname},
 				},
 			})
 
@@ -555,15 +555,15 @@ var _ = Describe("Gateway API Routes", func() {
 
 		It("should delete orphaned HTTPRoute when removed from server spec", func() {
 			plugin := createPlugin("bluemap-orphan", []mck8slexlav1beta1.PluginEndpoint{
-				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+				{Name: gcWebUI, Port: 8100, Protocol: gcProtocolHTTP},
 			})
 
 			server := createServer("http-route-orphan", &mck8slexlav1beta1.GatewayConfig{
 				Enabled:    true,
-				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: gcMyGateway}},
 				TCPRoute:   &mck8slexlav1beta1.RouteConfig{Enabled: true},
 				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
-					{PluginName: "bluemap-orphan", EndpointName: "web-ui", Hostname: "map.example.com"},
+					{PluginName: "bluemap-orphan", EndpointName: gcWebUI, Hostname: gcMapHostname},
 				},
 			})
 
@@ -592,14 +592,14 @@ var _ = Describe("Gateway API Routes", func() {
 
 		It("should update HTTPRoute when hostname changes", func() {
 			plugin := createPlugin("bluemap-update", []mck8slexlav1beta1.PluginEndpoint{
-				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+				{Name: gcWebUI, Port: 8100, Protocol: gcProtocolHTTP},
 			})
 
 			server := createServer("http-route-update", &mck8slexlav1beta1.GatewayConfig{
 				Enabled:    true,
-				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: gcMyGateway}},
 				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
-					{PluginName: "bluemap-update", EndpointName: "web-ui", Hostname: "old.example.com"},
+					{PluginName: "bluemap-update", EndpointName: gcWebUI, Hostname: "old.example.com"},
 				},
 			})
 
@@ -622,14 +622,14 @@ var _ = Describe("Gateway API Routes", func() {
 
 		It("should create HTTPRoute with pathPrefix", func() {
 			plugin := createPlugin("bluemap-path", []mck8slexlav1beta1.PluginEndpoint{
-				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+				{Name: gcWebUI, Port: 8100, Protocol: gcProtocolHTTP},
 			})
 
 			server := createServer("http-route-path", &mck8slexlav1beta1.GatewayConfig{
 				Enabled:    true,
-				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: gcMyGateway}},
 				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
-					{PluginName: "bluemap-path", EndpointName: "web-ui", Hostname: "mc.example.com", PathPrefix: "/map"},
+					{PluginName: "bluemap-path", EndpointName: gcWebUI, Hostname: "mc.example.com", PathPrefix: "/map"},
 				},
 			})
 
@@ -648,14 +648,14 @@ var _ = Describe("Gateway API Routes", func() {
 
 		It("should set owner reference on HTTPRoute", func() {
 			plugin := createPlugin("bluemap-owner", []mck8slexlav1beta1.PluginEndpoint{
-				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+				{Name: gcWebUI, Port: 8100, Protocol: gcProtocolHTTP},
 			})
 
 			server := createServer("http-route-owner", &mck8slexlav1beta1.GatewayConfig{
 				Enabled:    true,
-				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: gcMyGateway}},
 				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
-					{PluginName: "bluemap-owner", EndpointName: "web-ui", Hostname: "map.example.com"},
+					{PluginName: "bluemap-owner", EndpointName: gcWebUI, Hostname: gcMapHostname},
 				},
 			})
 
@@ -675,9 +675,9 @@ var _ = Describe("Gateway API Routes", func() {
 		It("should set HTTPRouteConfigValid=False when plugin not matched", func() {
 			server := createServer("http-cond-invalid", &mck8slexlav1beta1.GatewayConfig{
 				Enabled:    true,
-				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: gcMyGateway}},
 				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
-					{PluginName: "nonexistent-plugin", EndpointName: "web-ui", Hostname: "map.example.com"},
+					{PluginName: "nonexistent-plugin", EndpointName: gcWebUI, Hostname: gcMapHostname},
 				},
 			})
 
@@ -693,14 +693,14 @@ var _ = Describe("Gateway API Routes", func() {
 
 		It("should set HTTPRouteConfigValid=True when all routes are valid", func() {
 			plugin := createPlugin("bluemap-cond-ok", []mck8slexlav1beta1.PluginEndpoint{
-				{Name: "web-ui", Port: 8100, Protocol: "HTTP"},
+				{Name: gcWebUI, Port: 8100, Protocol: gcProtocolHTTP},
 			})
 
 			server := createServer("http-cond-valid", &mck8slexlav1beta1.GatewayConfig{
 				Enabled:    true,
-				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: gcMyGateway}},
 				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
-					{PluginName: "bluemap-cond-ok", EndpointName: "web-ui", Hostname: "map.example.com"},
+					{PluginName: "bluemap-cond-ok", EndpointName: gcWebUI, Hostname: gcMapHostname},
 				},
 			})
 
@@ -715,9 +715,9 @@ var _ = Describe("Gateway API Routes", func() {
 		It("should clear stale HTTPRouteConfigValid condition when httpRoutes removed", func() {
 			server := createServer("http-cond-stale", &mck8slexlav1beta1.GatewayConfig{
 				Enabled:    true,
-				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: "my-gateway"}},
+				ParentRefs: []mck8slexlav1beta1.GatewayParentRef{{Name: gcMyGateway}},
 				HTTPRoutes: []mck8slexlav1beta1.PluginHTTPRoute{
-					{PluginName: "nonexistent", EndpointName: "web-ui", Hostname: "map.example.com"},
+					{PluginName: gcNonexistent, EndpointName: gcWebUI, Hostname: gcMapHostname},
 				},
 			})
 

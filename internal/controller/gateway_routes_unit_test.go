@@ -55,7 +55,7 @@ func TestBuildHTTPRoute_LongNameTruncatedTo253(t *testing.T) {
 	server := &mcv1beta1.PaperMCServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      strings.Repeat("s", 100),
-			Namespace: "default",
+			Namespace: gcNamespaceDefault,
 		},
 		Spec: mcv1beta1.PaperMCServerSpec{
 			Gateway: &mcv1beta1.GatewayConfig{

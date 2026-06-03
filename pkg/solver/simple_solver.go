@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	updateStrategyLatest = "latest"
-	updateStrategyAuto   = "auto"
-	updateStrategyPin    = "pin"
+	updateStrategyLatest   = "latest"
+	updateStrategyAuto     = "auto"
+	updateStrategyPin      = "pin"
+	updateStrategyBuildPin = "build-pin"
 )
 
 // SimpleSolver implements a linear search constraint solver for MVP.
@@ -70,7 +71,7 @@ func (s *SimpleSolver) checkPinnedPluginVersion(plugin *mcv1beta1.Plugin) string
 	}
 
 	switch strategy {
-	case updateStrategyPin, "build-pin":
+	case updateStrategyPin, updateStrategyBuildPin:
 		if plugin.Spec.Version != "" {
 			return plugin.Spec.Version
 		}
@@ -151,7 +152,7 @@ func (s *SimpleSolver) FindBestPaperVersion(
 	}
 
 	switch strategy {
-	case "pin", "build-pin":
+	case updateStrategyPin, updateStrategyBuildPin:
 		// For pin/build-pin strategies, return the exact specified version
 		if server.Spec.Version == "" {
 			return "", errors.Newf("updateStrategy is '%s' but version is not set", strategy)

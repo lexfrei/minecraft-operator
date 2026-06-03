@@ -46,7 +46,7 @@ import (
 )
 
 const (
-	conditionTypeServerReady          = "Ready"
+	conditionTypeServerReady          = conditionTypeReady
 	conditionTypeStatefulSetReady     = "StatefulSetReady"
 	conditionTypeUpdateAvailable      = "UpdateAvailable"
 	conditionTypeUpdateBlocked        = "UpdateBlocked"
@@ -597,7 +597,7 @@ func (r *PaperMCServerReconciler) buildPodSpec(
 
 	if len(podSpec.Containers) == 0 {
 		podSpec.Containers = []corev1.Container{{
-			Name: "papermc",
+			Name: containerNamePaperMC,
 		}}
 	}
 
@@ -618,7 +618,7 @@ func (r *PaperMCServerReconciler) buildPodSpec(
 
 	container.Env = r.buildEnvironmentVariables(server, container.Env)
 	container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-		Name:      "data",
+		Name:      gcVolumeData,
 		MountPath: "/data",
 	})
 
@@ -642,8 +642,8 @@ func (r *PaperMCServerReconciler) buildPodSpec(
 func (r *PaperMCServerReconciler) buildSelector(server *mcv1beta1.PaperMCServer) *metav1.LabelSelector {
 	return &metav1.LabelSelector{
 		MatchLabels: map[string]string{
-			"app":                       "papermc",
-			"mc.k8s.lex.la/server-name": server.Name,
+			gcLabelApp:        containerNamePaperMC,
+			gcLabelServerName: server.Name,
 		},
 	}
 }
@@ -658,8 +658,8 @@ func (r *PaperMCServerReconciler) buildPodTemplate(
 	maps.Copy(podLabels, server.Spec.PodTemplate.Labels)
 	maps.Copy(podLabels, standardLabels(server.Name, "server"))
 	// Retain legacy selector labels for backward compatibility
-	podLabels["app"] = "papermc"
-	podLabels["mc.k8s.lex.la/server-name"] = server.Name
+	podLabels[gcLabelApp] = containerNamePaperMC
+	podLabels[gcLabelServerName] = server.Name
 
 	// Preserve user-supplied annotations.
 	var podAnnotations map[string]string
@@ -682,7 +682,7 @@ func (r *PaperMCServerReconciler) buildVolumeClaimTemplates() []corev1.Persisten
 	return []corev1.PersistentVolumeClaim{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "data",
+				Name: gcVolumeData,
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -820,7 +820,7 @@ func (r *PaperMCServerReconciler) ensureService(
 func buildServicePorts(server *mcv1beta1.PaperMCServer, matchedPlugins []mcv1beta1.Plugin) []corev1.ServicePort {
 	ports := []corev1.ServicePort{
 		{
-			Name:       "minecraft",
+			Name:       gcPortNameMinecraft,
 			Port:       25565,
 			TargetPort: intstr.FromInt(25565),
 			Protocol:   corev1.ProtocolTCP,
@@ -831,7 +831,7 @@ func buildServicePorts(server *mcv1beta1.PaperMCServer, matchedPlugins []mcv1bet
 	if server.Spec.RCON.Enabled {
 		rconPort := server.Spec.RCON.Port
 		ports = append(ports, corev1.ServicePort{
-			Name:       "rcon",
+			Name:       gcRCON,
 			Port:       rconPort,
 			TargetPort: intstr.FromInt(int(rconPort)),
 			Protocol:   corev1.ProtocolTCP,
@@ -855,7 +855,7 @@ func buildServicePorts(server *mcv1beta1.PaperMCServer, matchedPlugins []mcv1bet
 			var proto corev1.Protocol
 
 			switch ep.Protocol {
-			case "UDP":
+			case gcProtocolUDP:
 				proto = corev1.ProtocolUDP
 			default: // TCP, HTTP, or empty (defaults to TCP)
 				proto = corev1.ProtocolTCP
@@ -901,8 +901,8 @@ func (r *PaperMCServerReconciler) buildService(
 		Type:  serviceType,
 		Ports: ports,
 		Selector: map[string]string{
-			"app":                       "papermc",
-			"mc.k8s.lex.la/server-name": server.Name,
+			gcLabelApp:        containerNamePaperMC,
+			gcLabelServerName: server.Name,
 		},
 	}
 
@@ -925,7 +925,7 @@ func (r *PaperMCServerReconciler) buildService(
 // detectCurrentPaperVersion parses version from StatefulSet container image tag.
 // Supported formats:
 //   - docker.io/lexfrei/papermc:1.21.10-91 -> version="1.21.10", build=91
-//   - docker.io/lexfrei/papermc:latest -> version="latest", build=0 (DEPRECATED, for backward compatibility only)
+//   - docker.io/lexfrei/papermc:latest -> version=updateStrategyLatest, build=0 (DEPRECATED, for backward compatibility only)
 //   - lexfrei/papermc:1.21.10-91 -> version="1.21.10", build=91
 //
 // NOTE: The :latest tag is deprecated and should not be used in new deployments.
@@ -953,7 +953,7 @@ func (r *PaperMCServerReconciler) detectCurrentPaperVersion(ctx context.Context,
 
 	tag := matches[2]
 
-	// Handle "latest" tag specially (DEPRECATED)
+	// Handle updateStrategyLatest tag specially (DEPRECATED)
 	// This is only for backward compatibility with existing deployments
 	if tag == versionPolicyLatest {
 		slog.WarnContext(ctx, "DEPRECATED: Detected :latest tag in existing deployment",
@@ -1033,7 +1033,7 @@ func (r *PaperMCServerReconciler) checkDowngrade(
 		return nil // First deployment, no downgrade possible
 	}
 
-	// Allow any version when current is "latest" (unresolved)
+	// Allow any version when current is updateStrategyLatest (unresolved)
 	if server.Status.CurrentVersion == updateStrategyLatest {
 		return nil
 	}
@@ -1088,7 +1088,7 @@ func (r *PaperMCServerReconciler) checkCompatibility(
 	return nil
 }
 
-// resolveLatestVersion resolves "latest" to actual latest Paper version from Docker Hub.
+// resolveLatestVersion resolves updateStrategyLatest to actual latest Paper version from Docker Hub.
 func (r *PaperMCServerReconciler) resolveLatestVersion(
 	ctx context.Context,
 	server *mcv1beta1.PaperMCServer,
@@ -1360,11 +1360,11 @@ func (r *PaperMCServerReconciler) resolvePluginVersionForServer(
 	strategy := plugin.Spec.UpdateStrategy
 	if strategy == "" {
 		// Default to latest if not specified
-		strategy = "latest"
+		strategy = updateStrategyLatest
 	}
 
 	// Handle pin and build-pin strategies
-	if strategy == "pin" || strategy == "build-pin" || strategy == "pinned" {
+	if strategy == updateStrategyPin || strategy == updateStrategyBuildPin || strategy == "pinned" {
 		pinnedVersion := plugin.Spec.Version
 		if pinnedVersion == "" {
 			return "", errors.Newf("updateStrategy is '%s' but version is not set", strategy)
@@ -2124,7 +2124,7 @@ func (r *PaperMCServerReconciler) findServersForPlugin(ctx context.Context, obj 
 // Kubernetes-injected volumes (e.g., projected SA tokens) are ignored because they
 // only exist in the existing spec and are not managed by the operator.
 //
-// Operator-managed volume names are: "data", "config-script", and any name starting with "cm-".
+// Operator-managed volume names are: gcVolumeData, gcConfigScript, and any name starting with "cm-".
 func volumesChanged(existing, desired []corev1.Volume) bool {
 	desiredMap := make(map[string]corev1.Volume, len(desired))
 	for _, v := range desired {
@@ -2167,7 +2167,7 @@ func volumesChanged(existing, desired []corev1.Volume) bool {
 }
 
 // isOperatorManagedVolume returns true if the volume name is managed by the operator.
-// Operator-managed volumes: "data", "config-script", and any name starting with "cm-".
+// Operator-managed volumes: gcVolumeData, gcConfigScript, and any name starting with "cm-".
 func isOperatorManagedVolume(name string) bool {
-	return name == "data" || name == "config-script" || strings.HasPrefix(name, "cm-")
+	return name == gcVolumeData || name == gcConfigScript || strings.HasPrefix(name, "cm-")
 }

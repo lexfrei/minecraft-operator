@@ -17,6 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test fixture constants.
+const testWarningMsg = "Warning"
+
 // --- Mock implementation ---
 
 // mockRCONConn implements rconConn interface for testing.
@@ -479,7 +482,7 @@ func TestRCONClient_GracefulShutdown_WarningError(t *testing.T) {
 	mock.executeError = errors.New("connection lost")
 	client.conn = mock
 
-	err = client.GracefulShutdown(context.Background(), []string{"Warning"}, 1*time.Millisecond)
+	err = client.GracefulShutdown(context.Background(), []string{testWarningMsg}, 1*time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to send warning")
@@ -504,7 +507,7 @@ func TestRCONClient_GracefulShutdown_SaveAllError(t *testing.T) {
 	}
 	client.conn = mock
 
-	err = client.GracefulShutdown(context.Background(), []string{"Warning"}, 1*time.Millisecond)
+	err = client.GracefulShutdown(context.Background(), []string{testWarningMsg}, 1*time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to save world")
@@ -529,7 +532,7 @@ func TestRCONClient_GracefulShutdown_StopError(t *testing.T) {
 	}
 	client.conn = mock
 
-	err = client.GracefulShutdown(context.Background(), []string{"Warning"}, 1*time.Millisecond)
+	err = client.GracefulShutdown(context.Background(), []string{testWarningMsg}, 1*time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to stop server")

@@ -25,7 +25,7 @@ func validServer() *PaperMCServer {
 			Namespace: "default",
 		},
 		Spec: PaperMCServerSpec{
-			UpdateStrategy: "latest",
+			UpdateStrategy: strategyLatest,
 			UpdateSchedule: UpdateSchedule{
 				CheckCron: "0 3 * * *",
 				MaintenanceWindow: MaintenanceWindow{
@@ -169,7 +169,7 @@ func TestServerValidateCreate_BackupInvalidCron(t *testing.T) {
 	s := validServer()
 	s.Spec.Backup = &BackupSpec{
 		Enabled:  true,
-		Schedule: "bad cron",
+		Schedule: testCronBad,
 	}
 
 	_, err := v.ValidateCreate(context.Background(), s)
@@ -195,7 +195,7 @@ func TestServerValidateCreate_BackupDisabledInvalidCronIgnored(t *testing.T) {
 	s := validServer()
 	s.Spec.Backup = &BackupSpec{
 		Enabled:  false,
-		Schedule: "bad cron",
+		Schedule: testCronBad,
 	}
 
 	warnings, err := v.ValidateCreate(context.Background(), s)
@@ -222,7 +222,7 @@ func TestServerValidateCreate_GatewayEnabledWithParentRefs(t *testing.T) {
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled: true,
 		ParentRefs: []GatewayParentRef{
-			{Name: "my-gateway"},
+			{Name: testGatewayName},
 		},
 	}
 
@@ -236,7 +236,7 @@ func TestServerValidateCreate_MaintenanceWindowDisabledInvalidCronIgnored(t *tes
 	v := &PaperMCServerValidator{}
 	s := validServer()
 	s.Spec.UpdateSchedule.MaintenanceWindow.Enabled = false
-	s.Spec.UpdateSchedule.MaintenanceWindow.Cron = "bad cron"
+	s.Spec.UpdateSchedule.MaintenanceWindow.Cron = testCronBad
 
 	warnings, err := v.ValidateCreate(context.Background(), s)
 	require.NoError(t, err)
@@ -281,7 +281,7 @@ func TestServerValidateUpdate_InvalidNewSpec(t *testing.T) {
 	v := &PaperMCServerValidator{}
 	oldS := validServer()
 	newS := validServer()
-	newS.Spec.UpdateSchedule.CheckCron = "bad"
+	newS.Spec.UpdateSchedule.CheckCron = testCronBad
 
 	_, err := v.ValidateUpdate(context.Background(), oldS, newS)
 	require.Error(t, err)
@@ -303,9 +303,9 @@ func TestServerValidateCreate_HTTPRoutesWithGatewayEnabled(t *testing.T) {
 	s := validServer()
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled:    true,
-		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		ParentRefs: []GatewayParentRef{{Name: testGatewayName}},
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "map.example.com"},
+			{PluginName: testPluginBlueMap, EndpointName: testEndpointWebUI, Hostname: testHostMapExample},
 		},
 	}
 
@@ -320,7 +320,7 @@ func TestServerValidateCreate_HTTPRoutesWithGatewayDisabled(t *testing.T) {
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled: false,
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "map.example.com"},
+			{PluginName: testPluginBlueMap, EndpointName: testEndpointWebUI, Hostname: testHostMapExample},
 		},
 	}
 
@@ -335,7 +335,7 @@ func TestServerValidateCreate_HTTPRoutesWithoutParentRefs(t *testing.T) {
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled: true,
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "map.example.com"},
+			{PluginName: testPluginBlueMap, EndpointName: testEndpointWebUI, Hostname: testHostMapExample},
 		},
 	}
 
@@ -349,16 +349,16 @@ func TestServerValidateCreate_HTTPRoutesDuplicatePluginEndpoint(t *testing.T) {
 	s := validServer()
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled:    true,
-		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		ParentRefs: []GatewayParentRef{{Name: testGatewayName}},
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "map1.example.com"},
-			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "map2.example.com"},
+			{PluginName: testPluginBlueMap, EndpointName: testEndpointWebUI, Hostname: "map1.example.com"},
+			{PluginName: testPluginBlueMap, EndpointName: testEndpointWebUI, Hostname: "map2.example.com"},
 		},
 	}
 
 	_, err := v.ValidateCreate(context.Background(), s)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "bluemap")
+	assert.Contains(t, err.Error(), testPluginBlueMap)
 }
 
 func TestServerValidateCreate_HTTPRoutesEmptyPluginName(t *testing.T) {
@@ -366,9 +366,9 @@ func TestServerValidateCreate_HTTPRoutesEmptyPluginName(t *testing.T) {
 	s := validServer()
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled:    true,
-		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		ParentRefs: []GatewayParentRef{{Name: testGatewayName}},
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "", EndpointName: "web-ui", Hostname: "map.example.com"},
+			{PluginName: "", EndpointName: testEndpointWebUI, Hostname: testHostMapExample},
 		},
 	}
 
@@ -382,9 +382,9 @@ func TestServerValidateCreate_HTTPRoutesEmptyEndpointName(t *testing.T) {
 	s := validServer()
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled:    true,
-		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		ParentRefs: []GatewayParentRef{{Name: testGatewayName}},
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "bluemap", EndpointName: "", Hostname: "map.example.com"},
+			{PluginName: testPluginBlueMap, EndpointName: "", Hostname: testHostMapExample},
 		},
 	}
 
@@ -398,9 +398,9 @@ func TestServerValidateCreate_HTTPRoutesEmptyHostname(t *testing.T) {
 	s := validServer()
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled:    true,
-		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		ParentRefs: []GatewayParentRef{{Name: testGatewayName}},
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: ""},
+			{PluginName: testPluginBlueMap, EndpointName: testEndpointWebUI, Hostname: ""},
 		},
 	}
 
@@ -414,16 +414,16 @@ func TestServerValidateCreate_HTTPRoutesDuplicateHostnamePathPrefix(t *testing.T
 	s := validServer()
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled:    true,
-		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		ParentRefs: []GatewayParentRef{{Name: testGatewayName}},
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "map.example.com", PathPrefix: "/map"},
-			{PluginName: "dynmap", EndpointName: "dynmap-ui", Hostname: "map.example.com", PathPrefix: "/map"},
+			{PluginName: testPluginBlueMap, EndpointName: testEndpointWebUI, Hostname: testHostMapExample, PathPrefix: testPathMap},
+			{PluginName: "dynmap", EndpointName: "dynmap-ui", Hostname: testHostMapExample, PathPrefix: testPathMap},
 		},
 	}
 
 	_, err := v.ValidateCreate(context.Background(), s)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "map.example.com")
+	assert.Contains(t, err.Error(), testHostMapExample)
 }
 
 func TestServerValidateCreate_HTTPRoutesSameHostnameDifferentPathValid(t *testing.T) {
@@ -431,10 +431,10 @@ func TestServerValidateCreate_HTTPRoutesSameHostnameDifferentPathValid(t *testin
 	s := validServer()
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled:    true,
-		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		ParentRefs: []GatewayParentRef{{Name: testGatewayName}},
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "mc.example.com", PathPrefix: "/map"},
-			{PluginName: "dynmap", EndpointName: "dynmap-ui", Hostname: "mc.example.com", PathPrefix: "/dynmap"},
+			{PluginName: testPluginBlueMap, EndpointName: testEndpointWebUI, Hostname: testHostMCExample, PathPrefix: testPathMap},
+			{PluginName: "dynmap", EndpointName: "dynmap-ui", Hostname: testHostMCExample, PathPrefix: "/dynmap"},
 		},
 	}
 
@@ -448,7 +448,7 @@ func TestServerValidateCreate_HTTPRoutesEmptyListValid(t *testing.T) {
 	s := validServer()
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled:    true,
-		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		ParentRefs: []GatewayParentRef{{Name: testGatewayName}},
 		HTTPRoutes: nil,
 	}
 
@@ -462,9 +462,9 @@ func TestServerValidateCreate_HTTPRoutesInvalidHostname(t *testing.T) {
 	s := validServer()
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled:    true,
-		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		ParentRefs: []GatewayParentRef{{Name: testGatewayName}},
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "not a valid hostname!"},
+			{PluginName: testPluginBlueMap, EndpointName: testEndpointWebUI, Hostname: "not a valid hostname!"},
 		},
 	}
 
@@ -478,9 +478,9 @@ func TestServerValidateCreate_HTTPRoutesPathPrefixNoSlash(t *testing.T) {
 	s := validServer()
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled:    true,
-		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		ParentRefs: []GatewayParentRef{{Name: testGatewayName}},
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "map.example.com", PathPrefix: "map"},
+			{PluginName: testPluginBlueMap, EndpointName: testEndpointWebUI, Hostname: testHostMapExample, PathPrefix: "map"},
 		},
 	}
 
@@ -494,9 +494,9 @@ func TestServerValidateCreate_HTTPRoutesWithPathPrefix(t *testing.T) {
 	s := validServer()
 	s.Spec.Gateway = &GatewayConfig{
 		Enabled:    true,
-		ParentRefs: []GatewayParentRef{{Name: "my-gateway"}},
+		ParentRefs: []GatewayParentRef{{Name: testGatewayName}},
 		HTTPRoutes: []PluginHTTPRoute{
-			{PluginName: "bluemap", EndpointName: "web-ui", Hostname: "mc.example.com", PathPrefix: "/map"},
+			{PluginName: testPluginBlueMap, EndpointName: testEndpointWebUI, Hostname: testHostMCExample, PathPrefix: testPathMap},
 		},
 	}
 
@@ -512,12 +512,12 @@ func TestServerValidateCreate_PluginConfigsValid(t *testing.T) {
 	s := validServer()
 	s.Spec.PluginConfigs = []ServerPluginConfig{
 		{
-			PluginName: "bluemap",
+			PluginName: testPluginBlueMap,
 			Configs: []PluginConfigFile{
 				{
-					ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-config", Key: "core.conf"},
-					Path:         "core.conf",
-					Overwrite:    "always",
+					ConfigMapRef: ConfigMapKeyRef{Name: testCMBlueMapConfig, Key: testConfigCoreConf},
+					Path:         testConfigCoreConf,
+					Overwrite:    testOverwriteAlways,
 				},
 			},
 		},
@@ -536,8 +536,8 @@ func TestServerValidateCreate_PluginConfigsMissingPluginName(t *testing.T) {
 			PluginName: "",
 			Configs: []PluginConfigFile{
 				{
-					ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-config", Key: "core.conf"},
-					Path:         "core.conf",
+					ConfigMapRef: ConfigMapKeyRef{Name: testCMBlueMapConfig, Key: testConfigCoreConf},
+					Path:         testConfigCoreConf,
 				},
 			},
 		},
@@ -553,11 +553,11 @@ func TestServerValidateCreate_PluginConfigsPathTraversal(t *testing.T) {
 	s := validServer()
 	s.Spec.PluginConfigs = []ServerPluginConfig{
 		{
-			PluginName: "bluemap",
+			PluginName: testPluginBlueMap,
 			Configs: []PluginConfigFile{
 				{
-					ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
-					Path:         "../etc/passwd",
+					ConfigMapRef: ConfigMapKeyRef{Name: testCMEvil, Key: testCMKeyPayload},
+					Path:         testPathTraversalPasswd,
 				},
 			},
 		},
@@ -573,11 +573,11 @@ func TestServerValidateCreate_PluginConfigsAbsolutePath(t *testing.T) {
 	s := validServer()
 	s.Spec.PluginConfigs = []ServerPluginConfig{
 		{
-			PluginName: "bluemap",
+			PluginName: testPluginBlueMap,
 			Configs: []PluginConfigFile{
 				{
-					ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
-					Path:         "/etc/passwd",
+					ConfigMapRef: ConfigMapKeyRef{Name: testCMEvil, Key: testCMKeyPayload},
+					Path:         testPathEtcPasswd,
 				},
 			},
 		},
@@ -593,11 +593,11 @@ func TestServerValidateCreate_PluginConfigsMissingConfigMapName(t *testing.T) {
 	s := validServer()
 	s.Spec.PluginConfigs = []ServerPluginConfig{
 		{
-			PluginName: "bluemap",
+			PluginName: testPluginBlueMap,
 			Configs: []PluginConfigFile{
 				{
-					ConfigMapRef: ConfigMapKeyRef{Name: "", Key: "core.conf"},
-					Path:         "core.conf",
+					ConfigMapRef: ConfigMapKeyRef{Name: "", Key: testConfigCoreConf},
+					Path:         testConfigCoreConf,
 				},
 			},
 		},
@@ -613,11 +613,11 @@ func TestServerValidateCreate_PluginConfigsMissingConfigMapKey(t *testing.T) {
 	s := validServer()
 	s.Spec.PluginConfigs = []ServerPluginConfig{
 		{
-			PluginName: "bluemap",
+			PluginName: testPluginBlueMap,
 			Configs: []PluginConfigFile{
 				{
-					ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-config", Key: ""},
-					Path:         "core.conf",
+					ConfigMapRef: ConfigMapKeyRef{Name: testCMBlueMapConfig, Key: ""},
+					Path:         testConfigCoreConf,
 				},
 			},
 		},
@@ -633,15 +633,15 @@ func TestServerValidateCreate_PluginConfigsDuplicatePath(t *testing.T) {
 	s := validServer()
 	s.Spec.PluginConfigs = []ServerPluginConfig{
 		{
-			PluginName: "bluemap",
+			PluginName: testPluginBlueMap,
 			Configs: []PluginConfigFile{
 				{
-					ConfigMapRef: ConfigMapKeyRef{Name: "cm1", Key: "core.conf"},
-					Path:         "core.conf",
+					ConfigMapRef: ConfigMapKeyRef{Name: "cm1", Key: testConfigCoreConf},
+					Path:         testConfigCoreConf,
 				},
 				{
-					ConfigMapRef: ConfigMapKeyRef{Name: "cm2", Key: "core.conf"},
-					Path:         "core.conf",
+					ConfigMapRef: ConfigMapKeyRef{Name: "cm2", Key: testConfigCoreConf},
+					Path:         testConfigCoreConf,
 				},
 			},
 		},
@@ -649,7 +649,7 @@ func TestServerValidateCreate_PluginConfigsDuplicatePath(t *testing.T) {
 
 	_, err := v.ValidateCreate(context.Background(), s)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "core.conf")
+	assert.Contains(t, err.Error(), testConfigCoreConf)
 }
 
 func TestServerValidateCreate_PluginConfigsEmptyList(t *testing.T) {
@@ -669,9 +669,9 @@ func TestServerValidateCreate_ServerConfigsValid(t *testing.T) {
 	s := validServer()
 	s.Spec.ServerConfigs = []ServerConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
-			Path:         "server.properties",
-			Overwrite:    "always",
+			ConfigMapRef: ConfigMapKeyRef{Name: testCMMCConfig, Key: testConfigServerProps},
+			Path:         testConfigServerProps,
+			Overwrite:    testOverwriteAlways,
 		},
 	}
 
@@ -685,8 +685,8 @@ func TestServerValidateCreate_ServerConfigsPathTraversal(t *testing.T) {
 	s := validServer()
 	s.Spec.ServerConfigs = []ServerConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
-			Path:         "../etc/passwd",
+			ConfigMapRef: ConfigMapKeyRef{Name: testCMEvil, Key: testCMKeyPayload},
+			Path:         testPathTraversalPasswd,
 		},
 	}
 
@@ -700,8 +700,8 @@ func TestServerValidateCreate_ServerConfigsAbsolutePath(t *testing.T) {
 	s := validServer()
 	s.Spec.ServerConfigs = []ServerConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
-			Path:         "/etc/passwd",
+			ConfigMapRef: ConfigMapKeyRef{Name: testCMEvil, Key: testCMKeyPayload},
+			Path:         testPathEtcPasswd,
 		},
 	}
 
@@ -715,8 +715,8 @@ func TestServerValidateCreate_ServerConfigsMissingConfigMapName(t *testing.T) {
 	s := validServer()
 	s.Spec.ServerConfigs = []ServerConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "", Key: "server.properties"},
-			Path:         "server.properties",
+			ConfigMapRef: ConfigMapKeyRef{Name: "", Key: testConfigServerProps},
+			Path:         testConfigServerProps,
 		},
 	}
 
@@ -730,8 +730,8 @@ func TestServerValidateCreate_ServerConfigsMissingConfigMapKey(t *testing.T) {
 	s := validServer()
 	s.Spec.ServerConfigs = []ServerConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: ""},
-			Path:         "server.properties",
+			ConfigMapRef: ConfigMapKeyRef{Name: testCMMCConfig, Key: ""},
+			Path:         testConfigServerProps,
 		},
 	}
 
@@ -745,18 +745,18 @@ func TestServerValidateCreate_ServerConfigsDuplicatePath(t *testing.T) {
 	s := validServer()
 	s.Spec.ServerConfigs = []ServerConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "cm1", Key: "server.properties"},
-			Path:         "server.properties",
+			ConfigMapRef: ConfigMapKeyRef{Name: "cm1", Key: testConfigServerProps},
+			Path:         testConfigServerProps,
 		},
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "cm2", Key: "server.properties"},
-			Path:         "server.properties",
+			ConfigMapRef: ConfigMapKeyRef{Name: "cm2", Key: testConfigServerProps},
+			Path:         testConfigServerProps,
 		},
 	}
 
 	_, err := v.ValidateCreate(context.Background(), s)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "server.properties")
+	assert.Contains(t, err.Error(), testConfigServerProps)
 }
 
 func TestServerValidateCreate_ServerConfigsEmptyPath(t *testing.T) {
@@ -764,7 +764,7 @@ func TestServerValidateCreate_ServerConfigsEmptyPath(t *testing.T) {
 	s := validServer()
 	s.Spec.ServerConfigs = []ServerConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
+			ConfigMapRef: ConfigMapKeyRef{Name: testCMMCConfig, Key: testConfigServerProps},
 			Path:         "",
 		},
 	}
@@ -779,7 +779,7 @@ func TestServerValidateCreate_ServerConfigsSubdirectoryPath(t *testing.T) {
 	s := validServer()
 	s.Spec.ServerConfigs = []ServerConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: "paper-global.yml"},
+			ConfigMapRef: ConfigMapKeyRef{Name: testCMMCConfig, Key: "paper-global.yml"},
 			Path:         "config/paper-global.yml",
 			Overwrite:    "ifNotExists",
 		},
@@ -798,12 +798,12 @@ func TestServerValidateUpdate_ValidPluginConfigs(t *testing.T) {
 	newS := validServer()
 	newS.Spec.PluginConfigs = []ServerPluginConfig{
 		{
-			PluginName: "bluemap",
+			PluginName: testPluginBlueMap,
 			Configs: []PluginConfigFile{
 				{
-					ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-config", Key: "core.conf"},
-					Path:         "core.conf",
-					Overwrite:    "always",
+					ConfigMapRef: ConfigMapKeyRef{Name: testCMBlueMapConfig, Key: testConfigCoreConf},
+					Path:         testConfigCoreConf,
+					Overwrite:    testOverwriteAlways,
 				},
 			},
 		},
@@ -820,11 +820,11 @@ func TestServerValidateUpdate_InvalidPluginConfigsPathTraversal(t *testing.T) {
 	newS := validServer()
 	newS.Spec.PluginConfigs = []ServerPluginConfig{
 		{
-			PluginName: "bluemap",
+			PluginName: testPluginBlueMap,
 			Configs: []PluginConfigFile{
 				{
-					ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
-					Path:         "../etc/passwd",
+					ConfigMapRef: ConfigMapKeyRef{Name: testCMEvil, Key: testCMKeyPayload},
+					Path:         testPathTraversalPasswd,
 				},
 			},
 		},
@@ -841,9 +841,9 @@ func TestServerValidateUpdate_ValidServerConfigs(t *testing.T) {
 	newS := validServer()
 	newS.Spec.ServerConfigs = []ServerConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
-			Path:         "server.properties",
-			Overwrite:    "always",
+			ConfigMapRef: ConfigMapKeyRef{Name: testCMMCConfig, Key: testConfigServerProps},
+			Path:         testConfigServerProps,
+			Overwrite:    testOverwriteAlways,
 		},
 	}
 
@@ -858,8 +858,8 @@ func TestServerValidateUpdate_InvalidServerConfigs(t *testing.T) {
 	newS := validServer()
 	newS.Spec.ServerConfigs = []ServerConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "evil", Key: "payload"},
-			Path:         "/etc/passwd",
+			ConfigMapRef: ConfigMapKeyRef{Name: testCMEvil, Key: testCMKeyPayload},
+			Path:         testPathEtcPasswd,
 		},
 	}
 
@@ -873,19 +873,19 @@ func TestServerValidateCreate_MixedPluginAndServerConfigs(t *testing.T) {
 	s := validServer()
 	s.Spec.PluginConfigs = []ServerPluginConfig{
 		{
-			PluginName: "bluemap",
+			PluginName: testPluginBlueMap,
 			Configs: []PluginConfigFile{
 				{
-					ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-config", Key: "core.conf"},
-					Path:         "core.conf",
+					ConfigMapRef: ConfigMapKeyRef{Name: testCMBlueMapConfig, Key: testConfigCoreConf},
+					Path:         testConfigCoreConf,
 				},
 			},
 		},
 	}
 	s.Spec.ServerConfigs = []ServerConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "mc-config", Key: "server.properties"},
-			Path:         "server.properties",
+			ConfigMapRef: ConfigMapKeyRef{Name: testCMMCConfig, Key: testConfigServerProps},
+			Path:         testConfigServerProps,
 		},
 	}
 

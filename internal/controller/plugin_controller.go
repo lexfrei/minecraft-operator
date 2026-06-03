@@ -316,10 +316,10 @@ func (r *PluginReconciler) fetchPluginMetadata(
 	plugin *mcv1beta1.Plugin,
 ) ([]plugins.PluginVersion, bool, error) {
 	switch plugin.Spec.Source.Type {
-	case "url":
+	case gcSourceURL:
 		versions, cacheHit, err := r.fetchURLMetadata(ctx, plugin)
 		return versions, cacheHit, err
-	case "hangar":
+	case gcSourceHangar:
 		versions, err := r.fetchHangarMetadata(ctx, plugin)
 		return versions, false, err
 	default:
@@ -364,7 +364,7 @@ func (r *PluginReconciler) fetchURLMetadata(
 	// Use cached metadata if URL and checksum haven't changed.
 	if r.urlCacheValid(plugin) {
 		slog.DebugContext(ctx, "Using cached metadata for URL plugin",
-			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
+			"plugin", plugin.Name, gcSourceURL, plugin.Spec.Source.URL)
 
 		return convertCachedVersions(plugin.Status.AvailableVersions), true, nil
 	}
@@ -372,7 +372,7 @@ func (r *PluginReconciler) fetchURLMetadata(
 	// Warn about missing checksum only when actually downloading (not on cache hits).
 	if plugin.Spec.Source.Checksum == "" {
 		slog.WarnContext(ctx, "URL plugin has no checksum, downloads will not be verified",
-			"plugin", plugin.Name, "url", plugin.Spec.Source.URL)
+			"plugin", plugin.Name, gcSourceURL, plugin.Spec.Source.URL)
 	}
 
 	// Phase 1: Download JAR. HTTP failure means the repo is unreachable.

@@ -16,11 +16,6 @@ import (
 )
 
 const (
-	sourceTypeURL       = "url"
-	strategyLatest      = "latest"
-	strategyAuto        = "auto"
-	strategyPin         = "pin"
-	strategyBuildPin    = "build-pin"
 	testPluginVersion   = "2.5.0"
 	testExampleJARURL   = "https://example.com/plugin.jar"
 	testExampleChecksum = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -35,10 +30,10 @@ func validPlugin() *Plugin {
 		},
 		Spec: PluginSpec{
 			Source: PluginSource{
-				Type:    "hangar",
+				Type:    sourceTypeHangar,
 				Project: "BlueMap",
 			},
-			UpdateStrategy:   "latest",
+			UpdateStrategy:   strategyLatest,
 			InstanceSelector: metav1.LabelSelector{},
 		},
 	}
@@ -309,9 +304,9 @@ func TestPluginValidateCreate_ConfigsValid(t *testing.T) {
 	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-defaults", Key: "core.conf"},
-			Path:         "core.conf",
-			Overwrite:    "always",
+			ConfigMapRef: ConfigMapKeyRef{Name: "bluemap-defaults", Key: testConfigCoreConf},
+			Path:         testConfigCoreConf,
+			Overwrite:    testOverwriteAlways,
 		},
 	}
 
@@ -325,8 +320,8 @@ func TestPluginValidateCreate_ConfigsWithoutPluginDirName(t *testing.T) {
 	p := validPlugin()
 	p.Spec.Configs = []PluginConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
-			Path:         "core.conf",
+			ConfigMapRef: ConfigMapKeyRef{Name: testNameTest, Key: testNameTest},
+			Path:         testConfigCoreConf,
 		},
 	}
 
@@ -341,7 +336,7 @@ func TestPluginValidateCreate_ConfigPathTraversal(t *testing.T) {
 	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
+			ConfigMapRef: ConfigMapKeyRef{Name: testNameTest, Key: testNameTest},
 			Path:         "../../../etc/passwd",
 		},
 	}
@@ -357,8 +352,8 @@ func TestPluginValidateCreate_ConfigAbsolutePath(t *testing.T) {
 	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
-			Path:         "/etc/passwd",
+			ConfigMapRef: ConfigMapKeyRef{Name: testNameTest, Key: testNameTest},
+			Path:         testPathEtcPasswd,
 		},
 	}
 
@@ -373,7 +368,7 @@ func TestPluginValidateCreate_ConfigEmptyPath(t *testing.T) {
 	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
+			ConfigMapRef: ConfigMapKeyRef{Name: testNameTest, Key: testNameTest},
 			Path:         "",
 		},
 	}
@@ -389,8 +384,8 @@ func TestPluginValidateCreate_ConfigEmptyConfigMapRef(t *testing.T) {
 	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "", Key: "test"},
-			Path:         "core.conf",
+			ConfigMapRef: ConfigMapKeyRef{Name: "", Key: testNameTest},
+			Path:         testConfigCoreConf,
 		},
 	}
 
@@ -405,8 +400,8 @@ func TestPluginValidateCreate_PluginDirNameTraversal(t *testing.T) {
 	p.Spec.PluginDirName = "../escape"
 	p.Spec.Configs = []PluginConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
-			Path:         "core.conf",
+			ConfigMapRef: ConfigMapKeyRef{Name: testNameTest, Key: testNameTest},
+			Path:         testConfigCoreConf,
 		},
 	}
 
@@ -421,8 +416,8 @@ func TestPluginValidateCreate_PluginDirNameWithSlash(t *testing.T) {
 	p.Spec.PluginDirName = "some/path"
 	p.Spec.Configs = []PluginConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "test"},
-			Path:         "core.conf",
+			ConfigMapRef: ConfigMapKeyRef{Name: testNameTest, Key: testNameTest},
+			Path:         testConfigCoreConf,
 		},
 	}
 
@@ -438,17 +433,17 @@ func TestPluginValidateCreate_ConfigDuplicatePaths(t *testing.T) {
 	p.Spec.Configs = []PluginConfigFile{
 		{
 			ConfigMapRef: ConfigMapKeyRef{Name: "a", Key: "x"},
-			Path:         "core.conf",
+			Path:         testConfigCoreConf,
 		},
 		{
 			ConfigMapRef: ConfigMapKeyRef{Name: "b", Key: "y"},
-			Path:         "core.conf",
+			Path:         testConfigCoreConf,
 		},
 	}
 
 	_, err := v.ValidateCreate(context.Background(), p)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "core.conf")
+	assert.Contains(t, err.Error(), testConfigCoreConf)
 }
 
 func TestPluginValidateCreate_ConfigNestedPath(t *testing.T) {
@@ -457,7 +452,7 @@ func TestPluginValidateCreate_ConfigNestedPath(t *testing.T) {
 	p.Spec.PluginDirName = testPluginDirName
 	p.Spec.Configs = []PluginConfigFile{
 		{
-			ConfigMapRef: ConfigMapKeyRef{Name: "test", Key: "overworld"},
+			ConfigMapRef: ConfigMapKeyRef{Name: testNameTest, Key: "overworld"},
 			Path:         "maps/overworld.conf",
 			Overwrite:    "ifNotExists",
 		},
@@ -484,8 +479,8 @@ func TestPluginValidateCreate_EndpointsValid(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
 	p.Spec.Endpoints = []PluginEndpoint{
-		{Name: "web-ui", Port: 8123, Protocol: "HTTP"},
-		{Name: "metrics", Port: 9100, Protocol: "TCP"},
+		{Name: testEndpointWebUI, Port: 8123, Protocol: protocolHTTP},
+		{Name: "metrics", Port: 9100, Protocol: protocolTCP},
 	}
 
 	warnings, err := v.ValidateCreate(context.Background(), p)
@@ -507,21 +502,21 @@ func TestPluginValidateCreate_EndpointsDuplicateNames(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
 	p.Spec.Endpoints = []PluginEndpoint{
-		{Name: "web-ui", Port: 8123, Protocol: "HTTP"},
-		{Name: "web-ui", Port: 9100, Protocol: "TCP"},
+		{Name: testEndpointWebUI, Port: 8123, Protocol: protocolHTTP},
+		{Name: testEndpointWebUI, Port: 9100, Protocol: protocolTCP},
 	}
 
 	_, err := v.ValidateCreate(context.Background(), p)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "web-ui")
+	assert.Contains(t, err.Error(), testEndpointWebUI)
 }
 
 func TestPluginValidateCreate_EndpointsDuplicatePortProtocol(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
 	p.Spec.Endpoints = []PluginEndpoint{
-		{Name: "web-ui", Port: 8123, Protocol: "TCP"},
-		{Name: "other", Port: 8123, Protocol: "TCP"},
+		{Name: testEndpointWebUI, Port: 8123, Protocol: protocolTCP},
+		{Name: "other", Port: 8123, Protocol: protocolTCP},
 	}
 
 	_, err := v.ValidateCreate(context.Background(), p)
@@ -533,8 +528,8 @@ func TestPluginValidateCreate_EndpointsSamePortDifferentProtocol(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
 	p.Spec.Endpoints = []PluginEndpoint{
-		{Name: "game-tcp", Port: 8123, Protocol: "TCP"},
-		{Name: "game-udp", Port: 8123, Protocol: "UDP"},
+		{Name: "game-tcp", Port: 8123, Protocol: protocolTCP},
+		{Name: "game-udp", Port: 8123, Protocol: protocolUDP},
 	}
 
 	warnings, err := v.ValidateCreate(context.Background(), p)
@@ -546,7 +541,7 @@ func TestPluginValidateCreate_EndpointInvalidProtocol(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
 	p.Spec.Endpoints = []PluginEndpoint{
-		{Name: "bad", Port: 8123, Protocol: "SCTP"},
+		{Name: testNameBad, Port: 8123, Protocol: "SCTP"},
 	}
 
 	_, err := v.ValidateCreate(context.Background(), p)
@@ -570,7 +565,7 @@ func TestPluginValidateCreate_EndpointPortZero(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
 	p.Spec.Endpoints = []PluginEndpoint{
-		{Name: "bad", Port: 0, Protocol: "TCP"},
+		{Name: testNameBad, Port: 0, Protocol: protocolTCP},
 	}
 
 	_, err := v.ValidateCreate(context.Background(), p)
@@ -582,7 +577,7 @@ func TestPluginValidateCreate_EndpointPortTooHigh(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
 	p.Spec.Endpoints = []PluginEndpoint{
-		{Name: "bad", Port: 70000, Protocol: "TCP"},
+		{Name: testNameBad, Port: 70000, Protocol: protocolTCP},
 	}
 
 	_, err := v.ValidateCreate(context.Background(), p)
@@ -594,7 +589,7 @@ func TestPluginValidateCreate_EndpointEmptyName(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
 	p.Spec.Endpoints = []PluginEndpoint{
-		{Name: "", Port: 8123, Protocol: "TCP"},
+		{Name: "", Port: 8123, Protocol: protocolTCP},
 	}
 
 	_, err := v.ValidateCreate(context.Background(), p)
@@ -627,7 +622,7 @@ func TestPluginValidateCreate_SourceProjectWithBacktick(t *testing.T) {
 func TestPluginValidateCreate_SourceProjectWithPathTraversal(t *testing.T) {
 	v := &PluginValidator{}
 	p := validPlugin()
-	p.Spec.Source.Project = "../etc/passwd"
+	p.Spec.Source.Project = testPathTraversalPasswd
 
 	_, err := v.ValidateCreate(context.Background(), p)
 	require.Error(t, err)

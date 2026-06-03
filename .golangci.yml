@@ -24,6 +24,14 @@ linters:
     - unparam
     - unused
   settings:
+    govet:
+      # The `inline` analyzer (default-enabled since golangci-lint v2.12)
+      # only reports "cannot inline: type parameter inference is not yet
+      # supported" — a Go compiler limitation on generics, not a code
+      # defect, and nothing the source can act on. Disable just that
+      # analyzer; the rest of govet stays on.
+      disable:
+        - inline
     revive:
       rules:
         - name: comment-spacings

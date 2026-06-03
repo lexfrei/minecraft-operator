@@ -27,7 +27,7 @@ func TestParseSchema_ServerCreateRequest(t *testing.T) {
 	}
 
 	// Check required fields exist
-	requiredNames := map[string]bool{"name": false, "namespace": false, "updateStrategy": false}
+	requiredNames := map[string]bool{"name": false, "namespace": false, fieldUpdateStrategy: false}
 	for _, f := range schema.Fields {
 		if _, ok := requiredNames[f.Name]; ok {
 			requiredNames[f.Name] = true
@@ -70,7 +70,7 @@ func TestParseSchema_FieldTypes(t *testing.T) {
 
 	// build should be integer
 	if b, ok := fieldByName["build"]; ok {
-		if b.Type != "integer" {
+		if b.Type != typeInteger {
 			t.Errorf("build should be integer, got %s", b.Type)
 		}
 		if b.Minimum == nil || *b.Minimum != 1 {
@@ -124,9 +124,9 @@ func TestParseSchema_NestedObjects(t *testing.T) {
 		// Check rcon has enabled field
 		found := false
 		for _, p := range rcon.Properties {
-			if p.Name == "enabled" {
+			if p.Name == fieldEnabled {
 				found = true
-				if p.Type != "boolean" {
+				if p.Type != typeBoolean {
 					t.Errorf("rcon.enabled should be boolean, got %s", p.Type)
 				}
 			}
@@ -220,7 +220,7 @@ func TestParseSchema_ConditionalVisibility(t *testing.T) {
 	}
 
 	// version should be conditional on updateStrategy=pin,build-pin
-	if v, ok := fieldByName["version"]; ok {
+	if v, ok := fieldByName[fieldVersion]; ok {
 		if v.Condition == nil {
 			t.Error("version should have a conditional visibility rule")
 		} else {

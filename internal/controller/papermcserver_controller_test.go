@@ -39,7 +39,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: gcNamespaceDefault, // TODO(user):Modify as needed
 		}
 		papermcserver := &mck8slexlav1beta1.PaperMCServer{}
 
@@ -50,15 +50,15 @@ var _ = Describe("PaperMCServer Controller", func() {
 				resource := &mck8slexlav1beta1.PaperMCServer{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
-						Namespace: "default",
+						Namespace: gcNamespaceDefault,
 					},
 					Spec: mck8slexlav1beta1.PaperMCServerSpec{
-						UpdateStrategy: "latest",
-						Version:        "latest",
+						UpdateStrategy: updateStrategyLatest,
+						Version:        updateStrategyLatest,
 						UpdateSchedule: mck8slexlav1beta1.UpdateSchedule{
-							CheckCron: "0 3 * * *",
+							CheckCron: gcCronDaily3am,
 							MaintenanceWindow: mck8slexlav1beta1.MaintenanceWindow{
-								Cron:    "0 4 * * 0",
+								Cron:    gcCronWeekly,
 								Enabled: true,
 							},
 						},
@@ -69,15 +69,15 @@ var _ = Describe("PaperMCServer Controller", func() {
 							Enabled: false,
 							PasswordSecret: mck8slexlav1beta1.SecretKeyRef{
 								Name: "test-secret",
-								Key:  "password",
+								Key:  gcPassword,
 							},
 						},
 						PodTemplate: corev1.PodTemplateSpec{
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
 									{
-										Name:  "papermc",
-										Image: "lexfrei/papermc:latest",
+										Name:  containerNamePaperMC,
+										Image: gcImageLatest,
 									},
 								},
 							},
@@ -103,7 +103,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 			resource := &mck8slexlav1beta1.PaperMCServer{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resource.Spec.Version).To(Equal("latest"))
+			Expect(resource.Spec.Version).To(Equal(updateStrategyLatest))
 			// TODO(user): Add integration tests with full reconciler setup including PaperClient and Solver.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
@@ -118,20 +118,20 @@ var _ = Describe("PaperMCServer Controller", func() {
 			plugin := mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "compatible-plugin",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Status: mck8slexlav1beta1.PluginStatus{
 					AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 						{
-							Version:           "1.0.0",
-							MinecraftVersions: []string{"1.20.4", "1.21.0", "1.21.1"},
-							DownloadURL:       "https://example.com/plugin.jar",
+							Version:           gcVersion100,
+							MinecraftVersions: []string{gcVersion1204, gcVersion1210, gcVersion1211},
+							DownloadURL:       gcURLPlugin,
 						},
 					},
 				},
 			}
 
-			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, "1.21.1")
+			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, gcVersion1211)
 			Expect(compatible).To(BeTrue(), "Plugin with compatible version should return true")
 		})
 
@@ -143,25 +143,25 @@ var _ = Describe("PaperMCServer Controller", func() {
 			plugin := mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "incompatible-plugin",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Status: mck8slexlav1beta1.PluginStatus{
 					AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 						{
-							Version:           "1.0.0",
+							Version:           gcVersion100,
 							MinecraftVersions: []string{"1.19.4", "1.20.0"},
-							DownloadURL:       "https://example.com/plugin.jar",
+							DownloadURL:       gcURLPlugin,
 						},
 						{
-							Version:           "2.0.0",
-							MinecraftVersions: []string{"1.20.1", "1.20.4"},
-							DownloadURL:       "https://example.com/plugin-v2.jar",
+							Version:           gcVersion200,
+							MinecraftVersions: []string{"1.20.1", gcVersion1204},
+							DownloadURL:       gcURLPluginV2,
 						},
 					},
 				},
 			}
 
-			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, "1.21.1")
+			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, gcVersion1211)
 			Expect(compatible).To(BeFalse(), "Plugin without compatible version should return false")
 		})
 
@@ -174,14 +174,14 @@ var _ = Describe("PaperMCServer Controller", func() {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "blocker-plugin",
-						Namespace: "default",
+						Namespace: gcNamespaceDefault,
 					},
 					Status: mck8slexlav1beta1.PluginStatus{
 						AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 							{
-								Version:           "1.0.0",
-								MinecraftVersions: []string{"1.20.4"},
-								DownloadURL:       "https://example.com/plugin.jar",
+								Version:           gcVersion100,
+								MinecraftVersions: []string{gcVersion1204},
+								DownloadURL:       gcURLPlugin,
 							},
 						},
 					},
@@ -189,7 +189,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 			}
 
 			compatible, blockingPlugin, blockReason := reconciler.checkPluginCompatibility(
-				ctx, "1.21.1", matchedPlugins)
+				ctx, gcVersion1211, matchedPlugins)
 
 			Expect(compatible).To(BeFalse(), "Update should be blocked")
 			Expect(blockingPlugin).To(Equal("blocker-plugin"))
@@ -203,14 +203,14 @@ var _ = Describe("PaperMCServer Controller", func() {
 			matchedPlugins := []mck8slexlav1beta1.Plugin{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "plugin-a",
-						Namespace: "default",
+						Name:      gcPluginA,
+						Namespace: gcNamespaceDefault,
 					},
 					Status: mck8slexlav1beta1.PluginStatus{
 						AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 							{
-								Version:           "1.0.0",
-								MinecraftVersions: []string{"1.21.0", "1.21.1"},
+								Version:           gcVersion100,
+								MinecraftVersions: []string{gcVersion1210, gcVersion1211},
 								DownloadURL:       "https://example.com/a.jar",
 							},
 						},
@@ -218,14 +218,14 @@ var _ = Describe("PaperMCServer Controller", func() {
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "plugin-b",
-						Namespace: "default",
+						Name:      gcPluginB,
+						Namespace: gcNamespaceDefault,
 					},
 					Status: mck8slexlav1beta1.PluginStatus{
 						AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 							{
-								Version:           "2.0.0",
-								MinecraftVersions: []string{"1.20.4", "1.21.1"},
+								Version:           gcVersion200,
+								MinecraftVersions: []string{gcVersion1204, gcVersion1211},
 								DownloadURL:       "https://example.com/b.jar",
 							},
 						},
@@ -234,7 +234,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 			}
 
 			compatible, blockingPlugin, blockReason := reconciler.checkPluginCompatibility(
-				ctx, "1.21.1", matchedPlugins)
+				ctx, gcVersion1211, matchedPlugins)
 
 			Expect(compatible).To(BeTrue(), "Update should be allowed when all plugins compatible")
 			Expect(blockingPlugin).To(BeEmpty())
@@ -251,7 +251,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "override-only-plugin",
-						Namespace: "default",
+						Namespace: gcNamespaceDefault,
 					},
 					Spec: mck8slexlav1beta1.PluginSpec{
 						CompatibilityOverride: &mck8slexlav1beta1.CompatibilityOverride{
@@ -264,7 +264,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 			}
 
 			compatible, blockingPlugin, blockReason := reconciler.checkPluginCompatibility(
-				ctx, "1.21.1", matchedPlugins)
+				ctx, gcVersion1211, matchedPlugins)
 
 			Expect(compatible).To(BeTrue(),
 				"Plugin with override should not be blocked even without available versions")
@@ -280,14 +280,14 @@ var _ = Describe("PaperMCServer Controller", func() {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "no-metadata-plugin",
-						Namespace: "default",
+						Namespace: gcNamespaceDefault,
 					},
 					// No AvailableVersions, no override
 				},
 			}
 
 			compatible, blockingPlugin, blockReason := reconciler.checkPluginCompatibility(
-				ctx, "1.21.1", matchedPlugins)
+				ctx, gcVersion1211, matchedPlugins)
 
 			Expect(compatible).To(BeTrue(),
 				"Plugin without metadata should be assumed compatible per DESIGN.md")
@@ -304,7 +304,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 			plugin := mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "override-plugin",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PluginSpec{
 					CompatibilityOverride: &mck8slexlav1beta1.CompatibilityOverride{
@@ -316,7 +316,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				Status: mck8slexlav1beta1.PluginStatus{},
 			}
 
-			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, "1.21.4")
+			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, gcVersion1214)
 			Expect(compatible).To(BeTrue(),
 				"Plugin with compatibilityOverride matching via wildcard should be compatible")
 		})
@@ -328,17 +328,17 @@ var _ = Describe("PaperMCServer Controller", func() {
 			plugin := mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "override-exact-plugin",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PluginSpec{
 					CompatibilityOverride: &mck8slexlav1beta1.CompatibilityOverride{
 						Enabled:           true,
-						MinecraftVersions: []string{"1.21.1"},
+						MinecraftVersions: []string{gcVersion1211},
 					},
 				},
 			}
 
-			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, "1.21.1")
+			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, gcVersion1211)
 			Expect(compatible).To(BeTrue(),
 				"Plugin with exact version in compatibilityOverride should be compatible")
 		})
@@ -350,7 +350,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 			plugin := mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "override-empty-plugin",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PluginSpec{
 					CompatibilityOverride: &mck8slexlav1beta1.CompatibilityOverride{
@@ -360,7 +360,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				},
 			}
 
-			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, "1.21.1")
+			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, gcVersion1211)
 			Expect(compatible).To(BeTrue(),
 				"Plugin with enabled override and no versions should assume compatible")
 		})
@@ -372,7 +372,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 			plugin := mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "override-mismatch-plugin",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PluginSpec{
 					CompatibilityOverride: &mck8slexlav1beta1.CompatibilityOverride{
@@ -382,7 +382,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				},
 			}
 
-			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, "1.21.1")
+			compatible := reconciler.isPluginCompatibleWithPaper(ctx, &plugin, gcVersion1211)
 			Expect(compatible).To(BeFalse(),
 				"Plugin with override versions not matching should be incompatible")
 		})
@@ -395,13 +395,13 @@ var _ = Describe("PaperMCServer Controller", func() {
 			server := &mck8slexlav1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-server",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
-								{Name: "papermc"},
+								{Name: containerNamePaperMC},
 							},
 						},
 					},
@@ -420,19 +420,19 @@ var _ = Describe("PaperMCServer Controller", func() {
 			server := &mck8slexlav1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-server",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
-								{Name: "papermc"},
+								{Name: containerNamePaperMC},
 							},
 						},
 					},
 				},
 				Status: mck8slexlav1beta1.PaperMCServerStatus{
-					DesiredVersion: "1.21.1",
+					DesiredVersion: gcVersion1211,
 					DesiredBuild:   100,
 				},
 			}
@@ -454,7 +454,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 			server := &mck8slexlav1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-clear-blocked",
-					Namespace:  "default",
+					Namespace:  gcNamespaceDefault,
 					Generation: 1,
 				},
 				Status: mck8slexlav1beta1.PaperMCServerStatus{
@@ -489,7 +489,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 			server := &mck8slexlav1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-clear-blocked-true",
-					Namespace:  "default",
+					Namespace:  gcNamespaceDefault,
 					Generation: 1,
 				},
 				Status: mck8slexlav1beta1.PaperMCServerStatus{
@@ -517,9 +517,9 @@ var _ = Describe("PaperMCServer Controller", func() {
 		It("should detect changes in AvailableUpdate content", func() {
 
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				AvailableUpdate: &mck8slexlav1beta1.AvailableUpdate{
 					Version: "1.21.2",
@@ -528,13 +528,13 @@ var _ = Describe("PaperMCServer Controller", func() {
 			}
 
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				AvailableUpdate: &mck8slexlav1beta1.AvailableUpdate{
-					Version: "1.21.3", // Different version!
-					Build:   60,       // Different build!
+					Version: gcVersion1213, // Different version!
+					Build:   60,            // Different build!
 				},
 			}
 
@@ -547,9 +547,9 @@ var _ = Describe("PaperMCServer Controller", func() {
 		It("should detect changes in LastUpdate", func() {
 			now := metav1.Now()
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				LastUpdate: &mck8slexlav1beta1.UpdateHistory{
 					AppliedAt:  now,
@@ -558,9 +558,9 @@ var _ = Describe("PaperMCServer Controller", func() {
 			}
 
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				LastUpdate:     nil, // Different!
 			}
@@ -573,16 +573,16 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 		It("should treat nil and empty Plugins slice as equal", func() {
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Plugins:        nil,
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Plugins:        []mck8slexlav1beta1.ServerPluginStatus{},
 			}
@@ -593,16 +593,16 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 		It("should treat nil and empty Conditions slice as equal", func() {
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Conditions:     nil,
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Conditions:     []metav1.Condition{},
 			}
@@ -614,13 +614,13 @@ var _ = Describe("PaperMCServer Controller", func() {
 		It("should detect Conditions content changes", func() {
 			now := metav1.Now()
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Conditions: []metav1.Condition{
 					{
-						Type:               "Ready",
+						Type:               conditionTypeReady,
 						Status:             metav1.ConditionTrue,
 						LastTransitionTime: now,
 						Reason:             "ReconcileSuccess",
@@ -629,13 +629,13 @@ var _ = Describe("PaperMCServer Controller", func() {
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Conditions: []metav1.Condition{
 					{
-						Type:               "Ready",
+						Type:               conditionTypeReady,
 						Status:             metav1.ConditionFalse,
 						LastTransitionTime: now,
 						Reason:             "ReconcileError",
@@ -650,27 +650,27 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 		It("should detect Plugin content changes", func() {
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 					{
-						PluginRef:       mck8slexlav1beta1.PluginRef{Name: "my-plugin", Namespace: "default"},
-						ResolvedVersion: "1.0.0",
+						PluginRef:       mck8slexlav1beta1.PluginRef{Name: gcMyPlugin, Namespace: gcNamespaceDefault},
+						ResolvedVersion: gcVersion100,
 						Compatible:      true,
 					},
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 					{
-						PluginRef:       mck8slexlav1beta1.PluginRef{Name: "my-plugin", Namespace: "default"},
-						ResolvedVersion: "2.0.0",
+						PluginRef:       mck8slexlav1beta1.PluginRef{Name: gcMyPlugin, Namespace: gcNamespaceDefault},
+						ResolvedVersion: gcVersion200,
 						Compatible:      false,
 					},
 				},
@@ -682,16 +682,16 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 		It("should detect UpdateBlocked changes", func() {
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				UpdateBlocked:  nil,
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				UpdateBlocked: &mck8slexlav1beta1.UpdateBlockedStatus{
 					Blocked: true,
@@ -707,9 +707,9 @@ var _ = Describe("PaperMCServer Controller", func() {
 			// not the Reason string. If the reason changes (e.g., different
 			// plugin blocks the update), the status won't be updated.
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				UpdateBlocked: &mck8slexlav1beta1.UpdateBlockedStatus{
 					Blocked: true,
@@ -717,9 +717,9 @@ var _ = Describe("PaperMCServer Controller", func() {
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				UpdateBlocked: &mck8slexlav1beta1.UpdateBlockedStatus{
 					Blocked: true,
@@ -737,37 +737,37 @@ var _ = Describe("PaperMCServer Controller", func() {
 			// This causes unnecessary status updates (reconciliation churn)
 			// because k8s List() doesn't guarantee order.
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 					{
-						PluginRef:       mck8slexlav1beta1.PluginRef{Name: "plugin-a", Namespace: "default"},
-						ResolvedVersion: "1.0.0",
+						PluginRef:       mck8slexlav1beta1.PluginRef{Name: gcPluginA, Namespace: gcNamespaceDefault},
+						ResolvedVersion: gcVersion100,
 						Compatible:      true,
 					},
 					{
-						PluginRef:       mck8slexlav1beta1.PluginRef{Name: "plugin-b", Namespace: "default"},
-						ResolvedVersion: "2.0.0",
+						PluginRef:       mck8slexlav1beta1.PluginRef{Name: gcPluginB, Namespace: gcNamespaceDefault},
+						ResolvedVersion: gcVersion200,
 						Compatible:      true,
 					},
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 					{
-						PluginRef:       mck8slexlav1beta1.PluginRef{Name: "plugin-b", Namespace: "default"},
-						ResolvedVersion: "2.0.0",
+						PluginRef:       mck8slexlav1beta1.PluginRef{Name: gcPluginB, Namespace: gcNamespaceDefault},
+						ResolvedVersion: gcVersion200,
 						Compatible:      true,
 					},
 					{
-						PluginRef:       mck8slexlav1beta1.PluginRef{Name: "plugin-a", Namespace: "default"},
-						ResolvedVersion: "1.0.0",
+						PluginRef:       mck8slexlav1beta1.PluginRef{Name: gcPluginA, Namespace: gcNamespaceDefault},
+						ResolvedVersion: gcVersion100,
 						Compatible:      true,
 					},
 				},
@@ -782,30 +782,30 @@ var _ = Describe("PaperMCServer Controller", func() {
 			// UpdateBlocked.Reason but ignores BlockedBy. If the blocking
 			// plugin changes, the status won't update.
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				UpdateBlocked: &mck8slexlav1beta1.UpdateBlockedStatus{
 					Blocked: true,
 					Reason:  "Plugin incompatible",
 					BlockedBy: &mck8slexlav1beta1.BlockedByInfo{
-						Plugin:  "plugin-a",
-						Version: "1.0.0",
+						Plugin:  gcPluginA,
+						Version: gcVersion100,
 					},
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				UpdateBlocked: &mck8slexlav1beta1.UpdateBlockedStatus{
 					Blocked: true,
 					Reason:  "Plugin incompatible",
 					BlockedBy: &mck8slexlav1beta1.BlockedByInfo{
-						Plugin:  "plugin-b",
-						Version: "2.0.0",
+						Plugin:  gcPluginB,
+						Version: gcVersion200,
 					},
 				},
 			}
@@ -819,32 +819,32 @@ var _ = Describe("PaperMCServer Controller", func() {
 			// and Compatible, ignoring CurrentVersion, Source, PendingDeletion,
 			// DesiredVersion, and InstalledJARName fields.
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 					{
-						PluginRef:       mck8slexlav1beta1.PluginRef{Name: "plugin-a", Namespace: "default"},
-						ResolvedVersion: "1.0.0",
+						PluginRef:       mck8slexlav1beta1.PluginRef{Name: gcPluginA, Namespace: gcNamespaceDefault},
+						ResolvedVersion: gcVersion100,
 						Compatible:      true,
 						CurrentVersion:  "0.9.0",
-						Source:          "hangar",
+						Source:          gcSourceHangar,
 					},
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 					{
-						PluginRef:       mck8slexlav1beta1.PluginRef{Name: "plugin-a", Namespace: "default"},
-						ResolvedVersion: "1.0.0",
+						PluginRef:       mck8slexlav1beta1.PluginRef{Name: gcPluginA, Namespace: gcNamespaceDefault},
+						ResolvedVersion: gcVersion100,
 						Compatible:      true,
-						CurrentVersion:  "1.0.0",
-						Source:          "hangar",
+						CurrentVersion:  gcVersion100,
+						Source:          gcSourceHangar,
 					},
 				},
 			}
@@ -856,28 +856,28 @@ var _ = Describe("PaperMCServer Controller", func() {
 		It("should detect plugin PendingDeletion changes", func() {
 			// BUG: pluginStatusSliceEqual ignores PendingDeletion field
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 					{
-						PluginRef:       mck8slexlav1beta1.PluginRef{Name: "plugin-a", Namespace: "default"},
-						ResolvedVersion: "1.0.0",
+						PluginRef:       mck8slexlav1beta1.PluginRef{Name: gcPluginA, Namespace: gcNamespaceDefault},
+						ResolvedVersion: gcVersion100,
 						Compatible:      true,
 						PendingDeletion: false,
 					},
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				CurrentBuild:   100,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 					{
-						PluginRef:       mck8slexlav1beta1.PluginRef{Name: "plugin-a", Namespace: "default"},
-						ResolvedVersion: "1.0.0",
+						PluginRef:       mck8slexlav1beta1.PluginRef{Name: gcPluginA, Namespace: gcNamespaceDefault},
+						ResolvedVersion: gcVersion100,
 						Compatible:      true,
 						PendingDeletion: true,
 					},
@@ -893,28 +893,28 @@ var _ = Describe("PaperMCServer Controller", func() {
 			// ignoring the Plugins list. When plugin versions change
 			// for the same Paper version, the status won't update.
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.0",
+				CurrentVersion: gcVersion1210,
 				CurrentBuild:   90,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				AvailableUpdate: &mck8slexlav1beta1.AvailableUpdate{
-					Version: "1.21.1",
+					Version: gcVersion1211,
 					Build:   100,
 					Plugins: []mck8slexlav1beta1.PluginVersionPair{
-						{PluginRef: mck8slexlav1beta1.PluginRef{Name: "plugin-a", Namespace: "default"}, Version: "1.0.0"},
+						{PluginRef: mck8slexlav1beta1.PluginRef{Name: gcPluginA, Namespace: gcNamespaceDefault}, Version: gcVersion100},
 					},
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.0",
+				CurrentVersion: gcVersion1210,
 				CurrentBuild:   90,
-				DesiredVersion: "1.21.1",
+				DesiredVersion: gcVersion1211,
 				DesiredBuild:   100,
 				AvailableUpdate: &mck8slexlav1beta1.AvailableUpdate{
-					Version: "1.21.1",
+					Version: gcVersion1211,
 					Build:   100,
 					Plugins: []mck8slexlav1beta1.PluginVersionPair{
-						{PluginRef: mck8slexlav1beta1.PluginRef{Name: "plugin-a", Namespace: "default"}, Version: "2.0.0"},
+						{PluginRef: mck8slexlav1beta1.PluginRef{Name: gcPluginA, Namespace: gcNamespaceDefault}, Version: gcVersion200},
 					},
 				},
 			}
@@ -1049,21 +1049,21 @@ var _ = Describe("PaperMCServer Controller", func() {
 			server := &mck8slexlav1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-preserve",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					Version: "1.21.4",
+					Version: gcVersion1214,
 				},
 				Status: mck8slexlav1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.4",
+					CurrentVersion: gcVersion1214,
 					Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 						{
 							PluginRef: mck8slexlav1beta1.PluginRef{
-								Name:      "my-plugin",
-								Namespace: "default",
+								Name:      gcMyPlugin,
+								Namespace: gcNamespaceDefault,
 							},
 							InstalledJARName: "my-plugin.jar",
-							CurrentVersion:   "2.0.0",
+							CurrentVersion:   gcVersion200,
 						},
 					},
 				},
@@ -1072,19 +1072,19 @@ var _ = Describe("PaperMCServer Controller", func() {
 			matchedPlugins := []mck8slexlav1beta1.Plugin{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "my-plugin",
-						Namespace: "default",
+						Name:      gcMyPlugin,
+						Namespace: gcNamespaceDefault,
 					},
 					Spec: mck8slexlav1beta1.PluginSpec{
 						Source: mck8slexlav1beta1.PluginSource{
-							Type: "hangar",
+							Type: gcSourceHangar,
 						},
 					},
 					Status: mck8slexlav1beta1.PluginStatus{
 						AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 							{
 								Version:           "2.1.0",
-								MinecraftVersions: []string{"1.21.4"},
+								MinecraftVersions: []string{gcVersion1214},
 							},
 						},
 					},
@@ -1096,7 +1096,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 			Expect(result).To(HaveLen(1))
 			Expect(result[0].InstalledJARName).To(Equal("my-plugin.jar"),
 				"buildPluginStatus must preserve InstalledJARName from previous status")
-			Expect(result[0].CurrentVersion).To(Equal("2.0.0"),
+			Expect(result[0].CurrentVersion).To(Equal(gcVersion200),
 				"buildPluginStatus must preserve CurrentVersion from previous status")
 		})
 
@@ -1110,18 +1110,18 @@ var _ = Describe("PaperMCServer Controller", func() {
 			server := &mck8slexlav1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-preserve-pending",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					Version: "1.21.4",
+					Version: gcVersion1214,
 				},
 				Status: mck8slexlav1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.4",
+					CurrentVersion: gcVersion1214,
 					Plugins: []mck8slexlav1beta1.ServerPluginStatus{
 						{
 							PluginRef: mck8slexlav1beta1.PluginRef{
 								Name:      "deleting-plugin",
-								Namespace: "default",
+								Namespace: gcNamespaceDefault,
 							},
 							PendingDeletion: true,
 						},
@@ -1133,18 +1133,18 @@ var _ = Describe("PaperMCServer Controller", func() {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "deleting-plugin",
-						Namespace: "default",
+						Namespace: gcNamespaceDefault,
 					},
 					Spec: mck8slexlav1beta1.PluginSpec{
 						Source: mck8slexlav1beta1.PluginSource{
-							Type: "hangar",
+							Type: gcSourceHangar,
 						},
 					},
 					Status: mck8slexlav1beta1.PluginStatus{
 						AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 							{
-								Version:           "1.0.0",
-								MinecraftVersions: []string{"1.21.4"},
+								Version:           gcVersion100,
+								MinecraftVersions: []string{gcVersion1214},
 							},
 						},
 					},
@@ -1171,32 +1171,32 @@ var _ = Describe("PaperMCServer Controller", func() {
 			server := &mck8slexlav1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-desired-version",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					Version: "1.21.4",
+					Version: gcVersion1214,
 				},
 				Status: mck8slexlav1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.4",
+					CurrentVersion: gcVersion1214,
 				},
 			}
 
 			matchedPlugins := []mck8slexlav1beta1.Plugin{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-plugin",
-						Namespace: "default",
+						Name:      gcTestPlugin,
+						Namespace: gcNamespaceDefault,
 					},
 					Spec: mck8slexlav1beta1.PluginSpec{
 						Source: mck8slexlav1beta1.PluginSource{
-							Type: "hangar",
+							Type: gcSourceHangar,
 						},
 					},
 					Status: mck8slexlav1beta1.PluginStatus{
 						AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 							{
 								Version:           "3.0.0",
-								MinecraftVersions: []string{"1.21.4"},
+								MinecraftVersions: []string{gcVersion1214},
 							},
 						},
 					},
@@ -1226,24 +1226,24 @@ var _ = Describe("PaperMCServer Controller", func() {
 			server := &mck8slexlav1beta1.PaperMCServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-empty-versions",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					Version: "1.21.4",
+					Version: gcVersion1214,
 				},
 				Status: mck8slexlav1beta1.PaperMCServerStatus{
-					CurrentVersion: "1.21.4",
+					CurrentVersion: gcVersion1214,
 				},
 			}
 
 			plugin := &mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "new-plugin",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PluginSpec{
 					Source: mck8slexlav1beta1.PluginSource{
-						Type: "hangar",
+						Type: gcSourceHangar,
 					},
 				},
 				Status: mck8slexlav1beta1.PluginStatus{
@@ -1338,8 +1338,8 @@ var _ = Describe("PaperMCServer Controller", func() {
 		BeforeEach(func() {
 			namespace = testNamespace
 			mockPaper = &testutil.MockPaperAPI{
-				Versions:     []string{"1.21.1", "1.21.2", "1.21.3", "1.21.4"},
-				BuildInfo:    &paper.BuildInfo{Version: "1.21.4", Build: 100, DownloadURL: "https://example.com/paper.jar"},
+				Versions:     []string{gcVersion1211, "1.21.2", gcVersion1213, gcVersion1214},
+				BuildInfo:    &paper.BuildInfo{Version: gcVersion1214, Build: 100, DownloadURL: "https://example.com/paper.jar"},
 				BuildNumbers: []int{90, 95, 100},
 			}
 			mockReg = &testutil.MockRegistryAPI{
@@ -1361,7 +1361,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 					Name:      name,
 					Namespace: namespace,
 					Labels: map[string]string{
-						"app": "test",
+						gcLabelApp: gcTest,
 					},
 				},
 				Spec: spec,
@@ -1380,10 +1380,10 @@ var _ = Describe("PaperMCServer Controller", func() {
 		It("should create StatefulSet and Service on first reconcile with latest strategy", func() {
 			serverName := "test-latest-reconcile"
 			createServer(serverName, mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			})
@@ -1409,16 +1409,16 @@ var _ = Describe("PaperMCServer Controller", func() {
 				Name: serverName, Namespace: namespace,
 			}, &svc)).To(Succeed())
 			Expect(svc.Spec.Ports).To(ContainElement(
-				HaveField("Name", Equal("minecraft"))))
+				HaveField("Name", Equal(gcPortNameMinecraft))))
 		})
 
 		It("should set Ready condition on successful reconcile", func() {
 			serverName := "test-ready-cond"
 			createServer(serverName, mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			})
@@ -1441,11 +1441,11 @@ var _ = Describe("PaperMCServer Controller", func() {
 		It("should resolve version with pin strategy using specific version", func() {
 			serverName := "test-pin-reconcile"
 			createServer(serverName, mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "pin",
-				Version:        "1.21.3",
+				UpdateStrategy: updateStrategyPin,
+				Version:        gcVersion1213,
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			})
@@ -1460,7 +1460,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				Name: serverName, Namespace: namespace,
 			}, &server)).To(Succeed())
 
-			Expect(server.Status.DesiredVersion).To(Equal("1.21.3"))
+			Expect(server.Status.DesiredVersion).To(Equal(gcVersion1213))
 			Expect(server.Status.DesiredBuild).To(BeNumerically(">", 0))
 		})
 
@@ -1468,12 +1468,12 @@ var _ = Describe("PaperMCServer Controller", func() {
 			serverName := "test-buildpin-reconcile"
 			build := 95
 			createServer(serverName, mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "build-pin",
-				Version:        "1.21.3",
+				UpdateStrategy: updateStrategyBuildPin,
+				Version:        gcVersion1213,
 				Build:          &build,
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			})
@@ -1488,18 +1488,18 @@ var _ = Describe("PaperMCServer Controller", func() {
 				Name: serverName, Namespace: namespace,
 			}, &server)).To(Succeed())
 
-			Expect(server.Status.DesiredVersion).To(Equal("1.21.3"))
+			Expect(server.Status.DesiredVersion).To(Equal(gcVersion1213))
 			Expect(server.Status.DesiredBuild).To(Equal(95))
 		})
 
 		It("should fail when pin strategy has no version specified", func() {
 			serverName := "test-pin-no-version"
 			createServer(serverName, mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "pin",
+				UpdateStrategy: updateStrategyPin,
 				// Version intentionally empty
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			})
@@ -1515,10 +1515,10 @@ var _ = Describe("PaperMCServer Controller", func() {
 			serverName := "test-no-tags"
 			mockReg.Tags = []string{} // No tags
 			createServer(serverName, mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			})
@@ -1546,12 +1546,12 @@ var _ = Describe("PaperMCServer Controller", func() {
 				"1.21.3-999": false,
 			}
 			createServer(serverName, mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "build-pin",
-				Version:        "1.21.3",
+				UpdateStrategy: updateStrategyBuildPin,
+				Version:        gcVersion1213,
 				Build:          &build,
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			})
@@ -1566,10 +1566,10 @@ var _ = Describe("PaperMCServer Controller", func() {
 		It("should be idempotent on second reconcile", func() {
 			serverName := "test-idempotent"
 			createServer(serverName, mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			})
@@ -1603,18 +1603,18 @@ var _ = Describe("PaperMCServer Controller", func() {
 		It("should add RCON port to Service when RCON enabled", func() {
 			serverName := "test-rcon-port"
 			createServer(serverName, mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				RCON: mck8slexlav1beta1.RCONConfig{
 					Enabled: true,
 					Port:    25575,
 					PasswordSecret: mck8slexlav1beta1.SecretKeyRef{
-						Name: "rcon-secret",
-						Key:  "password",
+						Name: gcRCONSecret,
+						Key:  gcPassword,
 					},
 				},
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			})
@@ -1631,7 +1631,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 			var hasRCON bool
 			for _, port := range svc.Spec.Ports {
-				if port.Name == "rcon" {
+				if port.Name == gcRCON {
 					hasRCON = true
 					Expect(port.Port).To(Equal(int32(25575)))
 					break
@@ -1645,18 +1645,18 @@ var _ = Describe("PaperMCServer Controller", func() {
 			customRCONPort := int32(25576)
 
 			createServer(serverName, mck8slexlav1beta1.PaperMCServerSpec{
-				UpdateStrategy: "latest",
+				UpdateStrategy: updateStrategyLatest,
 				RCON: mck8slexlav1beta1.RCONConfig{
 					Enabled: true,
 					Port:    customRCONPort,
 					PasswordSecret: mck8slexlav1beta1.SecretKeyRef{
-						Name: "rcon-secret",
-						Key:  "password",
+						Name: gcRCONSecret,
+						Key:  gcPassword,
 					},
 				},
 				PodTemplate: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "papermc"}},
+						Containers: []corev1.Container{{Name: containerNamePaperMC}},
 					},
 				},
 			})
@@ -1673,7 +1673,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 			var hasRCON bool
 			for _, port := range svc.Spec.Ports {
-				if port.Name == "rcon" {
+				if port.Name == gcRCON {
 					hasRCON = true
 					Expect(port.Port).To(Equal(customRCONPort),
 						"Service RCON port should match spec.rcon.port, not hardcoded 25575")
@@ -1701,7 +1701,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				Solver: solver.NewSimpleSolver(),
 			}
 
-			pairs := reconciler.buildPluginVersionPairs(ctx, "1.21.1", nil)
+			pairs := reconciler.buildPluginVersionPairs(ctx, gcVersion1211, nil)
 			Expect(pairs).To(BeEmpty())
 		})
 
@@ -1716,7 +1716,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "empty-plugin",
-						Namespace: "default",
+						Namespace: gcNamespaceDefault,
 					},
 					Status: mck8slexlav1beta1.PluginStatus{
 						AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{},
@@ -1724,7 +1724,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 				},
 			}
 
-			pairs := reconciler.buildPluginVersionPairs(ctx, "1.21.1", plugins)
+			pairs := reconciler.buildPluginVersionPairs(ctx, gcVersion1211, plugins)
 			Expect(pairs).To(BeEmpty())
 		})
 
@@ -1739,25 +1739,25 @@ var _ = Describe("PaperMCServer Controller", func() {
 			plugins := []mck8slexlav1beta1.Plugin{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-plugin",
-						Namespace: "default",
+						Name:      gcTestPlugin,
+						Namespace: gcNamespaceDefault,
 					},
 					Spec: mck8slexlav1beta1.PluginSpec{
-						UpdateStrategy: "latest",
+						UpdateStrategy: updateStrategyLatest,
 					},
 					Status: mck8slexlav1beta1.PluginStatus{
 						AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 							{
-								Version:           "2.0.0",
-								MinecraftVersions: []string{"1.21", "1.21.1"},
+								Version:           gcVersion200,
+								MinecraftVersions: []string{gcVersion121, gcVersion1211},
 								DownloadURL:       "https://example.com/v2.jar",
 								CachedAt:          now,
 								ReleasedAt:        metav1.NewTime(time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)),
 							},
 							{
-								Version:           "1.0.0",
-								MinecraftVersions: []string{"1.20", "1.21"},
-								DownloadURL:       "https://example.com/v1.jar",
+								Version:           gcVersion100,
+								MinecraftVersions: []string{gcVersion120, gcVersion121},
+								DownloadURL:       gcURLV1,
 								CachedAt:          now,
 								ReleasedAt:        metav1.NewTime(time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)),
 							},
@@ -1766,10 +1766,10 @@ var _ = Describe("PaperMCServer Controller", func() {
 				},
 			}
 
-			pairs := reconciler.buildPluginVersionPairs(ctx, "1.21.1", plugins)
+			pairs := reconciler.buildPluginVersionPairs(ctx, gcVersion1211, plugins)
 			Expect(pairs).To(HaveLen(1))
-			Expect(pairs[0].PluginRef.Name).To(Equal("test-plugin"))
-			Expect(pairs[0].PluginRef.Namespace).To(Equal("default"))
+			Expect(pairs[0].PluginRef.Name).To(Equal(gcTestPlugin))
+			Expect(pairs[0].PluginRef.Namespace).To(Equal(gcNamespaceDefault))
 			Expect(pairs[0].Version).NotTo(BeEmpty())
 		})
 
@@ -1784,14 +1784,14 @@ var _ = Describe("PaperMCServer Controller", func() {
 			plugins := []mck8slexlav1beta1.Plugin{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "plugin-a",
-						Namespace: "default",
+						Name:      gcPluginA,
+						Namespace: gcNamespaceDefault,
 					},
 					Status: mck8slexlav1beta1.PluginStatus{
 						AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 							{
-								Version:           "1.0.0",
-								MinecraftVersions: []string{"1.21.1"},
+								Version:           gcVersion100,
+								MinecraftVersions: []string{gcVersion1211},
 								DownloadURL:       "https://example.com/a.jar",
 								CachedAt:          now,
 								ReleasedAt:        metav1.NewTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)),
@@ -1801,8 +1801,8 @@ var _ = Describe("PaperMCServer Controller", func() {
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "plugin-b",
-						Namespace: "ns2",
+						Name:      gcPluginB,
+						Namespace: gcNamespace2,
 					},
 					Status: mck8slexlav1beta1.PluginStatus{
 						AvailableVersions: nil, // No versions — should be skipped
@@ -1811,13 +1811,13 @@ var _ = Describe("PaperMCServer Controller", func() {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "plugin-c",
-						Namespace: "default",
+						Namespace: gcNamespaceDefault,
 					},
 					Status: mck8slexlav1beta1.PluginStatus{
 						AvailableVersions: []mck8slexlav1beta1.PluginVersionInfo{
 							{
 								Version:           "3.0.0",
-								MinecraftVersions: []string{"1.21.1"},
+								MinecraftVersions: []string{gcVersion1211},
 								DownloadURL:       "https://example.com/c.jar",
 								CachedAt:          now,
 								ReleasedAt:        metav1.NewTime(time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)),
@@ -1827,10 +1827,10 @@ var _ = Describe("PaperMCServer Controller", func() {
 				},
 			}
 
-			pairs := reconciler.buildPluginVersionPairs(ctx, "1.21.1", plugins)
+			pairs := reconciler.buildPluginVersionPairs(ctx, gcVersion1211, plugins)
 			// plugin-b has no versions and should be skipped
 			Expect(pairs).To(HaveLen(2))
-			Expect(pairs[0].PluginRef.Name).To(Equal("plugin-a"))
+			Expect(pairs[0].PluginRef.Name).To(Equal(gcPluginA))
 			Expect(pairs[1].PluginRef.Name).To(Equal("plugin-c"))
 		})
 	})
@@ -1839,7 +1839,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 		It("should return update when newer build is available", func() {
 			mockPaper := &testutil.MockPaperAPI{
 				BuildInfo: &paper.BuildInfo{
-					Version: "1.21.1",
+					Version: gcVersion1211,
 					Build:   150,
 				},
 			}
@@ -1852,7 +1852,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 			server := &mck8slexlav1beta1.PaperMCServer{
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					Version: "1.21.1",
+					Version: gcVersion1211,
 				},
 				Status: mck8slexlav1beta1.PaperMCServerStatus{
 					CurrentBuild: 100,
@@ -1862,14 +1862,14 @@ var _ = Describe("PaperMCServer Controller", func() {
 			update, err := reconciler.findBuildUpdate(ctx, server, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(update).NotTo(BeNil())
-			Expect(update.Version).To(Equal("1.21.1"))
+			Expect(update.Version).To(Equal(gcVersion1211))
 			Expect(update.Build).To(Equal(150))
 		})
 
 		It("should return nil when already on latest build", func() {
 			mockPaper := &testutil.MockPaperAPI{
 				BuildInfo: &paper.BuildInfo{
-					Version: "1.21.1",
+					Version: gcVersion1211,
 					Build:   100,
 				},
 			}
@@ -1882,7 +1882,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 			server := &mck8slexlav1beta1.PaperMCServer{
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					Version: "1.21.1",
+					Version: gcVersion1211,
 				},
 				Status: mck8slexlav1beta1.PaperMCServerStatus{
 					CurrentBuild: 100,
@@ -1907,7 +1907,7 @@ var _ = Describe("PaperMCServer Controller", func() {
 
 			server := &mck8slexlav1beta1.PaperMCServer{
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					Version: "1.21.1",
+					Version: gcVersion1211,
 				},
 			}
 
@@ -1928,31 +1928,31 @@ var _ = Describe("PaperMCServerController helpers", func() {
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
 				Conditions: []metav1.Condition{
 					{
-						Type:    "Ready",
+						Type:    conditionTypeReady,
 						Status:  metav1.ConditionTrue,
-						Reason:  "AllGood",
+						Reason:  gcAllGood,
 						Message: "Server is ready",
 					},
 					{
-						Type:    "VersionResolved",
+						Type:    conditionTypeVersionResolved,
 						Status:  metav1.ConditionTrue,
-						Reason:  "Resolved",
-						Message: "Version resolved",
+						Reason:  reasonResolved,
+						Message: gcVersionResolvedMsg,
 					},
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
 				Conditions: []metav1.Condition{
 					{
-						Type:    "VersionResolved",
+						Type:    conditionTypeVersionResolved,
 						Status:  metav1.ConditionTrue,
-						Reason:  "Resolved",
-						Message: "Version resolved",
+						Reason:  reasonResolved,
+						Message: gcVersionResolvedMsg,
 					},
 					{
-						Type:    "Ready",
+						Type:    conditionTypeReady,
 						Status:  metav1.ConditionTrue,
-						Reason:  "AllGood",
+						Reason:  gcAllGood,
 						Message: "Server is ready",
 					},
 				},
@@ -1967,11 +1967,11 @@ var _ = Describe("PaperMCServerController helpers", func() {
 		It("should detect Backup field differences", func() {
 			completedAt := metav1.Now()
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				Backup: &mck8slexlav1beta1.BackupStatus{
 					BackupCount: 3,
 					LastBackup: &mck8slexlav1beta1.BackupRecord{
-						SnapshotName: "server-backup-100",
+						SnapshotName: gcServerBackup100,
 						Successful:   true,
 						Trigger:      "manual",
 						CompletedAt:  &completedAt,
@@ -1979,7 +1979,7 @@ var _ = Describe("PaperMCServerController helpers", func() {
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				Backup:         nil,
 			}
 
@@ -1989,13 +1989,13 @@ var _ = Describe("PaperMCServerController helpers", func() {
 
 		It("should detect Backup content differences", func() {
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				Backup: &mck8slexlav1beta1.BackupStatus{
 					BackupCount: 3,
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				Backup: &mck8slexlav1beta1.BackupStatus{
 					BackupCount: 5,
 				},
@@ -2009,11 +2009,11 @@ var _ = Describe("PaperMCServerController helpers", func() {
 			t1 := metav1.NewTime(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 			t2 := metav1.NewTime(time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC))
 			a := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				Backup: &mck8slexlav1beta1.BackupStatus{
 					BackupCount: 1,
 					LastBackup: &mck8slexlav1beta1.BackupRecord{
-						SnapshotName: "server-backup-100",
+						SnapshotName: gcServerBackup100,
 						StartedAt:    t1,
 						Successful:   true,
 						Trigger:      "scheduled",
@@ -2021,11 +2021,11 @@ var _ = Describe("PaperMCServerController helpers", func() {
 				},
 			}
 			b := &mck8slexlav1beta1.PaperMCServerStatus{
-				CurrentVersion: "1.21.1",
+				CurrentVersion: gcVersion1211,
 				Backup: &mck8slexlav1beta1.BackupStatus{
 					BackupCount: 1,
 					LastBackup: &mck8slexlav1beta1.BackupRecord{
-						SnapshotName: "server-backup-100",
+						SnapshotName: gcServerBackup100,
 						StartedAt:    t2,
 						Successful:   true,
 						Trigger:      "scheduled",
@@ -2038,8 +2038,8 @@ var _ = Describe("PaperMCServerController helpers", func() {
 		})
 
 		It("should consider equal when both Backup are nil", func() {
-			a := &mck8slexlav1beta1.PaperMCServerStatus{CurrentVersion: "1.21.1"}
-			b := &mck8slexlav1beta1.PaperMCServerStatus{CurrentVersion: "1.21.1"}
+			a := &mck8slexlav1beta1.PaperMCServerStatus{CurrentVersion: gcVersion1211}
+			b := &mck8slexlav1beta1.PaperMCServerStatus{CurrentVersion: gcVersion1211}
 
 			Expect(serverStatusEqual(a, b)).To(BeTrue(),
 				"serverStatusEqual should be equal when both Backup are nil")
@@ -2059,12 +2059,12 @@ var _ = Describe("PaperMCServerController helpers", func() {
 			pluginWithNoVersions := mck8slexlav1beta1.Plugin{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "empty-versions-plugin",
-					Namespace: "default",
+					Namespace: gcNamespaceDefault,
 				},
 				Spec: mck8slexlav1beta1.PluginSpec{
 					Source: mck8slexlav1beta1.PluginSource{
-						Type:    "hangar",
-						Project: "test",
+						Type:    gcSourceHangar,
+						Project: gcTest,
 					},
 				},
 				Status: mck8slexlav1beta1.PluginStatus{
@@ -2075,7 +2075,7 @@ var _ = Describe("PaperMCServerController helpers", func() {
 			// Should not panic — bounds check skips plugins with no versions
 			pairs := reconciler.buildPluginVersionPairs(
 				context.Background(),
-				"1.21.4",
+				gcVersion1214,
 				[]mck8slexlav1beta1.Plugin{pluginWithNoVersions},
 			)
 
@@ -2091,12 +2091,12 @@ var _ = Describe("PaperMCServerController helpers", func() {
 			// Successful/PreviousVersion are incorrectly considered equal.
 			a := &mck8slexlav1beta1.UpdateHistory{
 				AppliedAt:       metav1.NewTime(time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)),
-				PreviousVersion: "1.21.0",
+				PreviousVersion: gcVersion1210,
 				Successful:      true,
 			}
 			b := &mck8slexlav1beta1.UpdateHistory{
 				AppliedAt:       metav1.NewTime(time.Date(2025, 6, 2, 10, 0, 0, 0, time.UTC)),
-				PreviousVersion: "1.21.0",
+				PreviousVersion: gcVersion1210,
 				Successful:      true,
 			}
 
@@ -2117,12 +2117,12 @@ var _ = Describe("PaperMCServerController helpers", func() {
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 				PaperClient: &testutil.MockPaperAPI{
-					Versions:     []string{"1.21.1"},
-					BuildInfo:    &paper.BuildInfo{Version: "1.21.1", Build: 91, DownloadURL: "https://example.com/paper.jar"},
+					Versions:     []string{gcVersion1211},
+					BuildInfo:    &paper.BuildInfo{Version: gcVersion1211, Build: 91, DownloadURL: "https://example.com/paper.jar"},
 					BuildNumbers: []int{91},
 				},
 				RegistryClient: &testutil.MockRegistryAPI{
-					Tags:       []string{"1.21.1-91"},
+					Tags:       []string{gcVersion1211Build91},
 					ImageExist: true,
 				},
 				Solver: solver.NewSimpleSolver(),
@@ -2137,10 +2137,10 @@ var _ = Describe("PaperMCServerController helpers", func() {
 					Namespace: namespace,
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{{Name: "papermc"}},
+							Containers: []corev1.Container{{Name: containerNamePaperMC}},
 						},
 					},
 				},
@@ -2157,11 +2157,11 @@ var _ = Describe("PaperMCServerController helpers", func() {
 				Name: serverName, Namespace: namespace,
 			}, &sts)).To(Succeed())
 
-			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "papermc"))
+			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", containerNamePaperMC))
 			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", serverName))
-			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", gcMinecraftOperator))
 			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "server"))
-			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", gcMinecraftOperator))
 		})
 
 		It("should not allow user labels to override standard labels", func() {
@@ -2176,10 +2176,10 @@ var _ = Describe("PaperMCServerController helpers", func() {
 					},
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{{Name: "papermc"}},
+							Containers: []corev1.Container{{Name: containerNamePaperMC}},
 						},
 					},
 				},
@@ -2197,7 +2197,7 @@ var _ = Describe("PaperMCServerController helpers", func() {
 			}, &sts)).To(Succeed())
 
 			// Standard labels must NOT be overridden by user labels
-			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+			Expect(sts.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", gcMinecraftOperator))
 
 			// User labels should be preserved
 			Expect(sts.Labels).To(HaveKeyWithValue("custom-label", "custom-value"))
@@ -2211,10 +2211,10 @@ var _ = Describe("PaperMCServerController helpers", func() {
 					Namespace: namespace,
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{{Name: "papermc"}},
+							Containers: []corev1.Container{{Name: containerNamePaperMC}},
 						},
 					},
 				},
@@ -2232,14 +2232,14 @@ var _ = Describe("PaperMCServerController helpers", func() {
 			}, &sts)).To(Succeed())
 
 			podLabels := sts.Spec.Template.Labels
-			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/name", "papermc"))
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/name", containerNamePaperMC))
 			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/instance", serverName))
-			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", gcMinecraftOperator))
 			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/component", "server"))
-			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+			Expect(podLabels).To(HaveKeyWithValue("app.kubernetes.io/part-of", gcMinecraftOperator))
 			// Must also retain legacy selector labels
-			Expect(podLabels).To(HaveKeyWithValue("app", "papermc"))
-			Expect(podLabels).To(HaveKey("mc.k8s.lex.la/server-name"))
+			Expect(podLabels).To(HaveKeyWithValue(gcLabelApp, containerNamePaperMC))
+			Expect(podLabels).To(HaveKey(gcLabelServerName))
 		})
 
 		It("should set standard labels on Service", func() {
@@ -2250,10 +2250,10 @@ var _ = Describe("PaperMCServerController helpers", func() {
 					Namespace: namespace,
 				},
 				Spec: mck8slexlav1beta1.PaperMCServerSpec{
-					UpdateStrategy: "latest",
+					UpdateStrategy: updateStrategyLatest,
 					PodTemplate: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
-							Containers: []corev1.Container{{Name: "papermc"}},
+							Containers: []corev1.Container{{Name: containerNamePaperMC}},
 						},
 					},
 				},
@@ -2270,11 +2270,11 @@ var _ = Describe("PaperMCServerController helpers", func() {
 				Name: serverName, Namespace: namespace,
 			}, &svc)).To(Succeed())
 
-			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "papermc"))
+			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", containerNamePaperMC))
 			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", serverName))
-			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "minecraft-operator"))
+			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", gcMinecraftOperator))
 			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "service"))
-			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "minecraft-operator"))
+			Expect(svc.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", gcMinecraftOperator))
 		})
 	})
 })

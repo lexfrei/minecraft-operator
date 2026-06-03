@@ -15,7 +15,7 @@ import (
 
 func TestVolumesChanged_IgnoresInjectedVolumes(t *testing.T) {
 	dataVolume := corev1.Volume{
-		Name: "data",
+		Name: gcVolumeData,
 		VolumeSource: corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 				ClaimName: "data-test-server-0",
@@ -47,7 +47,7 @@ func TestVolumesChanged_IgnoresInjectedVolumes(t *testing.T) {
 func TestVolumesChanged_DetectsModifiedVolume(t *testing.T) {
 	existing := []corev1.Volume{
 		{
-			Name: "config-script",
+			Name: gcConfigScript,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: "old-cm"},
@@ -57,7 +57,7 @@ func TestVolumesChanged_DetectsModifiedVolume(t *testing.T) {
 	}
 	desired := []corev1.Volume{
 		{
-			Name: "config-script",
+			Name: gcConfigScript,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: "new-cm"},
@@ -74,10 +74,10 @@ func TestVolumesChanged_DetectsMissingDesiredVolume(t *testing.T) {
 	existing := []corev1.Volume{}
 	desired := []corev1.Volume{
 		{
-			Name: "data",
+			Name: gcVolumeData,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: "data-test-0",
+					ClaimName: gcDataTest0,
 				},
 			},
 		},
@@ -90,10 +90,10 @@ func TestVolumesChanged_DetectsMissingDesiredVolume(t *testing.T) {
 func TestVolumesChanged_NoChange(t *testing.T) {
 	volumes := []corev1.Volume{
 		{
-			Name: "data",
+			Name: gcVolumeData,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: "data-test-0",
+					ClaimName: gcDataTest0,
 				},
 			},
 		},
@@ -108,10 +108,10 @@ func TestVolumesChanged_NoChange(t *testing.T) {
 func TestVolumesChanged_DetectsRemovedOperatorManagedVolume(t *testing.T) {
 	existing := []corev1.Volume{
 		{
-			Name: "data",
+			Name: gcVolumeData,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: "data-test-0",
+					ClaimName: gcDataTest0,
 				},
 			},
 		},
@@ -126,10 +126,10 @@ func TestVolumesChanged_DetectsRemovedOperatorManagedVolume(t *testing.T) {
 	}
 	desired := []corev1.Volume{
 		{
-			Name: "data",
+			Name: gcVolumeData,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: "data-test-0",
+					ClaimName: gcDataTest0,
 				},
 			},
 		},
@@ -143,15 +143,15 @@ func TestVolumesChanged_DetectsRemovedOperatorManagedVolume(t *testing.T) {
 func TestVolumesChanged_DetectsRemovedConfigScriptVolume(t *testing.T) {
 	existing := []corev1.Volume{
 		{
-			Name: "data",
+			Name: gcVolumeData,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: "data-test-0",
+					ClaimName: gcDataTest0,
 				},
 			},
 		},
 		{
-			Name: "config-script",
+			Name: gcConfigScript,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: "test-config-script"},
@@ -161,10 +161,10 @@ func TestVolumesChanged_DetectsRemovedConfigScriptVolume(t *testing.T) {
 	}
 	desired := []corev1.Volume{
 		{
-			Name: "data",
+			Name: gcVolumeData,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: "data-test-0",
+					ClaimName: gcDataTest0,
 				},
 			},
 		},
@@ -175,8 +175,8 @@ func TestVolumesChanged_DetectsRemovedConfigScriptVolume(t *testing.T) {
 }
 
 func TestIsOperatorManagedVolume(t *testing.T) {
-	assert.True(t, isOperatorManagedVolume("data"))
-	assert.True(t, isOperatorManagedVolume("config-script"))
+	assert.True(t, isOperatorManagedVolume(gcVolumeData))
+	assert.True(t, isOperatorManagedVolume(gcConfigScript))
 	assert.True(t, isOperatorManagedVolume("cm-bluemap-abc12345"))
 	assert.True(t, isOperatorManagedVolume("cm-"))
 	assert.False(t, isOperatorManagedVolume("kube-api-access-abc12"))

@@ -10,6 +10,16 @@ import (
 	"testing"
 )
 
+// Test fixture constants.
+const (
+	testVer100   = "1.0.0"
+	testVer200   = "2.0.0"
+	testVer1211  = "1.21.1"
+	testVer12110 = "1.21.10"
+	testPat121x  = "1.21.x"
+	testInvalid  = "invalid"
+)
+
 //nolint:funlen // Table-driven tests are expected to be long
 func TestCompare(t *testing.T) {
 	t.Parallel()
@@ -23,50 +33,50 @@ func TestCompare(t *testing.T) {
 	}{
 		{
 			name:    "equal versions",
-			v1:      "1.21.10",
-			v2:      "1.21.10",
+			v1:      testVer12110,
+			v2:      testVer12110,
 			want:    0,
 			wantErr: false,
 		},
 		{
 			name:    "v1 greater than v2",
 			v1:      "1.21.11",
-			v2:      "1.21.10",
+			v2:      testVer12110,
 			want:    1,
 			wantErr: false,
 		},
 		{
 			name:    "v1 less than v2",
 			v1:      "1.21.9",
-			v2:      "1.21.10",
+			v2:      testVer12110,
 			want:    -1,
 			wantErr: false,
 		},
 		{
 			name:    "latest equals latest",
-			v1:      "latest",
-			v2:      "latest",
+			v1:      Latest,
+			v2:      Latest,
 			want:    0,
 			wantErr: false,
 		},
 		{
 			name:    "latest greater than version",
-			v1:      "latest",
-			v2:      "1.21.10",
+			v1:      Latest,
+			v2:      testVer12110,
 			want:    1,
 			wantErr: false,
 		},
 		{
 			name:    "version less than latest",
-			v1:      "1.21.10",
-			v2:      "latest",
+			v1:      testVer12110,
+			v2:      Latest,
 			want:    -1,
 			wantErr: false,
 		},
 		{
 			name:    "major version difference",
-			v1:      "2.0.0",
-			v2:      "1.21.10",
+			v1:      testVer200,
+			v2:      testVer12110,
 			want:    1,
 			wantErr: false,
 		},
@@ -79,15 +89,15 @@ func TestCompare(t *testing.T) {
 		},
 		{
 			name:    "invalid v1",
-			v1:      "invalid",
-			v2:      "1.21.10",
+			v1:      testInvalid,
+			v2:      testVer12110,
 			want:    0,
 			wantErr: true,
 		},
 		{
 			name:    "invalid v2",
-			v1:      "1.21.10",
-			v2:      "invalid",
+			v1:      testVer12110,
+			v2:      testInvalid,
 			want:    0,
 			wantErr: true,
 		},
@@ -122,64 +132,64 @@ func TestIsDowngrade(t *testing.T) {
 	}{
 		{
 			name:             "same version - not downgrade",
-			currentVersion:   "1.21.10",
-			candidateVersion: "1.21.10",
+			currentVersion:   testVer12110,
+			candidateVersion: testVer12110,
 			want:             false,
 			wantErr:          false,
 		},
 		{
 			name:             "upgrade - not downgrade",
-			currentVersion:   "1.21.10",
+			currentVersion:   testVer12110,
 			candidateVersion: "1.21.11",
 			want:             false,
 			wantErr:          false,
 		},
 		{
 			name:             "downgrade detected",
-			currentVersion:   "1.21.10",
+			currentVersion:   testVer12110,
 			candidateVersion: "1.21.9",
 			want:             true,
 			wantErr:          false,
 		},
 		{
 			name:             "major version downgrade",
-			currentVersion:   "2.0.0",
-			candidateVersion: "1.21.10",
+			currentVersion:   testVer200,
+			candidateVersion: testVer12110,
 			want:             true,
 			wantErr:          false,
 		},
 		{
 			name:             "major version upgrade",
-			currentVersion:   "1.21.10",
-			candidateVersion: "2.0.0",
+			currentVersion:   testVer12110,
+			candidateVersion: testVer200,
 			want:             false,
 			wantErr:          false,
 		},
 		{
 			name:             "latest to version - downgrade",
-			currentVersion:   "latest",
-			candidateVersion: "1.21.10",
+			currentVersion:   Latest,
+			candidateVersion: testVer12110,
 			want:             true,
 			wantErr:          false,
 		},
 		{
 			name:             "version to latest - upgrade",
-			currentVersion:   "1.21.10",
-			candidateVersion: "latest",
+			currentVersion:   testVer12110,
+			candidateVersion: Latest,
 			want:             false,
 			wantErr:          false,
 		},
 		{
 			name:             "invalid current version",
-			currentVersion:   "invalid",
-			candidateVersion: "1.21.10",
+			currentVersion:   testInvalid,
+			candidateVersion: testVer12110,
 			want:             false,
 			wantErr:          true,
 		},
 		{
 			name:             "invalid candidate version",
-			currentVersion:   "1.21.10",
-			candidateVersion: "invalid",
+			currentVersion:   testVer12110,
+			candidateVersion: testInvalid,
 			want:             false,
 			wantErr:          true,
 		},

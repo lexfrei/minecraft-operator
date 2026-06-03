@@ -390,7 +390,7 @@ func (r *UpdateReconciler) downloadPluginToServer(
 
 	// Ensure update directory exists
 	if _, mkdirErr := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
-		[]string{"mkdir", "-p", "/data/plugins/update"}); mkdirErr != nil {
+		[]string{gcCmdMkdir, "-p", gcPluginUpdateDir}); mkdirErr != nil {
 		return errors.Wrap(mkdirErr, "failed to create plugins/update directory")
 	}
 
@@ -400,7 +400,7 @@ func (r *UpdateReconciler) downloadPluginToServer(
 	slog.InfoContext(ctx, "Downloading plugin to server",
 		"server", server.Name,
 		"plugin", pluginName,
-		"url", downloadURL)
+		gcSourceURL, downloadURL)
 
 	_, err := r.PodExecutor.ExecInPod(ctx, namespace, podName, container,
 		[]string{"curl",
@@ -410,7 +410,7 @@ func (r *UpdateReconciler) downloadPluginToServer(
 			"--max-filesize", strconv.Itoa(plugins.MaxJARSize),
 			"--connect-timeout", "30",
 			"--max-time", "300",
-			"--user-agent", "minecraft-operator",
+			"--user-agent", gcMinecraftOperator,
 			"--output", outputPath, "--", downloadURL})
 	if err != nil {
 		return errors.Wrapf(err, "failed to download plugin %s", pluginName)
