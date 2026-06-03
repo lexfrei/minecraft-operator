@@ -549,5 +549,5 @@ type PaperMCServerList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&PaperMCServer{}, &PaperMCServerList{})
+	objectTypes = append(objectTypes, &PaperMCServer{}, &PaperMCServerList{})
 }

@@ -265,5 +265,5 @@ type PluginList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&Plugin{}, &PluginList{})
+	objectTypes = append(objectTypes, &Plugin{}, &PluginList{})
 }
