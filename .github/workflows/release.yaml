@@ -240,7 +240,7 @@ jobs:
       - name: Install tools
         run: |
           # renovate: datasource=github-releases depName=mikefarah/yq
-          YQ_VERSION="4.53.2"
+          YQ_VERSION="4.53.3"
           wget --quiet https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64 --output-document yq
           chmod +x yq
           sudo mv yq /usr/local/bin/yq
