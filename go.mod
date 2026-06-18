@@ -5,11 +5,11 @@ go 1.26.4
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/a-h/templ v0.3.1020
-	github.com/cockroachdb/errors v1.13.0
+	github.com/cockroachdb/errors v1.14.0
 	github.com/go-logr/logr v1.4.3
 	github.com/gorcon/rcon v1.4.0
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.6.0
-	github.com/lexfrei/go-hangar v0.0.0-20260611065505-2a745c1bb733
+	github.com/lexfrei/go-hangar v0.0.0-20260618203837-603f016f87a2
 	github.com/lexfrei/goPaperMC v0.0.3
 	github.com/oapi-codegen/runtime v1.4.1
 	github.com/onsi/ginkgo/v2 v2.31.0
