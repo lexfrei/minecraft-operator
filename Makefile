@@ -216,7 +216,7 @@ OAPI_CODEGEN ?= $(LOCALBIN)/oapi-codegen
 # renovate: datasource=github-releases depName=kubernetes-sigs/controller-tools
 CONTROLLER_TOOLS_VERSION ?= v0.21.0
 # renovate: datasource=github-releases depName=oapi-codegen/oapi-codegen
-OAPI_CODEGEN_VERSION ?= v2.7.1
+OAPI_CODEGEN_VERSION ?= v2.7.2
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
