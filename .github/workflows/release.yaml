@@ -51,7 +51,7 @@ jobs:
           pip install check-jsonschema
 
           # renovate: datasource=github-releases depName=artifacthub/hub
-          AH_VERSION="1.22.0"
+          AH_VERSION="1.23.0"
           wget --quiet https://github.com/artifacthub/hub/releases/download/v${AH_VERSION}/ah_${AH_VERSION}_linux_amd64.tar.gz
           tar --extract --gzip --file ah_${AH_VERSION}_linux_amd64.tar.gz
           chmod +x ah
