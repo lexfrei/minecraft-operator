@@ -11,7 +11,7 @@ require (
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.6.0
 	github.com/lexfrei/go-hangar v0.0.0-20260716055737-a24915330c08
 	github.com/lexfrei/goPaperMC v0.0.4
-	github.com/oapi-codegen/runtime v1.5.0
+	github.com/oapi-codegen/runtime v1.6.0
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
 	github.com/prometheus/client_golang v1.23.2
