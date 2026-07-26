@@ -37,11 +37,11 @@ technical_stack:
 
   core_dependencies:
     client_go: "k8s.io/client-go"
-    client_go_version: "v0.36.1"  # Matches controller-runtime v0.24
+    client_go_version: "v0.36.3"  # Matches controller-runtime v0.24
     apimachinery: "k8s.io/apimachinery"
-    apimachinery_version: "v0.36.1"
+    apimachinery_version: "v0.36.3"
     api: "k8s.io/api"
-    api_version: "v0.36.1"
+    api_version: "v0.36.3"
 
   external_libraries:
     hangar_client:
