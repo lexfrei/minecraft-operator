@@ -9,7 +9,7 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/gorcon/rcon v1.4.0
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.6.0
-	github.com/lexfrei/go-hangar v0.0.0-20260720030057-841332b459da
+	github.com/lexfrei/go-hangar v0.0.0-20260813202855-605059200a20
 	github.com/lexfrei/goPaperMC v0.0.4
 	github.com/oapi-codegen/runtime v1.6.0
 	github.com/onsi/ginkgo/v2 v2.32.1
