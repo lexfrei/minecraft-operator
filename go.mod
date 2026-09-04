@@ -1,6 +1,6 @@
 module github.com/lexfrei/minecraft-operator
 
-go 1.26.6
+go 1.27.1
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
@@ -9,7 +9,7 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/gorcon/rcon v1.4.0
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.6.0
-	github.com/lexfrei/go-hangar v0.0.0-20260819150621-4c1bbe62757a
+	github.com/lexfrei/go-hangar v0.0.0-20260901201650-7b7ec3ea0baa
 	github.com/lexfrei/goPaperMC v0.0.4
 	github.com/oapi-codegen/runtime v1.7.0
 	github.com/onsi/ginkgo/v2 v2.32.1
