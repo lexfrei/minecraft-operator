@@ -20,7 +20,7 @@ env:
 jobs:
   security:
     name: Security Scan
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -41,7 +41,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -65,7 +65,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -161,7 +161,7 @@ jobs:
 
   merge-manifests:
     name: Create Multi-arch Manifest
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs:
       - build-and-push
     steps:
@@ -187,7 +187,7 @@ jobs:
 
   lint-chart:
     name: Lint Chart
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -290,7 +290,7 @@ jobs:
 
   build-chart:
     name: Build Chart
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs:
       - security
       - lint
@@ -341,7 +341,7 @@ jobs:
 
   notify:
     name: Notify PR
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs:
       - merge-manifests
       - build-chart
@@ -403,7 +403,7 @@ jobs:
 
   summary:
     name: Summary
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs:
       - security
       - lint
