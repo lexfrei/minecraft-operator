@@ -141,8 +141,8 @@ github.com/kubernetes-csi/external-snapshotter/client/v8 v8.6.0 h1:FtGewu2k6HWw6
 github.com/kubernetes-csi/external-snapshotter/client/v8 v8.6.0/go.mod h1:Vxl89NySJ45J+ah3NTMan/KJXW+NpcGHE2Tw0GSw53k=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
-github.com/lexfrei/go-hangar v0.0.0-20260819150621-4c1bbe62757a h1:6XkAGIh3Ypjlt6WhJEgv21pBa9bciHulcXnWPlVuR7k=
-github.com/lexfrei/go-hangar v0.0.0-20260819150621-4c1bbe62757a/go.mod h1:60KR2suLNqje+XfLgFsUDShg8nnvf7ZIKWzzWYiz7Kc=
+github.com/lexfrei/go-hangar v0.0.0-20260901201650-7b7ec3ea0baa h1:SGmsGzBhOaqD8QbcjIR0WjwCiqwwfdyhd/n6iR03v1A=
+github.com/lexfrei/go-hangar v0.0.0-20260901201650-7b7ec3ea0baa/go.mod h1:R1wWTyZiO8iJcBbJDQ2vXtMnSNEgFwANvKPSlcZkKKU=
 github.com/lexfrei/goPaperMC v0.0.4 h1:nZJS9qeTuWEvkJrV2gBc7VK4bDATKKk6qRbKdYgWEGg=
 github.com/lexfrei/goPaperMC v0.0.4/go.mod h1:VeDnOQgDe5m/Tnc5kCJEesRAyTf8Mibcrog4mNipPOw=
 github.com/maruel/natural v1.1.1 h1:Hja7XhhmvEFhcByqDoHz9QZbkWey+COd9xWfCfn1ioo=
