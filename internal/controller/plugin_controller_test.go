@@ -1137,7 +1137,9 @@ var _ = Describe("Plugin Controller", func() {
 			req := ctrl.Request{NamespacedName: types.NamespacedName{Name: pluginName, Namespace: namespace}}
 			result, err := reconciler.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(Equal(ctrl.Result{}), "Should requeue after adding finalizer")
+			Expect(result).To(Equal(ctrl.Result{}),
+				"Adding the finalizer is a watched write and re-enqueues the key by itself, "+
+					"so the reconciler must not ask for a ratelimited requeue on top of it")
 
 			var plugin mck8slexlav1beta1.Plugin
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: pluginName, Namespace: namespace}, &plugin)).To(Succeed())

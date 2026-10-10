@@ -122,7 +122,10 @@ func (r *PluginReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			slog.ErrorContext(ctx, "Failed to add finalizer", "error", err)
 			return ctrl.Result{}, errors.Wrap(err, "failed to add finalizer")
 		}
-		return ctrl.Result{Requeue: true}, nil
+		// No requeue: the Update above is itself a watched write, so it
+		// enqueues this key again. Result.Requeue is deprecated precisely
+		// because a ratelimiter interval is the wrong tool here.
+		return ctrl.Result{}, nil
 	}
 
 	// Store original status for comparison
