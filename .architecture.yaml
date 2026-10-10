@@ -31,17 +31,17 @@ technical_stack:
 
   frameworks:
     operator: "sigs.k8s.io/controller-runtime"
-    operator_version: "v0.24.1"  # Tracks the k8s.io/* v0.36 line
+    operator_version: "v0.25.2"  # Tracks the k8s.io/* v0.37 line
     kubebuilder: "kubebuilder.io/v4"
     kubebuilder_version: "4.9.0"
 
   core_dependencies:
     client_go: "k8s.io/client-go"
-    client_go_version: "v0.36.3"  # Matches controller-runtime v0.24
+    client_go_version: "v0.37.1"  # Matches controller-runtime v0.25
     apimachinery: "k8s.io/apimachinery"
-    apimachinery_version: "v0.36.3"
+    apimachinery_version: "v0.37.1"
     api: "k8s.io/api"
-    api_version: "v0.36.3"
+    api_version: "v0.37.1"
 
   external_libraries:
     hangar_client:
