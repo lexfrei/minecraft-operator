@@ -81,7 +81,7 @@ technical_stack:
 
     templ:
       package: "github.com/a-h/templ"
-      version: "v0.3.960"
+      version: "go.mod"  # make templ installs the generator at the go.mod version; generated code only builds against its own runtime
       purpose: "Type-safe HTML templates compiled to Go code for Web UI"
 
     htmx:
@@ -701,7 +701,7 @@ decisions:
   - id: ADR-020
     date: 2025-11-01
     status: accepted
-    decision: "Use a-h/templ v0.3.960 for Web UI templates instead of html/template"
+    decision: "Use a-h/templ for Web UI templates instead of html/template"
     reasoning: "Type-safe templates compiled to Go at build time, prevents runtime errors, better IDE support, automatic XSS protection, aligns with project type-safety philosophy. Note: v0.3.0 in original specification doesn't exist; using latest stable v0.3.960"
     alternatives:
       - "html/template: Runtime template parsing, no type safety, prone to errors"

@@ -52,6 +52,11 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Verify generated code is up to date
+        run: |
+          make templ
+          git diff --exit-code
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
