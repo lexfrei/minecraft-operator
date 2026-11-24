@@ -39,9 +39,23 @@
       "groupName": "kubernetes",
       "matchManagers": ["gomod"],
       "matchPackageNames": ["sigs.k8s.io/controller-runtime", "k8s.io/**"]
+    },
+    {
+      "description": "Bump the Kubernetes versions recorded in .architecture.yaml in the same PR as go.mod; a test fails when they disagree",
+      "matchFileNames": [".architecture.yaml"],
+      "groupName": "kubernetes"
     }
   ],
   "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Kubernetes library versions in .architecture.yaml: a `key: \"<module>\"` line followed by its `key_version: \"vX.Y.Z\"` line",
+      "managerFilePatterns": ["/^\\.architecture\\.yaml$/"],
+      "matchStrings": [
+        "\"(?<depName>(?:sigs\\.)?k8s\\.io/[\\w.-]+)\"\\n\\s*\\w+_version: \"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "datasourceTemplate": "go"
+    },
     {
       "customType": "regex",
       "fileMatch": ["\\.github/workflows/.*\\.ya?ml$"],
