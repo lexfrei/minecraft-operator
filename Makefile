@@ -52,12 +52,8 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 .PHONY: templ
-templ: ## Generate Go code from templ templates
-	@command -v templ >/dev/null 2>&1 || { \
-		echo "templ is not installed. Installing..."; \
-		go install github.com/a-h/templ/cmd/templ@v0.3.960; \
-	}
-	templ generate --path pkg/webui/templates
+templ: templ-generator ## Generate Go code from templ templates
+	$(TEMPL) generate --path pkg/webui/templates
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -211,6 +207,7 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 OAPI_CODEGEN ?= $(LOCALBIN)/oapi-codegen
+TEMPL ?= $(LOCALBIN)/templ
 
 ## Tool Versions
 # renovate: datasource=github-releases depName=kubernetes-sigs/controller-tools
@@ -221,6 +218,8 @@ OAPI_CODEGEN_VERSION ?= v2.9.0
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
+# Generated templ code only compiles against the runtime it was generated for.
+TEMPL_VERSION ?= $(shell go list -m -f "{{ .Version }}" github.com/a-h/templ)
 # renovate: datasource=github-releases depName=golangci/golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.15.0
 
@@ -251,6 +250,10 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 oapi-codegen: $(OAPI_CODEGEN) ## Download oapi-codegen locally if necessary.
 $(OAPI_CODEGEN): $(LOCALBIN)
 	$(call go-install-tool,$(OAPI_CODEGEN),github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen,$(OAPI_CODEGEN_VERSION))
+
+.PHONY: templ-generator
+templ-generator: $(LOCALBIN) ## Download the templ generator matching the runtime in go.mod.
+	$(call go-install-tool,$(TEMPL),github.com/a-h/templ/cmd/templ,$(TEMPL_VERSION))
 
 .PHONY: generate-api
 generate-api: oapi-codegen ## Generate API types and server from OpenAPI spec.
