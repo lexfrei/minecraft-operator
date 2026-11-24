@@ -187,8 +187,8 @@ jobs:
 
           docker buildx imagetools create \
             --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${AMD64_DIGEST} \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${ARM64_DIGEST}
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${AMD64_DIGEST}" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${ARM64_DIGEST}"
 
   lint-chart:
     name: Lint Chart
@@ -420,16 +420,18 @@ jobs:
     steps:
       - name: Create summary
         run: |
-          echo "## PR Validation Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Security Scan | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Lint | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Test | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Container Build | ${{ needs.merge-manifests.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Chart Lint | ${{ needs.lint-chart.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Chart Build | ${{ needs.build-chart.result }} |" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## PR Validation Summary"
+            echo ""
+            echo "| Check | Status |"
+            echo "|-------|--------|"
+            echo "| Security Scan | ${{ needs.security.result }} |"
+            echo "| Lint | ${{ needs.lint.result }} |"
+            echo "| Test | ${{ needs.test.result }} |"
+            echo "| Container Build | ${{ needs.merge-manifests.result }} |"
+            echo "| Chart Lint | ${{ needs.lint-chart.result }} |"
+            echo "| Chart Build | ${{ needs.build-chart.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail if any check failed
         if: >-
