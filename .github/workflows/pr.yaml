@@ -54,7 +54,7 @@ jobs:
 
       - name: Verify generated code is up to date
         run: |
-          make templ
+          make templ generate-api
           git diff --exit-code
 
       - name: Run golangci-lint
